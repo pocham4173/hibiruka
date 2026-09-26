@@ -1,0 +1,105 @@
+name: 予定のLINE送信
+
+# このファイル1つだけで、予約したLINEが送られます（ほかのファイルは不要）
+on:
+  schedule:
+    # 10分ごとに「送る時間になった予定」がないか見ます
+    - cron: "*/10 * * * *"
+  workflow_dispatch: # 「Run workflow」ボタンで今すぐ動かすこともできます
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 準備
+        run: |
+          mkdir -p notify && cd notify
+          npm init -y > /dev/null
+          npm install firebase-admin@12 --omit=dev --no-audit --no-fund
+      - name: LINEで送る
+        working-directory: notify
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          OWNER_NAME: 理絵
+        run: |
+          cat > send.js <<'SENDJS'
+          // ヒビルカ：予約されたLINEのお知らせを送るプログラム
+          // GitHub が10分ごとに動かして、「送る時間」になったものを送ります
+
+          const admin = require("firebase-admin");
+
+          const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || "{}");
+          const LINE_TOKEN = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+          const OWNER = process.env.OWNER_NAME || "理絵";
+          if (!serviceAccount.project_id || !LINE_TOKEN) {
+            console.error("GitHubのSecretsに FIREBASE_SERVICE_ACCOUNT と LINE_CHANNEL_ACCESS_TOKEN を登録してください。");
+            process.exit(1);
+          }
+
+          admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+          const db = admin.firestore();
+
+          const WEEK = "日月火水木金土";
+          // 日本時間の今（YYYY-MM-DDTHH:MM）
+          function nowJst() { return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 16); }
+          function fmtDate(s) {
+            const [y, m, d] = s.split("-").map(Number);
+            const w = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+            return `${m}月${d}日(${WEEK[w]})`;
+          }
+          function buildText(ev) {
+            const lines = [`🔔 ${OWNER}さんから予定のお知らせ`, "", `📅 ${fmtDate(ev.date)}${ev.time ? " " + ev.time : ""}`, `✏️ ${ev.title}`];
+            if (ev.place) lines.push(`📍 ${ev.place}`);
+            if (ev.memo) lines.push(`📝 ${ev.memo}`);
+            lines.push("", "ヒビルカより");
+            return lines.join("\n");
+          }
+          async function sendLine(userIds, text) {
+            const res = await fetch("https://api.line.me/v2/bot/message/multicast", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${LINE_TOKEN}` },
+              body: JSON.stringify({ to: userIds, messages: [{ type: "text", text }] }),
+            });
+            if (!res.ok) throw new Error(`LINE送信エラー ${res.status}: ${await res.text()}`);
+          }
+          function nextSendAt(sends) { const w = sends.filter(x => x.status === "wait").map(x => x.at).sort(); return w[0] || null; }
+
+          async function main() {
+            const now = nowJst();
+            console.log(`今（日本時間）: ${now}`);
+
+            const friends = new Map();
+            (await db.collection("friends").get()).forEach(d => friends.set(d.id, d.data()));
+
+            const snap = await db.collection("events").where("nextSendAt", "<=", now).get();
+            let sent = 0, failed = 0;
+
+            for (const doc of snap.docs) {
+              const ev = doc.data();
+              const sends = (ev.sends || []).map(x => ({ ...x }));
+              for (const s of sends) {
+                if (s.status !== "wait" || s.at > now) continue;
+                const userIds = [...new Set((s.friendIds || []).map(id => friends.get(id))
+                  .filter(f => f && f.status === "joined" && f.lineUserId).map(f => f.lineUserId))];
+                if (!userIds.length) { s.status = "fail"; s.error = "送れる人がいません"; failed++; continue; }
+                try {
+                  await sendLine(userIds, buildText(ev));
+                  s.status = "sent"; s.sentAt = now; sent++;
+                  console.log(`送信OK: 「${ev.title}」→ ${userIds.length}人`);
+                } catch (e) {
+                  s.status = "fail"; s.error = String(e.message).slice(0, 200); failed++;
+                  console.error(`送信失敗: 「${ev.title}」`, e.message);
+                }
+              }
+              await doc.ref.update({ sends, nextSendAt: nextSendAt(sends) });
+            }
+            console.log(`完了：送信 ${sent}件 / 失敗 ${failed}件`);
+          }
+
+          main().catch(e => { console.error(e); process.exit(1); });
+          SENDJS
+          node send.js
