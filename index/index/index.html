@@ -102,7 +102,7 @@
   .step small { font-weight: 400; font-size: 12.5px; color: var(--muted); }
   .lbl { display: block; font-weight: 600; margin: 16px 0 6px; font-size: 14.5px; }
   .lbl small { font-weight: 400; color: var(--muted); margin-left: 6px; font-size: 12.5px; }
-  input[type=text], input[type=date], input[type=time], input[type=url], input[type=tel], select, textarea {
+  input[type=text], input[type=date], input[type=time], input[type=url], input[type=tel], input[type=password], select, textarea {
     width: 100%; font-size: 16px; padding: 12px 13px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--text); -webkit-appearance: none; appearance: none;
   }
   select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='none' stroke='%23857d7f' stroke-width='1.6'%3E%3Cpath d='m5 8 5 5 5-5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 40px; }
@@ -304,16 +304,17 @@
 <!-- 読み込み中 -->
 <div id="loading" class="wrap"><div class="loading">読み込み中…<div id="slowMsg" class="setup-warn hidden" style="text-align:left;margin-top:20px">うまく開けないときは、<b>Safari</b>（Androidは<b>Chrome</b>）で開き直してください。<br>アプリの中の簡易ブラウザだと、開けないことがあります。</div></div></div>
 
-<!-- この端末をつなぐ -->
+<!-- 暗証番号 -->
 <div id="pairView" class="wrap hidden">
   <div class="card center" style="margin-top:20px">
-    <div class="big-emoji">📱</div>
-    <h2 style="margin-top:0">この端末をつなぐ</h2>
-    <p style="text-align:left">ヒビルカは、もう別の端末（またはSafari）で使われています。<br>使っているほうの <b>「設定」→「別の端末でも使う」</b> で出る<b>6けたの数字</b>を入れてください。</p>
-    <p class="note" style="text-align:left">iPhoneは、Safariで開いたヒビルカと、ホーム画面のアイコンから開いたヒビルカが、別々の端末になります。1回つなげば、次からは出ません。</p>
-    <input type="tel" id="pairInput" inputmode="numeric" maxlength="6" placeholder="例：123456" style="text-align:center;font-size:26px;letter-spacing:.3em;font-weight:900">
-    <button class="btn" id="pairBtn" style="margin-top:14px">つなぐ</button>
-    <p class="err" id="pairErr"></p>
+    <div class="big-emoji">🔒</div>
+    <h2 style="margin-top:0" id="pinTitle">暗証番号を入れてください</h2>
+    <p id="pinText" style="text-align:left;font-size:15px">ヒビルカを開くための、6けたの暗証番号を入れてください。<br>1回入れれば、この画面は次から出ません。</p>
+    <input type="password" id="pinInput" inputmode="numeric" maxlength="6" placeholder="●●●●●●" autocomplete="off" style="text-align:center;font-size:26px;letter-spacing:.4em">
+    <input type="password" id="pinInput2" class="hidden" inputmode="numeric" maxlength="6" placeholder="もう一度" autocomplete="off" style="text-align:center;font-size:22px;letter-spacing:.3em;margin-top:10px">
+    <button class="btn" id="pinBtn" style="margin-top:14px">ひらく</button>
+    <p class="err" id="pinErr"></p>
+    <p class="note" id="pinNote" style="text-align:left"></p>
   </div>
 </div>
 
@@ -458,10 +459,9 @@
 
     <div class="card">
       <img class="panel" src="data:image/jpeg;base64,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" alt="">
-      <h2 style="margin-top:0">別の端末でも使う</h2>
-      <p class="note" style="margin-top:-6px">パソコンや別のスマホでも、同じ予定・思い出を見られます。<br>iPhoneは「Safari」と「ホーム画面のアイコン」も別の端末になるので、それぞれ1回つないでください。</p>
-      <div id="pairBox" class="hidden"><p style="margin:12px 0 0">別の端末でヒビルカを開いて、この数字を入れてください（10分間有効）</p><div class="code-big" id="pairCode"></div></div>
-      <button class="btn sub" id="pairMakeBtn" style="margin-top:12px">6けたの数字を出す</button>
+      <h2 style="margin-top:0">暗証番号</h2>
+      <p class="note" style="margin-top:-6px">パソコンや別のスマホ、LINEから開いたときは、6けたの暗証番号を1回入れるだけで同じ予定・思い出が見られます。</p>
+      <button class="btn sub" id="pinChangeBtn" style="margin-top:12px">暗証番号を変える</button>
     </div>
 
     <div class="card">
@@ -527,7 +527,7 @@
       <div><b>iPhone</b><ol><li><b>Safari</b>でヒビルカを開く</li><li>下の共有ボタン <span class="kbd">□↑</span> を押す</li><li>「ホーム画面に追加」→「追加」</li></ol></div>
       <div><b>Android</b><ol><li><b>Chrome</b>でヒビルカを開く</li><li>右上の <span class="kbd">⋮</span> を押す</li><li>「ホーム画面に追加」→「追加」</li></ol></div>
     </div>
-    <p class="ig-note">iPhoneは、Safariとホーム画面のアイコンが別々になります。はじめてアイコンから開いたときは、「設定」→「別の端末でも使う」の6けたの数字でつないでください。</p>
+    <p class="ig-note">iPhoneは、Safariとホーム画面のアイコンが別々になります。はじめてアイコンから開いたときは、6けたの暗証番号を1回入れてください。</p>
   </section>
 
   <section class="ig">
@@ -733,6 +733,10 @@ let myUid = null;
 let friends = [], events = [], cats = DEFAULT_CATS.slice(), people = [], ownerName = CONFIG.defaultOwnerName;
 let unsub = [];
 
+async function pinHash(pin) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("hibiruka:" + CONFIG.firebase.projectId + ":" + pin));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
 async function startOwner() {
   const slow = setTimeout(() => $("slowMsg").classList.remove("hidden"), 8000);
   try {
@@ -740,43 +744,53 @@ async function startOwner() {
     const user = auth.currentUser || (await new Promise(r => { const u = auth.onAuthStateChanged(x => { u(); r(x); }); }));
     const cred = user && user.isAnonymous ? user : (await auth.signInAnonymously()).user;
     myUid = cred.uid;
-    const ownersRef = db.collection("config").doc("owners");
-    const snap = await ownersRef.get();
-    if (!snap.exists) {
-      await ownersRef.set({ uids: [myUid], createdAt: TS() });
-      toast("このスマホをヒビルカ専用にしました", 4000);
-    } else if (!(snap.data().uids || []).includes(myUid)) {
-      clearTimeout(slow); showPair(); return;
-    }
+    const [mem, own, lock] = await Promise.all([
+      db.collection("members").doc(myUid).get(),
+      db.collection("config").doc("owners").get(),
+      db.collection("config").doc("lock").get()
+    ]);
     clearTimeout(slow);
-    enterApp();
+    if (mem.exists || (own.exists && (own.data().uids || []).includes(myUid))) { enterApp(); return; }
+    showPin(!lock.exists);
   } catch (e) {
     console.error(e);
     $("slowMsg").classList.remove("hidden");
   }
 }
 
-function showPair() {
+function showPin(firstTime) {
   show("pairView");
-  $("pairBtn").onclick = async () => {
-    const code = $("pairInput").value.trim();
-    $("pairErr").textContent = "";
-    if (!/^\d{6}$/.test(code)) { $("pairErr").textContent = "6けたの数字を入れてください"; return; }
-    $("pairBtn").disabled = true;
+  if (firstTime) {
+    $("pinTitle").textContent = "暗証番号を決めてください";
+    $("pinText").innerHTML = "ヒビルカを開くための<b>6けたの数字</b>を決めてください。<br>ほかのスマホやパソコン、LINEから開いたときに1回だけ使います。";
+    $("pinInput2").classList.remove("hidden");
+    $("pinBtn").textContent = "この番号にする";
+    $("pinNote").textContent = "忘れないように、メモしておいてください。";
+  }
+  $("pinBtn").onclick = async () => {
+    const p = $("pinInput").value.trim();
+    $("pinErr").textContent = "";
+    if (!/^\d{6}$/.test(p)) { $("pinErr").textContent = "6けたの数字を入れてください"; return; }
+    if (firstTime && p !== $("pinInput2").value.trim()) { $("pinErr").textContent = "2回目の番号が違います"; return; }
+    $("pinBtn").disabled = true;
     try {
-      const ref = db.collection("config").doc("owners");
-      await db.runTransaction(async (tx) => {
-        const s = await tx.get(ref);
-        const uids = (s.data().uids || []);
-        tx.update(ref, { uids: uids.concat([myUid]), pairCode: code });
-      });
-      try { await db.collection("pair").doc(code).delete(); } catch {}
-      toast("つながりました！", 3000);
+      const h = await pinHash(p);
+      if (firstTime) {
+        const b = db.batch();
+        b.set(db.collection("config").doc("secret"), { pinHash: h });
+        b.set(db.collection("config").doc("lock"), { set: true, at: TS() });
+        b.set(db.collection("members").doc(myUid), { pinHash: h, at: TS() });
+        await b.commit();
+        toast("暗証番号を決めました", 3000);
+      } else {
+        await db.collection("members").doc(myUid).set({ pinHash: h, at: TS() });
+        toast("ひらきました", 2500);
+      }
       enterApp();
     } catch (e) {
       console.error(e);
-      $("pairErr").textContent = "つなげませんでした。数字が合っているか、10分以内か確かめてください。";
-    } finally { $("pairBtn").disabled = false; }
+      $("pinErr").textContent = firstTime ? "決められませんでした。もう一度お試しください。" : "暗証番号が違います";
+    } finally { $("pinBtn").disabled = false; }
   };
 }
 
@@ -1250,12 +1264,19 @@ function setupSettings() {
     try { await navigator.clipboard.writeText($("copyLinkBtn").dataset.url); toast("リンクをコピーしました"); }
     catch { prompt("このリンクをコピーしてください", $("copyLinkBtn").dataset.url); }
   };
-  $("pairMakeBtn").onclick = async () => {
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+  $("pinChangeBtn").onclick = async () => {
+    const p = (prompt("新しい暗証番号（6けたの数字）") || "").trim(); if (!p) return;
+    if (!/^\d{6}$/.test(p)) { toast("6けたの数字にしてください"); return; }
+    if ((prompt("確認のため、もう一度入れてください") || "").trim() !== p) { toast("番号が違いました"); return; }
     try {
-      await db.collection("pair").doc(code).set({ exp: new Date(Date.now() + 10 * 60000), createdAt: TS() });
-      $("pairCode").textContent = code; $("pairBox").classList.remove("hidden");
-    } catch (e) { console.error(e); toast("数字を出せませんでした"); }
+      const h = await pinHash(p);
+      const b = db.batch();
+      b.set(db.collection("config").doc("secret"), { pinHash: h });
+      b.set(db.collection("config").doc("lock"), { set: true, at: TS() });
+      b.set(db.collection("members").doc(myUid), { pinHash: h, at: TS() });
+      await b.commit();
+      toast("暗証番号を変えました");
+    } catch (e) { console.error(e); toast("変えられませんでした"); }
   };
 }
 async function createInvite() {
