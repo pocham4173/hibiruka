@@ -783,6 +783,10 @@ function showPair() {
 function enterApp() {
   show("app");
   setupTabs(); setupForm(); setupList(); setupSettings();
+  // LINEのメニューなどから開いたとき：?tab=rec / list / set、?view=up / cal / mem / fav
+  const t0 = qs.get("tab"), v0 = qs.get("view");
+  if (["rec", "list", "set"].includes(t0)) goTab(t0);
+  if (["up", "cal", "mem", "fav"].includes(v0)) { view = v0; document.querySelectorAll(".tile").forEach(x => x.classList.toggle("on", x.dataset.view === v0)); }
   const denied = (e) => { console.error(e); if (e.code === "permission-denied") toast("読み込めませんでした。もう一度開き直してください。", 6000); };
   unsub.push(db.collection("friends").orderBy("createdAt").onSnapshot(s => {
     friends = s.docs.map(d => ({ id: d.id, ...d.data() }));
