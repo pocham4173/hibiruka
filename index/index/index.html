@@ -306,7 +306,10 @@
   .friend { flex-wrap:wrap; align-items:flex-start; }
   .friend .name { flex-basis:100%; }
   details summary { cursor:pointer; padding:12px 0; font-weight:600; }
-  .simple-dialog { border:1px solid var(--line); border-radius:16px; padding:22px; width:min(90vw,430px); }
+  .simple-dialog { position:fixed; inset:0; margin:auto; box-sizing:border-box; border:1px solid var(--line); border-radius:16px; padding:20px; width:calc(100% - 32px); max-width:430px; max-height:calc(100dvh - 32px); overflow:auto; overscroll-behavior:contain; color:var(--text); background:#fff; }
+  .simple-dialog form { min-width:0; }
+  .simple-dialog input { display:block; width:100%; min-width:0; max-width:100%; font-size:16px; }
+  .simple-dialog h2, .simple-dialog p { overflow-wrap:anywhere; }
   .simple-dialog::backdrop { background:rgb(0 0 0 / .45); }
   #installGuide li { margin:16px 0; font-size:17px; }
 </style>
@@ -646,8 +649,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <dialog id="friendEdit" class="simple-dialog"><form id="friendEditForm">
-<h2>送信先の名前を変更</h2><label for="friendEditName">ヒビルカに表示する名前</label>
-<input id="friendEditName" maxlength="40" required autocomplete="off">
+<h2>送信先の名前を変更</h2><label class="lbl" for="friendEditName">ヒビルカに表示する名前</label>
+<input type="text" id="friendEditName" maxlength="40" required autocomplete="off">
 <p class="note">LINEの送信先と予約済みの通知はそのままです。</p>
 <p id="friendEditError" class="err" role="alert"></p>
 <button id="friendEditSave" class="btn" type="submit">保存する</button>
@@ -1429,7 +1432,7 @@ function editFriend(id) {
     } catch { $("friendEditError").textContent = '保存できませんでした。もう一度お試しください。'; }
     finally { $("friendEditSave").disabled = false; }
   };
-  dialog.showModal(); $("friendEditName").focus();
+  dialog.showModal(); $("friendEditName").focus({preventScroll:true});
 }
 function renderFriends() {
   const list = $("friendList"); if (!list) return;

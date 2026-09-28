@@ -24,8 +24,8 @@ test('retry key is stable for a reservation and different for another', () => {
   assert.ok(buildText({date:'2026-09-28',title:'予定',memo:'a'.repeat(6000)},'テスト').length<=5000);
 });
 
-function fixture({validate=false,status=200,accepted=false,expired=false,revoked=false}={}) {
-  const records={events:{event:{date:expired?'2020-01-01':'2099-01-01',time:'12:00',kind:'plan',title:'テストの予定',sends:[{id:'send',friendIds:['self'],at:'2020-01-01T10:00',status:'wait'}],nextSendAt:'2020-01-01T10:00'}},friends:{self:{status:revoked?'pending':'joined',lineUserId:'U'+'a'.repeat(32)},other:{status:'joined',lineUserId:'U'+'b'.repeat(32)}}};
+function fixture({validate=false,status=200,accepted=false,expired=false,revoked=false,recovery=false}={}) {
+  const records={config:{app:{selfFriendId:'self'}},events:{event:{date:expired?'2020-01-01':'2099-01-01',time:'12:00',kind:'plan',title:'テストの予定',sends:[{id:'send',friendIds:['self'],at:'2020-01-01T10:00',status:'wait'}],nextSendAt:'2020-01-01T10:00'}},friends:{self:{status:revoked?'pending':'joined',lineUserId:'U'+'a'.repeat(32)},other:{status:'joined',lineUserId:'U'+'b'.repeat(32)}}};
   const clone=x=>structuredClone(x), calls=[];
   const ref=(collection,id)=>({id,collection,get:async()=>snap(collection,id)});
   const snap=(c,id)=>({id,ref:ref(c,id),exists:!!records[c][id],data:()=>clone(records[c][id])});
@@ -41,7 +41,7 @@ function fixture({validate=false,status=200,accepted=false,expired=false,revoked
     })
   };
   const exports={};
-  const context={exports,module:{exports},require:name=>name==='firebase-admin'?{initializeApp:()=>{},credential:{cert:x=>x},firestore:()=>db}:name==='./service-account.cjs'?{parseServiceAccount}:require(name),Date,AbortSignal,console:{log:()=>{},error:()=>{}},process:{env:{FIREBASE_SERVICE_ACCOUNT:json,LINE_CHANNEL_ACCESS_TOKEN:'fake-test-token',VALIDATE_ONLY:String(validate)}},fetch:async(url,options)=>{
+  const context={exports,module:{exports},require:name=>name==='firebase-admin'?{initializeApp:()=>{},credential:{cert:x=>x},firestore:()=>db}:name==='./service-account.cjs'?{parseServiceAccount}:require(name),Date,AbortSignal,console:{log:()=>{},error:()=>{}},process:{env:{FIREBASE_SERVICE_ACCOUNT:json,LINE_CHANNEL_ACCESS_TOKEN:'fake-test-token',VALIDATE_ONLY:String(validate),...(recovery?{RECOVER_SELF_AT:'2020-01-01T10:00'}:{})}},fetch:async(url,options)=>{
     calls.push({url,options});return url.endsWith('/info')?{ok:true,json:async()=>({basicId:'@626hnkgo'})}:{ok:status===200,status,headers:new Headers(accepted?{'x-line-accepted-request-id':'accepted'}:{})};
   }};
   vm.createContext(context);vm.runInContext(fs.readFileSync(require.resolve('../scripts/send-line.cjs'),'utf8'),context);
@@ -72,4 +72,16 @@ test('all app scripts parse and install manifest is scoped to the GitHub app',()
   assert.equal(manifest.start_url,'./');assert.equal(manifest.scope,'./');
   for(const icon of manifest.icons)assert.ok(fs.existsSync('index/index/'+icon.src));
   new vm.Script(fs.readFileSync('index/index/install.js','utf8'));
+});
+
+test('recovery only retries the verified self and exact reservation; never other recipients', async()=>{
+  const f=fixture({recovery:true});
+  f.records.events.event.sends.push({id:'other',friendIds:['other'],at:'2020-01-01T10:00',status:'wait'});
+  f.records.events.event.sends.push({id:'later',friendIds:['self'],at:'2020-01-02T10:00',status:'wait'});
+  await f.main();
+  assert.equal(f.records.events.event.sends[0].status,'sent');
+  assert.equal(f.records.events.event.sends[1].status,'wait');
+  assert.equal(f.records.events.event.sends[2].status,'wait');
+  const g=fixture({recovery:true});g.records.friends.self.status='pending';
+  await assert.rejects(g.main());assert.equal(g.calls.length,1);
 });

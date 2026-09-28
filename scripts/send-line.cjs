@@ -46,18 +46,29 @@ async function main() {
     console.log('接続確認OK：Firebase・ヒビルカLINE。メッセージは送信していません。');
     return;
   }
+  const recoveryAt = process.env.RECOVER_SELF_AT;
+  let selfId = null;
+  if (recoveryAt) {
+    const config = await db.collection('config').doc('app').get();
+    selfId = config.data()?.selfFriendId;
+    if (!selfId || typeof selfId !== 'string' || selfId.includes('/')) throw new Error('LINE接続情報：自分の登録を確認できません。');
+    const self = await db.collection('friends').doc(selfId).get();
+    if (!self.exists || self.data().status !== 'joined' || !/^U[0-9a-f]{32}$/i.test(self.data().lineUserId || '')) throw new Error('LINE接続情報：自分のLINE登録を確認できません。');
+  }
+  const recoveryMatches = (ev, item) => !recoveryAt || (item.at === recoveryAt && item.friendIds?.length === 1 && item.friendIds[0] === selfId);
   const now = nowJst();
   const snapshot = await db.collection('events').where('nextSendAt','<=',now).get();
+  if (recoveryAt && snapshot.docs.flatMap(doc => (doc.data().sends || []).filter(item => item.status === 'wait' && recoveryMatches(doc.data(), item))).length > 1) throw new Error('LINE接続情報：該当する自分宛ての予約が複数あるため停止しました。');
   let sent = 0, failed = 0;
   for (const doc of snapshot.docs) {
     for (const candidate of doc.data().sends || []) {
-      if (candidate.status !== 'wait' || candidate.at > now) continue;
+      if (candidate.status !== 'wait' || candidate.at > now || !recoveryMatches(doc.data(), candidate)) continue;
       const claimed = await db.runTransaction(async tx => {
         const fresh = await tx.get(doc.ref);
         if (!fresh.exists) return null;
         const ev = fresh.data(), sends = ev.sends || [];
         const item = sends.find(s => s.id === candidate.id);
-        if (!item || item.status !== 'wait' || item.at > now || (item.leaseUntil || 0) > Date.now()) return null;
+        if (!item || !recoveryMatches(ev, item) || item.status !== 'wait' || item.at > now || (item.leaseUntil || 0) > Date.now()) return null;
         const deadline = `${ev.date}T${ev.time || '23:59'}`;
         if (ev.kind === 'memory' || deadline < now) {
           item.status = 'fail'; item.error = '予定の日時を過ぎたため送信しませんでした。';
@@ -78,7 +89,7 @@ async function main() {
         await updateSend(db,doc.ref,item.id,{status:'fail',error:'送れる相手がいません。LINE登録を確認してください。'}); failed++; continue;
       }
       const check = await doc.ref.get();
-      if (!check.exists || !check.data().sends?.some(s => s.id === item.id && s.status === 'wait')) continue;
+      if (!check.exists || !check.data().sends?.some(s => s.id === item.id && s.status === 'wait' && recoveryMatches(check.data(), s))) continue;
       try {
         const response = await lineRequest('/v2/bot/message/multicast',token,{
           method:'POST', headers:{'X-Line-Retry-Key':retryKey(doc.id,item.id)},
