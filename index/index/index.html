@@ -99,6 +99,12 @@
   .plus-btn svg { width: 24px; height: 24px; }
 
   /* フォーム */
+  .record-heading { font-size:22px; font-weight:700; margin:20px 0 8px; }
+  #catPills { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  #catPills .pill { min-height:52px; font-size:17px; justify-content:center; white-space:normal; overflow-wrap:anywhere; }
+  .kind-buttons { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:18px 0; }
+  .kind-buttons .pill { justify-content:center; min-height:48px; font-size:18px; }
+
   .step { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15.5px; margin: 20px 0 8px; color: var(--navy); }
   .step .n { width: 24px; height: 24px; border-radius: 50%; background: var(--navy); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
   .step small { font-weight: 400; font-size: 12.5px; color: var(--muted); }
@@ -354,20 +360,19 @@
 
   <!-- ===== 記録する ===== -->
   <section id="tab-rec" class="wrap hidden">
-    <div class="eyebrow" id="recEyebrow">何の記録？</div>
+    <h2 id="recEyebrow" tabindex="-1" class="record-heading">記録の種類を選ぶ</h2>
+    <p class="note">遊び・食事など、1つ選んでください。</p>
     <div class="pills" id="catPills" style="margin-top:8px"></div>
     <button class="chip add" id="catEditBtn" style="margin-top:12px">✏️ 項目を編集</button>
 
     <div class="card" style="margin-top:18px">
       <div class="form-head"><div class="ic c0" id="fIcon"></div><h2 id="fHead">遊びの記録</h2></div>
 
-      <label class="lbl">予定・記録の状態</label>
-      <select id="fKind">
-        <option value="auto">日付に合わせる</option>
-        <option value="plan">予定（これから）</option>
-        <option value="memory">思い出（あったこと）</option>
-      </select>
-      <p class="note">未来の日付は予定、今日より前は思い出になります。</p>
+      <input type="hidden" id="fKind" value="plan">
+      <div class="kind-buttons" role="group" aria-label="予定か思い出を選ぶ">
+        <button type="button" class="pill on" data-kind="plan" aria-pressed="true">予定</button>
+        <button type="button" class="pill" data-kind="memory" aria-pressed="false">思い出</button>
+      </div>
 
       <div class="step"><span class="n">1</span>いつ？</div>
       <div class="row2">
@@ -535,9 +540,9 @@
     <div class="ig-kicker">HOW TO USE</div>
     <h3 class="ig-h">使い方</h3>
     <div class="ig-steps">
-      <div class="ig-step"><span>01</span><div><b>記録する</b><p>「食事」「カフェ」「病院」などを選んで、いつ・誰と・どこで・なにをするかを入れます。写真は4枚まで。気に入った場所には ♥「また行きたい」。</p></div></div>
+      <div class="ig-step"><span>01</span><div><b>記録する</b><p>上の大きなボタンで「遊び」「食事」などを1つ選び、「予定」か「思い出」を選びます。日付と、場所または内容を入れて保存。写真やメモは、残したいときだけでOK。</p></div></div>
       <div class="ig-step"><span>02</span><div><b>LINEで予定を送る</b><p>これからの予定を保存すると「LINEで予定を送りますか？」と出ます。<b>誰に</b>・<b>送る日</b>・<b>送る時間</b>を選ぶだけ。「前の日の朝」「予定の1時間前」などもワンタップ。</p></div></div>
-      <div class="ig-step"><span>03</span><div><b>振り返る</b><p>「予定・思い出」で、カレンダー／思い出／また行きたい を切り替え。日付が過ぎた予定は、自然に思い出のアルバムへ。</p></div></div>
+      <div class="ig-step"><span>03</span><div><b>振り返る</b><p>「カレンダー」で日付を押すと、その日の予定を見たり追加できます。「思い出」で過去を振り返り、♥を付けた記録は「また行きたい」に集まります。</p></div></div>
       <div class="ig-step"><span>04</span><div><b>大切な人を招待する</b><p>「設定」で相手の名前を入れて、招待リンクをLINEで送ります。相手が<b>承認</b>すると、予定を送れる相手になります。</p></div></div>
     </div>
   </section>
@@ -564,6 +569,7 @@
     <h3 class="ig-h">ホーム画面に追加する</h3>
     <button class="btn navy" type="button" data-install>ホームに追加</button>
     <p class="ig-p" data-install-hint>上のボタンから、ホーム画面に追加できます。</p>
+    <details><summary>ホーム追加の流れ</summary><p class="ig-note">Android・Google Pixelは、対応するChromeでボタンを押し、確認画面で「インストール」。LINE内ではボタンからChromeへ進みます。iPhoneはボタンを押すと共有メニューからの追加方法が表示されます。</p></details>
   </section>
 
   <section class="ig">
@@ -891,7 +897,7 @@ function goTab(t) {
 /* =========================================================
    記録する
    ========================================================= */
-let form = { cat: "遊び", who: new Set(), fav: false, photos: [] }; // photos: [{thumb, full}] 新規 or {id, thumb} 既存
+let form = { cat: "", who: new Set(), fav: false, photos: [] }; // photos: [{thumb, full}] 新規 or {id, thumb} 既存
 let editingId = null;
 
 function catColor(i) { return "c" + (i % 4); }
@@ -905,28 +911,36 @@ function setupForm() {
   $("fPhotoInput").onchange = addPhotos;
   $("saveBtn").onclick = saveRecord;
   $("cancelEditBtn").onclick = () => { resetForm(); goTab("list"); };
-  $("fDate").oninput = updateSaveNote; $("fKind").onchange = updateSaveNote;
+  $("fDate").oninput = () => {
+    if ($("fDate").value && $("fDate").value < todayStr()) $("fKind").value = "memory";
+    updateSaveNote();
+  };
+  document.querySelectorAll('[data-kind]').forEach(b => b.onclick = () => {
+    $("fKind").value = b.dataset.kind; updateSaveNote();
+  });
   $("fPlace").oninput = updateMapLink;
 }
 function resetForm() {
   editingId = null;
-  form = { cat: cats[0]?.name || "遊び", who: new Set(), fav: false, photos: [] };
-  $("fKind").value = "auto"; $("fDate").value = todayStr(); $("fTime").value = "";
+  form = { cat: "", who: new Set(), fav: false, photos: [] };
+  $("fKind").value = "plan"; $("fDate").value = todayStr(); $("fTime").value = "";
   $("fPlace").value = ""; $("fTitle").value = ""; $("fMemo").value = ""; $("fLink").value = "";
   $("fFav").classList.remove("on");
   $("saveBtn").textContent = "この内容で記録する";
   $("cancelEditBtn").classList.add("hidden");
-  $("recEyebrow").textContent = "何の記録？";
+  $("recEyebrow").textContent = "記録の種類を選ぶ";
   renderCats(); renderWho(); renderPhotos(); updateSaveNote(); updateMapLink();
 }
 function renderCats() {
   if (!$("catPills")) return;
-  if (!cats.some(c => c.name === form.cat)) form.cat = cats[0]?.name || "";
-  $("catPills").innerHTML = cats.map((c, i) => `<button class="pill ${catColor(i)} ${c.name === form.cat ? "on" : ""}" data-cat="${esc(c.name)}">${icon(c.icon)}${esc(c.name)}</button>`).join("");
+  const choices = cats.slice();
+  if (editingId && form.cat && !choices.some(c => c.name === form.cat)) choices.push({name:form.cat,icon:"pin"});
+  if (!choices.some(c => c.name === form.cat)) form.cat = "";
+  $("catPills").innerHTML = choices.map((c, i) => `<button type="button" class="pill ${catColor(i)} ${c.name === form.cat ? "on" : ""}" aria-pressed="${c.name === form.cat}" data-cat="${esc(c.name)}">${icon(c.icon)}${c.name === form.cat ? "✓ " : ""}${esc(c.name)}</button>`).join("");
   $("catPills").querySelectorAll("[data-cat]").forEach(b => b.onclick = () => { form.cat = b.dataset.cat; renderCats(); });
   const c = catOf(form.cat), i = catIndex(form.cat);
   $("fIcon").className = "ic " + catColor(i); $("fIcon").innerHTML = icon(c.icon);
-  $("fHead").textContent = `${form.cat}の記録`;
+  $("fHead").textContent = form.cat ? `${form.cat}の記録` : "上で記録の種類を選んでください";
 }
 function renderWho() {
   if (!$("fWho")) return;
@@ -961,7 +975,11 @@ function gcalUrl(e) {
 }
 function updateSaveNote() {
   const k = $("fKind").value, d = $("fDate").value;
-  const plan = k === "plan" || (k === "auto" && d >= todayStr());
+  const plan = k === "plan" && d >= todayStr();
+  document.querySelectorAll('[data-kind]').forEach(b => {
+    const on = b.dataset.kind === k; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
+  });
+  $("saveBtn").textContent = editingId ? "変更を保存する" : plan ? "予定を保存する" : "思い出を保存する";
   $("saveNote").textContent = plan ? "予定なので、保存したあとにLINEで送るかどうか選べます。" : "思い出として残ります。";
 }
 
@@ -996,11 +1014,13 @@ function renderPhotos() {
 }
 
 async function saveRecord() {
+  if (!form.cat) { toast("遊び・食事など、記録の種類を1つ選んでください"); $("recEyebrow").focus(); return; }
   const date = $("fDate").value;
   if (!date) { toast("日付を入れてください"); return; }
   const kindSel = $("fKind").value;
+  if (kindSel === "plan" && date < todayStr()) { toast("過去の日付は「思い出」を選んでください"); return; }
   const data = {
-    cat: form.cat, kind: kindSel === "auto" ? (date >= todayStr() ? "plan" : "memory") : kindSel,
+    cat: form.cat, kind: kindSel,
     date, time: $("fTime").value || "",
     who: [...form.who], place: $("fPlace").value.trim(), title: $("fTitle").value.trim(),
     memo: $("fMemo").value.trim(), link: $("fLink").value.trim(), fav: form.fav,
@@ -1033,7 +1053,7 @@ async function editRecord(id) {
   editingId = id;
   form.cat = e.cat || cats[0]?.name; form.who = new Set(e.who || []); form.fav = !!e.fav;
   form.photos = (e.thumbs || []).map(t => ({ thumb: t, full: null }));
-  $("fKind").value = e.kind || "auto"; $("fDate").value = e.date; $("fTime").value = e.time || "";
+  $("fKind").value = isPlan(e) ? "plan" : "memory"; $("fDate").value = e.date; $("fTime").value = e.time || "";
   $("fPlace").value = e.place || ""; $("fTitle").value = e.title || ""; $("fMemo").value = e.memo || ""; $("fLink").value = e.link || "";
   $("fFav").classList.toggle("on", form.fav);
   $("saveBtn").textContent = "変更を保存する"; $("cancelEditBtn").classList.remove("hidden");
@@ -1109,7 +1129,7 @@ function setupList() {
   $("calAll").onclick = () => { calSel = null; renderList(); };
   $("calAdd").onclick = () => {
     if (!calSel) return;
-    resetForm(); $("fDate").value = calSel; updateSaveNote(); goTab("rec");
+    resetForm(); $("fDate").value = calSel; $("fKind").value = calSel < todayStr() ? "memory" : "plan"; updateSaveNote(); goTab("rec");
   };
 }
 function renderFilters() {
