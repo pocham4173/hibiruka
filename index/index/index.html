@@ -84,8 +84,8 @@
   .pill.on { background: var(--navy); color: #fff; border-color: var(--navy); }
   .pills { display: flex; flex-wrap: wrap; gap: 8px; }
 
-  /* 表示切り替え（これから・カレンダー…） */
-  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 18px 0 16px; }
+  /* 表示切り替え */
+  .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 18px 0 16px; }
   .tile { border-radius: 12px; padding: 12px 2px 10px; display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; white-space: nowrap; cursor: pointer; background: #fff !important; color: var(--text) !important; border: 1px solid var(--line) !important; }
   .tile svg { width: 22px; height: 22px; color: var(--rose); }
   .tile.on { background: var(--navy) !important; color: #fff !important; border-color: var(--navy) !important; }
@@ -95,7 +95,7 @@
   .hero h2 { font-size: 21px; margin: 2px 0 6px; color: var(--text); flex: 1; font-weight: 600; line-height: 1.5; letter-spacing: .08em; }
   .hero .sparkle { color: #c9a13b; font-size: 14px; }
   .hero p { margin: 0; color: var(--muted); font-size: 13.5px; }
-  .plus-btn { width: 50px; height: 50px; border-radius: 50%; border: none; background: var(--navy); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; flex: 0 0 auto; box-shadow: 0 4px 12px rgba(31,45,74,.25); }
+  .plus-btn { width: 100%; min-height: 48px; margin-top: 14px; gap: 8px; font-size: 16px; font-weight: 700; border-radius: 12px; border: none; background: var(--navy); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; flex: 0 0 auto; box-shadow: 0 4px 12px rgba(31,45,74,.25); }
   .plus-btn svg { width: 24px; height: 24px; }
 
   /* フォーム */
@@ -187,7 +187,7 @@
   .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; text-align: center; }
   .cal .wd { font-size: 11.5px; color: var(--muted); font-weight: 600; padding-bottom: 4px; }
   .cal .wd:first-child { color: #b0413b; } .cal .wd:last-child { color: #3d5f9e; }
-  .cal .day { aspect-ratio: 1; border-radius: 50%; font-size: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; border: 1px solid transparent; }
+  .cal .day { background: transparent; color: inherit; padding: 0; min-width: 0; aspect-ratio: 1; border-radius: 50%; font-size: 14px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; border: 1px solid transparent; }
   .cal .day.other { opacity: .3; }
   .cal .day.today { border-color: var(--navy); }
   .cal .day.sel { background: var(--navy); color: #fff; }
@@ -406,15 +406,14 @@
   <section id="tab-list" class="wrap">
     <div class="eyebrow">過去も、これからも</div>
     <div class="hero">
-      <div style="flex:1"><h2>あの日も、<br>次の楽しみも。<span class="sparkle">✦</span></h2><p>予定を立てて、思い出を重ねよう。</p></div>
-      <button class="plus-btn" id="heroPlus" aria-label="記録する"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
+      <div style="flex:1"><h2>予定も、思い出も。<span class="sparkle">✦</span></h2><p>予定を立てて、思い出を重ねよう。</p></div>
     </div>
+      <button class="plus-btn" id="heroPlus" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg><span id="heroPlusLabel">予定を追加</span></button>
 
     <div class="tiles">
-      <div class="tile c3 on" data-view="up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>これから</div>
-      <div class="tile c1" data-view="cal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/></svg>カレンダー</div>
-      <div class="tile c2" data-view="mem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>思い出</div>
-      <div class="tile c0" data-view="fav"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.5-1.4 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.1 3 5.5l7 7Z"/></svg>また行きたい</div>
+      <button type="button" class="tile c1 on" data-view="cal" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/></svg>カレンダー</button>
+      <button type="button" class="tile c2" data-view="mem" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>思い出</button>
+      <button type="button" class="tile c0" data-view="fav" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.5-1.4 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.1 3 5.5l7 7Z"/></svg>また行きたい</button>
     </div>
 
     <div class="pills" id="filterPills"></div>
@@ -422,8 +421,13 @@
     <button class="chip add" id="catEditBtn2" style="margin-top:12px">✏️ 項目を追加・削除</button>
 
     <div id="calBox" class="card hidden" style="margin-top:16px">
-      <div class="cal-head"><button id="calPrev">‹</button><b id="calTitle"></b><button id="calNext">›</button></div>
+      <div class="cal-head"><button type="button" id="calPrev" aria-label="前の月">‹</button><b id="calTitle"></b><button type="button" id="calNext" aria-label="次の月">›</button></div>
       <div class="cal" id="calGrid"></div>
+      <p class="note center">日付を押すと、その日の予定を見たり追加できます</p>
+      <div id="calActions" class="hidden">
+        <button type="button" class="plus-btn" id="calAdd">この日に追加</button>
+        <button type="button" class="chip" id="calAll" style="margin-top:12px">これからの予定をすべて見る</button>
+      </div>
     </div>
 
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:22px">
@@ -530,7 +534,7 @@
     <div class="ig-steps">
       <div class="ig-step"><span>01</span><div><b>記録する</b><p>「食事」「カフェ」「病院」などを選んで、いつ・誰と・どこで・なにをするかを入れます。写真は4枚まで。気に入った場所には ♥「また行きたい」。</p></div></div>
       <div class="ig-step"><span>02</span><div><b>LINEで予定を送る</b><p>これからの予定を保存すると「LINEで予定を送りますか？」と出ます。<b>誰に</b>・<b>送る日</b>・<b>送る時間</b>を選ぶだけ。「前の日の朝」「予定の1時間前」などもワンタップ。</p></div></div>
-      <div class="ig-step"><span>03</span><div><b>振り返る</b><p>「予定・思い出」で、これから／カレンダー／思い出／また行きたい を切り替え。日付が過ぎた予定は、自然に思い出のアルバムへ。</p></div></div>
+      <div class="ig-step"><span>03</span><div><b>振り返る</b><p>「予定・思い出」で、カレンダー／思い出／また行きたい を切り替え。日付が過ぎた予定は、自然に思い出のアルバムへ。</p></div></div>
       <div class="ig-step"><span>04</span><div><b>大切な人を招待する</b><p>「設定」で相手の名前を入れて、招待リンクをLINEで送ります。相手が<b>承認</b>すると、予定を送れる相手になります。</p></div></div>
     </div>
   </section>
@@ -697,7 +701,7 @@ function addDays(s, n) { const [y, m, d] = s.split("-").map(Number); return ymd(
 function fmtAt(at) { const [d, t] = at.split("T"); const p = parts(d); return `${p.m}/${p.d}(${p.w}) ${t}`; }
 function nextSendAt(sends) { const w = (sends || []).filter(x => x.status === "wait").map(x => x.at).sort(); return w[0] || null; }
 function inviteUrl(token) { return `https://liff.line.me/${CONFIG.liffId}?invite=${encodeURIComponent(token)}`; }
-function isPlan(e) { return e.kind === "plan" || (e.kind !== "memory" && e.date >= todayStr()); }
+function isPlan(e) { return e.kind !== "memory" && e.date >= todayStr(); }
 function toast(msg, ms = 3500) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), ms); }
 function show(id) { ["loading", "pairView", "app", "invite", "intro"].forEach(x => $(x).classList.toggle("hidden", x !== id)); }
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -850,7 +854,7 @@ function enterApp() {
   // LINEのメニューなどから開いたとき：?tab=rec / list / set、?view=up / cal / mem / fav
   const t0 = qs.get("tab"), v0 = qs.get("view");
   if (["rec", "list", "set"].includes(t0)) goTab(t0);
-  if (["up", "cal", "mem", "fav"].includes(v0)) { view = v0; document.querySelectorAll(".tile").forEach(x => x.classList.toggle("on", x.dataset.view === v0)); }
+  if (["up", "cal", "mem", "fav"].includes(v0)) selectView(v0 === "up" ? "cal" : v0);
   const denied = (e) => { console.error(e); if (e.code === "permission-denied") toast("読み込めませんでした。もう一度開き直してください。", 6000); };
   unsub.push(db.collection("friends").orderBy("createdAt").onSnapshot(s => {
     friends = s.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -878,7 +882,7 @@ const appRef = () => db.collection("config").doc("app");
 /* ---------- メインタブ ---------- */
 function setupTabs() {
   document.querySelectorAll(".maintabs button").forEach(b => b.onclick = () => goTab(b.dataset.tab));
-  $("heroPlus").onclick = () => { resetForm(); goTab("rec"); };
+  $("heroPlus").onclick = () => { resetForm(); if (view === "mem") { $("fKind").value = "memory"; updateSaveNote(); } goTab("rec"); };
 }
 function goTab(t) {
   document.querySelectorAll(".maintabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === t));
@@ -1018,7 +1022,7 @@ async function saveRecord() {
     form.photos.forEach((p, i) => { if (p.full) batch.set(db.collection("photos").doc(`${id}_${i}`), { eventId: id, i, data: p.full }); });
     await batch.commit();
     const saved = { ...data, id, sends: events.find(x => x.id === id)?.sends || [] };
-    resetForm(); goTab("list");
+    resetForm(); selectView(isPlan(saved) ? "cal" : "mem"); goTab("list");
     if (isPlan(saved)) openSend(id, saved);
     else toast(wasNew ? "記録しました" : "変更を保存しました");
   } catch (e) { console.error(e); toast("保存できませんでした。電波のよい所でもう一度お試しください。"); }
@@ -1087,17 +1091,32 @@ async function saveCats(a) {
 /* =========================================================
    予定・思い出
    ========================================================= */
-let view = "up", filterCat = "", filterWho = "", calMonth = null, calSel = null;
+let view = "cal", filterCat = "", filterWho = "", calMonth = null, calSel = null;
 
+function selectView(next) {
+  view = next; calSel = null;
+  document.querySelectorAll(".tile").forEach(x => {
+    const on = x.dataset.view === view;
+    x.classList.toggle("on", on); x.setAttribute("aria-pressed", String(on));
+  });
+  $("heroPlusLabel").textContent = view === "mem" ? "思い出を残す" : "予定を追加";
+  renderList();
+}
 function setupList() {
-  document.querySelectorAll(".tile").forEach(t => t.onclick = () => { view = t.dataset.view; document.querySelectorAll(".tile").forEach(x => x.classList.toggle("on", x === t)); renderList(); });
+  document.querySelectorAll(".tile").forEach(t => t.onclick = () => selectView(t.dataset.view));
   $("catEditBtn2").onclick = openCatSheet;
-  const n = new Date(); calMonth = new Date(n.getFullYear(), n.getMonth(), 1); calSel = todayStr();
-  $("calPrev").onclick = () => { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1); renderList(); };
-  $("calNext").onclick = () => { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1); renderList(); };
+  const n = new Date(); calMonth = new Date(n.getFullYear(), n.getMonth(), 1); calSel = null;
+  $("calPrev").onclick = () => { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() - 1, 1); calSel = null; renderList(); };
+  $("calNext").onclick = () => { calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + 1, 1); calSel = null; renderList(); };
+  $("calAll").onclick = () => { calSel = null; renderList(); };
+  $("calAdd").onclick = () => {
+    if (!calSel) return;
+    resetForm(); $("fDate").value = calSel; updateSaveNote(); goTab("rec");
+  };
 }
 function renderFilters() {
   if (!$("filterPills")) return;
+  renderWhoFilter();
   const all = [{ key: "", label: "すべて", ic: "book" }, { key: "__who", label: "誰と", ic: "users" }, ...cats.map(c => ({ key: c.name, label: c.name, ic: c.icon }))];
   $("filterPills").innerHTML = all.map((f, i) => {
     const on = f.key === "__who" ? !!filterWho : (f.key === filterCat && !(f.key === "" && filterWho));
@@ -1110,7 +1129,7 @@ function renderFilters() {
   });
 }
 function renderWhoFilter() {
-  const names = [...new Set(events.flatMap(e => e.who || []).concat(people, friends.map(f => f.name)))];
+  const names = [...new Set(events.flatMap(e => e.who || []).concat(people, friends.filter(f => f.id !== selfFriendId).map(f => f.name)))];
   $("whoFilter").innerHTML = names.length ? names.map(n => `<button class="chip ${n === filterWho ? "on" : ""}" data-w="${esc(n)}">${esc(n)}</button>`).join("") : `<span class="note">まだ「誰と」の記録がありません</span>`;
   $("whoFilter").querySelectorAll("[data-w]").forEach(b => b.onclick = () => { filterWho = filterWho === b.dataset.w ? "" : b.dataset.w; renderWhoFilter(); renderFilters(); renderList(); });
 }
@@ -1147,9 +1166,11 @@ function renderList() {
   const t = todayStr(), list = filtered();
   $("calBox").classList.toggle("hidden", view !== "cal");
   let items = [], title = "", html = "";
-  if (view === "up") {
+  $("calActions").classList.toggle("hidden", view !== "cal" || !calSel);
+  if (view === "cal") renderCal(list);
+  if (view === "cal" && !calSel) {
     title = "これからの予定"; items = list.filter(isPlan).sort((a, b) => (a.date + a.time) < (b.date + b.time) ? -1 : 1);
-    html = items.length ? items.map(card).join("") : emptyBox("pin", "次の楽しみを予定にしよう。", "右上の「＋」から入れられます");
+    html = items.length ? items.map(card).join("") : emptyBox("pin", "次の楽しみを予定にしよう。", "「予定を追加」から入れられます");
   } else if (view === "mem") {
     title = "思い出"; items = list.filter(e => !isPlan(e)).sort((a, b) => a.date < b.date ? 1 : -1);
     html = items.length ? `<div class="album">${items.map(e => {
@@ -1161,12 +1182,12 @@ function renderList() {
     title = "また行きたい"; items = list.filter(e => e.fav).sort((a, b) => a.date < b.date ? 1 : -1);
     html = items.length ? items.map(card).join("") : emptyBox("heart", "「また行きたい」はまだありません。", "記録するときに ♥ を押すとここに集まります");
   } else {
-    renderCal(list);
-    title = fmtDate(calSel); items = list.filter(e => e.date === calSel);
+    title = fmtDate(calSel); items = list.filter(e => e.date === calSel).sort((a,b) => (a.time || "").localeCompare(b.time || ""));
+    $("calAdd").textContent = calSel < t ? "＋ この日の思い出を残す" : "＋ この日に予定を追加";
     html = items.length ? items.map(card).join("") : `<p class="note center">この日の記録はありません</p>`;
   }
   $("listTitle").textContent = title;
-  $("listCount").textContent = view === "cal" ? "" : `${items.length}件`;
+  $("listCount").textContent = `${items.length}件`;
   $("listBox").innerHTML = html;
   $("listBox").querySelectorAll("[data-open]").forEach(el => el.onclick = (ev) => { if (ev.target.closest("[data-cancel],[data-stop]")) return; openDetail(el.dataset.open); });
   $("listBox").querySelectorAll("[data-cancel]").forEach(b => b.onclick = (ev) => { ev.stopPropagation(); const [a, c] = b.dataset.cancel.split("|"); cancelSend(a, c); });
@@ -1179,8 +1200,8 @@ function renderCal(list) {
   for (let i = 0; i < 42; i++) {
     const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i), s = ymd(d);
     const es = list.filter(e => e.date === s);
-    h += `<div class="day ${d.getMonth() !== m ? "other" : ""} ${s === todayStr() ? "today" : ""} ${s === calSel ? "sel" : ""}" data-d="${s}">${d.getDate()}
-      <div class="dots">${es.slice(0, 3).map(e => `<i class="${isPlan(e) ? "" : "p"}"></i>`).join("")}</div></div>`;
+    h += `<button type="button" aria-label="${fmtDate(s)} ${es.length}件" aria-pressed="${s === calSel}" class="day ${d.getMonth() !== m ? "other" : ""} ${s === todayStr() ? "today" : ""} ${s === calSel ? "sel" : ""}" data-d="${s}">${d.getDate()}
+      <div class="dots">${es.slice(0, 3).map(e => `<i class="${isPlan(e) ? "" : "p"}"></i>`).join("")}</div></button>`;
     if (i === 34 && new Date(start.getFullYear(), start.getMonth(), start.getDate() + 35).getMonth() !== m) break;
   }
   $("calGrid").innerHTML = h;
