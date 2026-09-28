@@ -105,7 +105,7 @@
   .kind-buttons { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:18px 0; }
   .kind-buttons .pill { justify-content:center; min-height:44px; font-size:16px; background:#fff; color:var(--text); border:1px solid var(--line); }
   .kind-buttons .pill.on { background:var(--navy); color:#fff; }
-  #heroPlus { width:auto; padding:10px 20px; min-height:44px; box-shadow:none; }
+  #heroPlus { width:auto; padding:11px 22px; min-height:44px; margin:18px 0 24px; background:#ad4564; color:#fff; box-shadow:0 4px 10px #ad456420; }
   #memoryViews { grid-template-columns:repeat(2,minmax(0,1fr)); }
   #memoryViews .tile { flex-direction:row; justify-content:center; gap:6px; padding:10px; min-height:44px; font-size:14px !important; }
 
@@ -212,6 +212,20 @@
   .album .m .img { aspect-ratio: 4/3; background: var(--sage); display: flex; align-items: center; justify-content: center; color: var(--sage-t); }
   .album .m .img img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .album .m .img svg { width: 28px; height: 28px; }
+  .album .m .memory-cover { position:relative; flex-direction:column; align-items:flex-start; justify-content:space-between; padding:16px; gap:8px; background:linear-gradient(135deg,#faedf2,#f3d8e4); color:#803b55; overflow:hidden; }
+  .album .m .memory-cover.c1 { background:linear-gradient(135deg,#fff5dc,#f0e0b9); color:#74581d; }
+  .album .m .memory-cover.c2 { background:linear-gradient(135deg,#eaf5ed,#cde5dc); color:#315f50; }
+  .album .m .memory-cover.c3 { background:linear-gradient(135deg,#f0edff,#dcd6f3); color:#574580; }
+  .memory-cover::after { content:""; position:absolute; width:110px; height:110px; right:-35px; bottom:-40px; border:16px solid #ffffff50; border-radius:50%; pointer-events:none; }
+  .memory-cover .cover-top { display:flex; align-items:center; justify-content:space-between; width:100%; gap:8px; font-size:12px; font-weight:700; }
+  .album .m .memory-cover svg { width:24px; height:24px; flex-shrink:0; }
+  .memory-cover .cover-date { font-size:28px; font-weight:700; line-height:1.1; letter-spacing:.02em; }
+  .memory-cover .cover-note { font-size:13px; line-height:1.5; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; overflow-wrap:anywhere; position:relative; z-index:1; }
+  .memory-map { display:inline-flex; align-items:center; gap:4px; min-height:36px; margin-top:8px; padding:4px 8px; border-radius:8px; background:#e6f1ed; color:#315f50; font-size:12px; font-weight:600; text-decoration:none; }
+  #tab-set .btn.sub { background:#eee8fa; border-color:#d8cbed; color:#60418b; }
+  #tab-set [data-install]:not(:disabled) { background:#267f88; color:#fff; }
+  #tab-set #selfAddFriend { background:#e4f7e9; color:#176a38; border-color:#b9e5c7; }
+  #tab-set .btn:focus-visible, #heroPlus:focus-visible { outline:3px solid #263955; outline-offset:3px; }
   .album .m .t { padding: 8px 10px 10px; }
   .album .m .t b { display: block; font-size: 14px; line-height: 1.4; word-break: break-word; }
   .album .m .t small { color: var(--muted); font-size: 11.5px; }
@@ -1188,6 +1202,11 @@ function card(e) {
     </div></div></div>`;
 }
 function emptyBox(ic, t, s) { return `<div class="card empty"><div class="ic">${icon(ic)}</div><p>${t}</p><small>${s}</small></div>`; }
+function memoryCover(e) {
+  const p = parts(e.date), category = catOf(e.cat);
+  const detail = e.memo || e.place || ((e.who || []).length ? e.who.join("・") + "と" : "この日の記録");
+  return `<div class="img memory-cover ${catColor(catIndex(e.cat))}"><div class="cover-top"><span>${esc(e.cat || "記録")}</span>${icon(category.icon)}</div><div class="cover-date">${p.m}<span style="font-size:16px">月</span> ${p.d}<span style="font-size:16px">日</span></div><div class="cover-note">${esc(detail)}</div></div>`;
+}
 function renderList() {
   if (!$("listBox") || !calMonth) return;
   const t = todayStr(), list = filtered();
@@ -1197,13 +1216,13 @@ function renderList() {
   if (view === "cal") renderCal(list);
   if (view === "cal" && !calSel) {
     title = "これからの予定"; items = list.filter(isPlan).sort((a, b) => (a.date + a.time) < (b.date + b.time) ? -1 : 1);
-    html = items.length ? items.map(card).join("") : emptyBox("pin", "次の楽しみを予定にしよう。", "「予定を追加」から入れられます");
+    html = items.length ? items.map(card).join("") : emptyBox("pin", "次の楽しみを予定にしよう。", "「記録する」から入れられます");
   } else if (view === "mem") {
     title = "思い出"; items = list.filter(e => !isPlan(e)).sort((a, b) => a.date < b.date ? 1 : -1);
     html = items.length ? `<div class="album">${items.map(e => {
       const p = parts(e.date);
-      return `<div class="m" data-open="${e.id}"><div class="img">${(e.thumbs || [])[0] ? `<img src="${e.thumbs[0]}" alt="">` : icon(catOf(e.cat).icon)}</div>
-      <div class="t"><b>${esc(e.title || e.place || e.cat)}${e.fav ? ' <span class="fav-mark">♥</span>' : ""}</b><small>${p.y}.${p.m}.${p.d}　${esc(e.cat || "")}</small></div></div>`;
+      return `<div class="m" data-open="${e.id}">${(e.thumbs || [])[0] ? `<div class="img"><img src="${e.thumbs[0]}" alt=""></div>` : memoryCover(e)}
+      <div class="t"><b>${esc(e.title || e.place || e.cat)}${e.fav ? ' <span class="fav-mark">♥</span>' : ""}</b><small>${p.y}.${p.m}.${p.d}　${esc(e.cat || "")}</small>${e.place ? `<div><a class="memory-map" href="${mapUrl(e.place)}" target="_blank" rel="noopener" data-stop>📍 地図で見る</a></div>` : ""}</div></div>`;
     }).join("")}</div>` : emptyBox("image", "思い出はまだありません。", "行ったところや、あったことを残そう");
   } else if (view === "fav") {
     title = "また行きたい"; items = list.filter(e => e.fav).sort((a, b) => a.date < b.date ? 1 : -1);
