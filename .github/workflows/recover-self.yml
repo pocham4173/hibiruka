@@ -1,5 +1,6 @@
 name: 自分宛ての未送信予約を復旧
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths: [.github/workflows/recover-self.yml]
