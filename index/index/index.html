@@ -294,10 +294,13 @@
   .big-emoji { font-size: 44px; line-height: 1; margin: 10px 0; }
   .err { color: var(--danger); font-size: 14px; margin-top: 10px; }
   .loading { text-align: center; padding: 70px 20px; color: var(--muted); }
-  #installGuide { border:1px solid var(--line); border-radius:16px; padding:22px; width:min(90vw,430px); color:var(--text); background:#fff; }
+  #installGuide { border:1px solid var(--line); border-radius:16px; padding:22px; width:min(90vw,430px); max-height:calc(100dvh - 32px); overflow:auto; box-sizing:border-box; color:var(--text); background:#fff; }
   #installGuide::backdrop { background:rgb(0 0 0 / .45); }
   #installGuide p { font-size:16px; overflow-wrap:anywhere; }
   #installGuide h2 { margin-top:0; }
+  #installGuide [hidden] { display:none !important; }
+  #installGuide summary { cursor:pointer; padding:14px 0; font-size:16px; }
+  #installGuide .btn { margin-top:12px; }
   [hidden] { display:none !important; }
   .install-shortcut { text-align:right; margin-top:-8px; margin-bottom:12px; }
   .install-shortcut .btn { width:auto; display:inline-flex; }
@@ -560,12 +563,7 @@
     <div class="ig-kicker">HOME SCREEN</div>
     <h3 class="ig-h">ホーム画面に追加する</h3>
     <button class="btn navy" type="button" data-install>ホームに追加</button>
-    <p class="ig-p">アプリのように、アイコンからすぐ開けます。</p>
-    <div class="ig-two">
-      <div><b>iPhone</b><ol><li><b>Safari</b>でヒビルカを開く</li><li>下の共有ボタン <span class="kbd">□↑</span> を押す</li><li>「ホーム画面に追加」→「追加」</li></ol></div>
-      <div><b>Android</b><ol><li><b>Chrome</b>でヒビルカを開く</li><li>右上の <span class="kbd">⋮</span> を押す</li><li>「ホーム画面に追加」→「追加」</li></ol></div>
-    </div>
-    <p class="ig-note">iPhoneは、Safariとホーム画面のアイコンが別々になります。はじめてアイコンから開いたときは、6けたの暗証番号を1回入れてください。</p>
+    <p class="ig-p" data-install-hint>上のボタンから、ホーム画面に追加できます。</p>
   </section>
 
   <section class="ig">
