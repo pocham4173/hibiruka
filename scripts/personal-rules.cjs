@@ -14,7 +14,7 @@ const {parseServiceAccount} = require('./service-account.cjs');
     if(!base.includes('function isOwner()') || /match\s+\/\{\w+=\*\*\}/.test(base))throw Error('Unexpected legacy rules; stop');
     const clean=base.replace(/\s*\/\/ HIBIRUKA_PERSONAL_V1_BEGIN[\s\S]*?\/\/ HIBIRUKA_PERSONAL_V1_END\s*/, '\n');
     if(!/\}\s*\}\s*$/.test(clean))throw Error('Unexpected rule structure');
-    const source=clean.replace(/\}\s*\}\s*$/,fs.readFileSync('security/personal.rules','utf8')+'\n  }\n}\n');
+    const source=clean.replace(/\}\s*\}\s*$/,()=>fs.readFileSync('security/personal.rules','utf8')+'\n  }\n}\n');
     fs.writeFileSync('/tmp/hibiruka-combined.rules',source);
     fs.writeFileSync('/tmp/hibiruka-rules-base.json',JSON.stringify({name:current.name,sha:crypto.createHash('sha256').update(base).digest('hex')}));
     console.log('Prepared isolated personal collections; legacy rules preserved.');
