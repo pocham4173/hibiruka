@@ -1,0 +1,36 @@
+name: 承認済み個人別保存の初回公開
+on:
+  push:
+    branches: [codex/personal-accounts]
+    paths: [.github/workflows/personal-launch.yml]
+permissions:
+  contents: read
+concurrency:
+  group: hibiruka-rules-deploy
+  cancel-in-progress: false
+jobs:
+  rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm install --prefix scripts firebase-admin@12 --omit=dev --no-audit --no-fund
+      - run: node scripts/personal-rules.cjs prepare
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - run: npm install --prefix security --no-audit --no-fund
+      - run: ./node_modules/.bin/firebase emulators:exec --only firestore --project demo-hibiruka-isolation 'node --test personal.test.cjs && cd .. && NODE_PATH=security/node_modules node --test tests/*.test.cjs'
+        working-directory: security
+      - run: node scripts/personal-rules.cjs deploy
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - run: node scripts/personal-smoke.cjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
