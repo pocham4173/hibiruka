@@ -1,8 +1,7 @@
-name: 承認済み個人別保存の初回公開
+name: 個人別保存の本番確認（手動のみ）
+# Manual diagnostic only. Production rules are already deployed.
 on:
-  push:
-    branches: [codex/personal-accounts]
-    paths: [.github/workflows/personal-launch.yml]
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
