@@ -1,0 +1,56 @@
+name: ヒビルカ定期送信の動作確認
+on:
+  push:
+    branches: [codex/minute-line-scheduler]
+    paths: [.github/workflows/line-worker-observe.yml]
+permissions:
+  contents: read
+concurrency:
+  group: hibiruka-cloudflare-deploy
+  cancel-in-progress: false
+jobs:
+  activate:
+    if: github.event.head_commit.message == 'Observe Hibiruka scheduler heartbeat'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CLOUDFLARE_ACCOUNT_ID: c012ff5fddf59148a0f718fc6736d080
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      VERIFIED_VERSION: 14e7c354a0db3b62ec005b7fd3649f35663feba2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 14e7c354a0db3b62ec005b7fd3649f35663feba2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --prefix scripts firebase-admin@12 --omit=dev --no-audit --no-fund
+      - name: Observe verify-only cron heartbeat
+        shell: bash
+        run: |
+          node <<'NODE'
+          const admin=require('./scripts/node_modules/firebase-admin');
+          const {parseServiceAccount}=require('./scripts/service-account.cjs');
+          const account=parseServiceAccount(process.env.FIREBASE_SERVICE_ACCOUNT);
+          if(account.project_id!=='hibiruka-f66fb')throw Error('Wrong project');
+          admin.initializeApp({credential:admin.credential.cert(account)});
+          const db=admin.firestore();
+          async function waitFor(enabled,count,minutes){
+            const deadline=Date.now()+minutes*60000;let last=0,seen=0;
+            while(Date.now()<deadline){
+              const snap=await db.doc('schedulerStatus/cloudflare').get(),v=snap.data();
+              const at=v?.checkedAt?.toMillis?.()||0;
+              if(v?.version===process.env.VERIFIED_VERSION&&v.enabled===enabled&&Date.now()-at<180000){
+                if(!v.ok)throw Error('Scheduled heartbeat reports failure');
+                if(at>last){last=at;seen++;console.log(JSON.stringify({stage:enabled?'enabled':'verify',checkedAt:new Date(at).toISOString(),ok:v.ok,sent:v.sent||0,failed:v.failed||0}));}
+                if(seen>=count)return;
+              }
+              await new Promise(r=>setTimeout(r,20000));
+            }
+            throw Error('Timed out waiting for scheduled heartbeat');
+          }
+          (async()=>{
+            await waitFor(false,2,16);
+            console.log('Two verify-only scheduled runs succeeded. No LINE messages were sent by this worker.');
+          })().catch(()=>{console.error('Rollout did not complete; inspect heartbeat and deployment status.');process.exitCode=1;}).finally(()=>admin.app().delete());
+          NODE
