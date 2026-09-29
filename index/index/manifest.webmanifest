@@ -9,7 +9,28 @@
   "background_color": "#f8f5f1",
   "theme_color": "#f8f5f1",
   "icons": [
-    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "description": "予定を入れて、何気ない日を思い出に。",
+  "shortcuts": [
+    {
+      "name": "予定を見る",
+      "url": "./?tab=list&view=cal"
+    },
+    {
+      "name": "思い出を見る",
+      "url": "./?tab=list&view=mem"
+    }
   ]
 }

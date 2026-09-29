@@ -339,6 +339,12 @@
   .simple-dialog h2, .simple-dialog p { overflow-wrap:anywhere; }
   .simple-dialog::backdrop { background:rgb(0 0 0 / .45); }
   #installGuide li { margin:16px 0; font-size:17px; }
+
+  .start-actions { display:flex; flex-wrap:wrap; gap:10px; }
+  .start-actions .btn { flex:1 1 150px; width:auto; min-height:44px; padding:12px 16px; font-size:16px; }
+  #firstRecordGuide, #savedNextSteps { background:#fff9f2; border-color:#ead5b9; }
+  #firstRecordGuide h2, #savedNextSteps h2 { font-size:21px; }
+  #firstRecordGuide .back-link, #savedNextSteps .back-link { background:none; border:0; padding:12px 0; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -367,7 +373,7 @@
 <div id="pairView" class="wrap hidden">
   <div class="card center" style="margin-top:20px">
     <h2>ヒビルカへようこそ</h2>
-    <a class="btn" href="?start=1" style="background:#ad4564;margin:18px 0">はじめる</a>
+    <a id="beginPersonal" class="btn" href="?start=1" style="background:#ad4564;margin:18px 0">はじめる</a>
     <p class="note">自分専用の予定と思い出を作れます。</p>
     <a class="btn sub" href="?signin=1">使ったことがある方・ログイン</a>
     <a class="back-link" href="?intro=1">使い方を見る</a>
@@ -446,6 +452,18 @@
 
   <!-- ===== 予定・思い出 ===== -->
   <section id="tab-list" class="wrap">
+    <aside id="firstRecordGuide" class="card hidden" aria-labelledby="firstRecordTitle">
+      <p class="note">はじめの1件</p><h2 id="firstRecordTitle">何を残しますか？</h2>
+      <p>日付と内容があればOK。写真やLINEの設定は、あとからでも。</p>
+      <div class="start-actions"><button class="btn" id="firstPlan" type="button">＋ 予定を入れる</button><button class="btn sub" id="firstMemory" type="button">思い出を残す</button></div>
+      <button class="back-link" id="skipFirstRecord" type="button">あとで</button>
+    </aside>
+    <aside id="savedNextSteps" class="card hidden" aria-labelledby="savedNextTitle">
+      <h2 id="savedNextTitle">最初の記録を保存しました</h2><p>次もすぐ開けるように、ホームにアイコンを置けます。</p>
+      <div class="start-actions"><button class="btn" type="button" data-install>ホームに追加</button><button class="btn sub" type="button" id="nextLineSetup">自分のLINEを登録</button></div>
+      <p class="note">通知・ホーム追加は、あとから設定でもできます。</p><button type="button" id="dismissNextSteps" class="back-link">閉じる</button>
+    </aside>
+
     <div class="eyebrow">過去も、これからも</div>
     <div class="hero">
       <div style="flex:1"><h2 id="listHeading">これからの予定<span class="sparkle">✦</span></h2><p id="listIntro">カレンダーで確認。新しい予定や思い出は「記録する」から。</p></div>
@@ -578,7 +596,7 @@
   <section class="ig">
     <div class="ig-kicker">HOW TO USE</div>
     <h3 class="ig-h">使い方</h3>
-    <p class="ig-p">初めての方は「自分のヒビルカをはじめる」から。機種変更に備えて、設定でメールとパスワードを登録してください。</p>
+    <p class="ig-p">初めての方は「はじめる」から、「予定を入れる」か「思い出を残す」を選びます。説明を読み終える必要はありません。保存したあとに、ホーム追加や自分へのLINE通知を設定できます。別のブラウザや機種へ移る前は、設定でメールとパスワードを登録してください。</p>
     <div class="ig-steps">
       <div class="ig-step"><span>01</span><div><b>記録する</b><p>「予定・記録」の「記録する」を押して、「遊び」「食事」などを1つ選び、「予定」か「思い出」を選びます。日付と、場所または内容を入れて保存。写真やメモは、残したいときだけでOK。</p></div></div>
       <div class="ig-step"><span>02</span><div><b>LINEで予定を送る</b><p>これからの予定を保存すると「LINEで予定を送りますか？」と出ます。<b>誰に</b>・<b>送る日</b>・<b>送る時間</b>を選ぶだけ。「前の日の朝」「予定の1時間前」などもワンタップ。</p></div></div>
@@ -869,6 +887,9 @@ async function startOwner() {
     }
     const lock=await db.collection("config").doc("lock").get();
     showPin(!lock.exists);
+    const begin = new URLSearchParams({start:"1"});
+    for (const key of ["tab","view"]) if(qs.has(key)) begin.set(key,qs.get(key));
+    $("beginPersonal").href="?"+begin.toString();
     if(qs.has("legacy")) $("pinDetails").open=true;
   } catch (e) {
     console.error(e);
@@ -938,7 +959,7 @@ function enterApp() {
   show("app");
   setupAccount();
   $("legacyTransfer").classList.toggle("hidden", personalMode);
-  setupTabs(); setupForm(); setupList(); setupSettings();
+  setupTabs(); setupForm(); setupList(); setupSettings(); setupFirstRecordGuide();
   // LINEのメニューなどから開いたとき：?tab=rec / list / set、?view=up / cal / mem / fav
   const t0 = qs.get("tab"), v0 = qs.get("view");
   if (["rec", "list", "set"].includes(t0)) goTab(t0);
@@ -951,7 +972,7 @@ function enterApp() {
   }, denied));
   unsub.push((personalMode ? ownedQuery("events") : recordCollection("events").orderBy("date")).onSnapshot(s => {
     events = s.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderList();
+    renderList(); renderFirstRecordGuide();
   }, denied));
   unsub.push(appRef().onSnapshot(s => {
     const d = s.exists ? s.data() : {};
@@ -966,6 +987,19 @@ function enterApp() {
   }, denied));
 }
 const appRef = () => personalMode ? db.collection("personalConfig").doc(myUid) : db.collection("config").doc("app");
+
+// Optional guidance belongs to this browser and UID, not shared records.
+function guideKey() { return "hibiruka:first-record:" + myUid; }
+function guideDone() { try { return localStorage.getItem(guideKey()) === "done"; } catch { return false; } }
+function finishGuide() { try { localStorage.setItem(guideKey(), "done"); } catch {} $("firstRecordGuide").classList.add("hidden"); }
+function renderFirstRecordGuide() { $("firstRecordGuide").classList.toggle("hidden", !personalMode || events.length > 0 || guideDone()); }
+function setupFirstRecordGuide() {
+  const create = kind => { resetForm(); $("fKind").value=kind; updateSaveNote(); goTab("rec"); $("recEyebrow").focus(); };
+  $("firstPlan").onclick=()=>create("plan"); $("firstMemory").onclick=()=>create("memory");
+  $("skipFirstRecord").onclick=finishGuide;
+  $("dismissNextSteps").onclick=()=>$("savedNextSteps").classList.add("hidden");
+  $("nextLineSetup").onclick=()=>{goTab("set");$("selfLineCard").scrollIntoView({block:"start",behavior:"smooth"});};
+}
 
 /* ---------- メインタブ ---------- */
 function setupTabs() {
@@ -1120,6 +1154,7 @@ async function saveRecord() {
   try {
     let id = editingId;
     const wasNew = !editingId;
+    const firstRecord = personalMode && wasNew && events.length === 0 && !guideDone();
     if (editingId) await recordCollection("events").doc(editingId).update(data);
     else { if(personalMode) data.ownerUid=myUid; data.sends = []; data.nextSendAt = null; data.createdAt = TS(); id = (await recordCollection("events").add(data)).id; }
     // 写真（大きいほう）は別に保存
@@ -1129,6 +1164,7 @@ async function saveRecord() {
     form.photos.forEach((p, i) => { if (p.full) batch.set(recordCollection("photos").doc(`${id}_${i}`), ownedData({ eventId: id, i, data: p.full })); });
     await batch.commit();
     const saved = { ...data, id, sends: events.find(x => x.id === id)?.sends || [] };
+    if (firstRecord) { finishGuide(); $("savedNextSteps").classList.remove("hidden"); }
     resetForm(); selectView(isPlan(saved) ? "cal" : "mem"); goTab("list");
     if (isPlan(saved)) openSend(id, saved);
     else toast(wasNew ? "記録しました" : "変更を保存しました");
@@ -1626,11 +1662,22 @@ function renderPeople() {
   });
 }
 
+function entryParams(search) {
+  const params = new URLSearchParams(search);
+  const state = params.get("liff.state");
+  if (state) {
+    try { const nested = new URL(state, location.origin).searchParams;
+      for (const key of ["invite","scope","tab","view","start","intro","signin"]) if (!params.has(key) && nested.has(key)) params.set(key,nested.get(key));
+    } catch {}
+  }
+  return params;
+}
+
 /* ---------- 入口 ---------- */
-const qs = new URLSearchParams(location.search);
+const qs = entryParams(location.search);
 if (qs.has("intro")) startIntro();
 else if (qs.has("signin")) startLogin();
-else if (qs.has("invite") || qs.has("liff.state")) startInvite(); else startOwner();
+else if (qs.has("invite")) startInvite(); else startOwner();
 </script>
 </body>
 </html>

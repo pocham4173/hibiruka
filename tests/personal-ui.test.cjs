@@ -25,7 +25,7 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
  const firestore=()=>db;firestore.FieldValue={serverTimestamp:()=>1,arrayUnion:x=>[x],arrayRemove:()=>[],increment:x=>x};
  w.firebase={initializeApp:()=>{},auth:authFn,firestore};w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.console.error=(...args)=>errors.push(args);w.liff={init:async()=>{},isLoggedIn:()=>true,getProfile:async()=>({userId:'U'+'a'.repeat(32),displayName:'A'}),isInClient:()=>false};
  const script=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean).pop();
- w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */'))+'\nconst qs=new URLSearchParams(location.search);globalThis.h={startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
+ w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */'))+'\nconst qs=new URLSearchParams(location.search);globalThis.h={entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
  return{w,d,data,calls,queries,close:()=>{w.close();assert.equal(errors.length,0,errors.map(String).join(' '));}};
 }
 test('new user gets a private profile and all list queries are owner-filtered',async()=>{
@@ -43,4 +43,11 @@ test('returning email user stays signed in; linking anonymous account preserves 
 });
 test('personal invite acceptance preserves current account and records acceptance identity',async()=>{
  const a=app({url:'?invite=token&scope=personal',invite:true,linked:true});try{await a.w.h.startInvite();await a.d.getElementById('invAcceptBtn').onclick();const f=a.data.get('personalFriends/token');assert.equal(f.status,'joined');assert.equal(f.acceptedBy,'A');assert.equal(f.ownerUid,'sender');assert(!a.calls.some(c=>c[0]==='anonymous'));}finally{a.close();}
+});
+
+test('first record guidance opens the chosen form and can be dismissed without losing data',async()=>{
+ const a=app();try{await a.w.h.startOwner();assert(!a.d.getElementById('firstRecordGuide').classList.contains('hidden'));a.d.getElementById('firstMemory').click();assert.equal(a.d.getElementById('fKind').value,'memory');assert(!a.d.getElementById('tab-rec').classList.contains('hidden'));a.d.getElementById('skipFirstRecord').click();assert(a.d.getElementById('firstRecordGuide').classList.contains('hidden'));assert(a.data.has('personalConfig/A'));}finally{a.close();}
+});
+test('LIFF menu destinations are separated from invitations and explicit parameters win',()=>{
+ const a=app();try{const p=a.w.h.entryParams('?liff.state='+encodeURIComponent('/?tab=list&view=mem'));assert.equal(p.get('view'),'mem');assert.equal(p.has('invite'),false);const q=a.w.h.entryParams('?view=cal&liff.state='+encodeURIComponent('/?view=mem&invite=t&scope=personal&redirect=https://evil.test'));assert.equal(q.get('view'),'cal');assert.equal(q.get('invite'),'t');assert.equal(q.has('redirect'),false);}finally{a.close();}
 });

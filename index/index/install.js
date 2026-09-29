@@ -13,7 +13,7 @@
   const dialog = document.createElement('dialog');
   dialog.id = 'installGuide';
   dialog.setAttribute('aria-labelledby', 'installTitle');
-  dialog.innerHTML = '<h2 id="installTitle">ホーム画面に追加</h2><p id="installStatus" role="status"></p><button type="button" class="btn navy" id="installNative" hidden>ホームに追加する</button><a class="btn navy" id="installChrome" hidden>Chromeで開く</a><details id="installFallback"><summary>ボタンで追加できないとき</summary><ol id="installSteps"></ol><button type="button" class="btn sub" id="installCopy">追加用リンクをコピー</button></details><button type="button" class="btn sub" id="installClose">閉じる</button><p id="installMessage" role="status"></p>';
+  dialog.innerHTML = '<h2 id="installTitle">ホーム画面に追加</h2><p id="installStatus" role="status"></p><button type="button" class="btn navy" id="installNative" hidden>ホームに追加する</button><a class="btn navy" id="installChrome" hidden>Chromeで開く</a><p id="installTransfer" hidden>別のブラウザで同じ記録を開くには、先にヒビルカの設定でメールを登録し、移動先でログインしてください。</p><details id="installFallback"><summary>ボタンで追加できないとき</summary><ol id="installSteps"></ol><button type="button" class="btn sub" id="installCopy">追加用リンクをコピー</button></details><button type="button" class="btn sub" id="installClose">閉じる</button><p id="installMessage" role="status"></p>';
   document.body.append(dialog);
   const native = document.getElementById('installNative');
   const chrome = document.getElementById('installChrome');
@@ -30,7 +30,8 @@
     });
     native.hidden = done || !installPrompt;
     native.disabled = prompting;
-    chrome.hidden = done || !!installPrompt || !android;
+    chrome.hidden = done || !!installPrompt || !android || androidChrome;
+    document.getElementById("installTransfer").hidden = !inApp || document.getElementById("app")?.classList.contains("hidden") !== false;
     document.getElementById('installStatus').textContent = done ? 'ホーム画面への追加が完了しました。' : installPrompt ? '下のボタンを押して、スマホの確認画面で「インストール」を押してください。' : androidChrome ? '追加ボタンの準備ができると、この画面に表示されます。出ない場合は「ボタンで追加できないとき」を開いてください。' : android ? 'Chromeで開くと、ホームへの追加に進めます。' : ios ? 'iPhoneは共有ボタン（□↑）から追加します。' : 'ブラウザのメニューから追加できます。';
     document.getElementById('installFallback').hidden = done || !!installPrompt;
     if (done && dialog.open) dialog.close();
@@ -49,7 +50,7 @@
       : ['ブラウザのメニューを開く', '「ヒビルカをインストール」を選ぶ'];
     const list = document.getElementById('installSteps'); list.replaceChildren();
     steps.forEach(text => { const li = document.createElement('li'); li.textContent = text; list.append(li); });
-    document.getElementById('installFallback').open = !android && !installPrompt;
+    document.getElementById('installFallback').open = (ios || androidChrome) && !installPrompt;
     update();
     if (!installed() && !dialog.open) dialog.showModal();
   }
@@ -72,7 +73,7 @@
     document.getElementById('installMessage').textContent = '';
     if (android && !androidChrome) {
       showGuide(); // Remains available if this browser cannot open the external app.
-      location.href = chromeUrl;
+      // The explicit Chrome button lets the user read the account-transfer note first.
       return;
     }
     showGuide();
