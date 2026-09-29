@@ -1,0 +1,74 @@
+name: ヒビルカ定期送信の初回起動
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/line-worker-activate.yml]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: hibiruka-cloudflare-deploy
+  cancel-in-progress: false
+jobs:
+  activate:
+    if: github.event.head_commit.message == 'Activate Hibiruka after stopping legacy sender'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: c012ff5fddf59148a0f718fc6736d080
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+      GH_READ_TOKEN: ${{ github.token }}
+      VERIFIED_VERSION: 14e7c354a0db3b62ec005b7fd3649f35663feba2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 14e7c354a0db3b62ec005b7fd3649f35663feba2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --prefix line-worker --no-audit --no-fund
+      - run: npm install --prefix scripts firebase-admin@12 --omit=dev --no-audit --no-fund
+      - name: Verify real cron before enabling existing reservations
+        shell: bash
+        run: |
+          node <<'NODE'
+          const admin=require('./scripts/node_modules/firebase-admin');
+          const {parseServiceAccount}=require('./scripts/service-account.cjs');
+          const {spawnSync}=require('node:child_process');
+          const account=parseServiceAccount(process.env.FIREBASE_SERVICE_ACCOUNT);
+          if(account.project_id!=='hibiruka-f66fb')throw Error('Wrong project');
+          admin.initializeApp({credential:admin.credential.cert(account)});
+          const db=admin.firestore();
+          async function waitFor(enabled,count,minutes){
+            const deadline=Date.now()+minutes*60000;let last=0,seen=0;
+            while(Date.now()<deadline){
+              const snap=await db.doc('schedulerStatus/cloudflare').get(),v=snap.data();
+              const at=v?.checkedAt?.toMillis?.()||0;
+              if(v?.version===process.env.VERIFIED_VERSION&&v.enabled===enabled&&Date.now()-at<180000){
+                if(!v.ok)throw Error('Scheduled heartbeat reports failure');
+                if(at>last){last=at;seen++;console.log(JSON.stringify({stage:enabled?'enabled':'verify',checkedAt:new Date(at).toISOString(),ok:v.ok,sent:v.sent||0,failed:v.failed||0}));}
+                if(seen>=count)return;
+              }
+              await new Promise(r=>setTimeout(r,20000));
+            }
+            throw Error('Timed out waiting for scheduled heartbeat');
+          }
+          (async()=>{
+            const headers={Authorization:'Bearer '+process.env.GH_READ_TOKEN,Accept:'application/vnd.github+json'};
+            async function gh(path){const r=await fetch('https://api.github.com/repos/pocham4173/hibiruka/'+path,{headers});if(!r.ok)throw Error('Cannot verify legacy sender state');return r.json();}
+            const file=await gh('contents/.github/workflows/notify.yml?ref=main');
+            const text=Buffer.from(file.content,'base64').toString();
+            if(/schedule:/.test(text)||!text.includes("VALIDATE_ONLY: 'true'"))throw Error('Legacy sender has not been stopped');
+            for(const status of ['in_progress','queued','waiting','pending','requested']){
+              const runs=await gh('actions/runs?status='+status+'&per_page=100');
+              if(runs.total_count>100||runs.workflow_runs.some(r=>r.name==='予定のLINE送信'))throw Error('Legacy workflow still running or queued');
+            }
+            await waitFor(false,2,16);
+            const r=spawnSync(process.execPath,['line-worker/deploy.cjs'],{stdio:'inherit',env:{...process.env,GITHUB_SHA:process.env.VERIFIED_VERSION,ENABLE_SENDING:'true'}});
+            if(r.status!==0)throw Error('Activation failed');
+            await waitFor(true,3,5);
+            console.log('Three real scheduled runs succeeded. Legacy GitHub scheduled sending is stopped.');
+          })().catch(()=>{console.error('Rollout did not complete; inspect heartbeat and deployment status.');process.exitCode=1;}).finally(()=>admin.app().delete());
+          NODE
