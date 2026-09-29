@@ -1,8 +1,8 @@
 name: 個人別保存の権限テスト
 on:
   push:
-    branches: [main]
-    paths: [.github/workflows/personal-storage.yml, security/**, scripts/personal-rules.cjs]
+    branches: [main, codex/personal-accounts]
+    paths: [.github/workflows/personal-storage.yml, security/**, scripts/personal-rules.cjs, scripts/send-line.cjs, tests/**, index/index/index.html]
 permissions:
   contents: read
 concurrency:
@@ -26,5 +26,5 @@ jobs:
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
       - run: npm install --prefix security --no-audit --no-fund
-      - run: ./node_modules/.bin/firebase emulators:exec --only firestore --project demo-hibiruka-isolation 'node --test personal.test.cjs'
+      - run: ./node_modules/.bin/firebase emulators:exec --only firestore --project demo-hibiruka-isolation 'node --test personal.test.cjs && cd .. && NODE_PATH=security/node_modules node --test tests/*.test.cjs'
         working-directory: security
