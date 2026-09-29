@@ -1,0 +1,11 @@
+{
+  "name": "hibiruka-line",
+  "main": "index.mjs",
+  "compatibility_date": "2026-09-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "triggers": {"crons": ["* * * * *"]},
+  "vars": {"SENDING_ENABLED": "false", "WORKER_VERSION": "unreleased"},
+  "observability": {"enabled": true}
+}
