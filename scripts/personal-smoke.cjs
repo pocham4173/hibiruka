@@ -9,7 +9,7 @@ const key=fs.readFileSync('index/index/index.html','utf8').match(/apiKey:\s*"([^
 const base='https://firestore.googleapis.com/v1/projects/hibiruka-f66fb/databases/(default)/documents';
 const users=[], paths=[];
 const s=stringValue=>({stringValue});
-async function auth(method,data){const r=await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:${method}?key=${key}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(!r.ok)throw Error(`Auth ${method}: ${r.status}`);return r.json();}
+async function auth(method,data){const r=await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:${method}?key=${key}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(!r.ok){const error=await r.json();throw Error(`Auth ${method}: ${r.status} ${String(error.error?.message||'unknown').replace(/[^A-Z_ :0-9]/g,'').slice(0,120)}`);}return r.json();}
 async function request(user,path,method='GET',body){return fetch(base+path,{method,headers:{Authorization:`Bearer ${user.idToken}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});}
 (async()=>{try{
  for(let i=0;i<2;i++){const u=await auth('signUp',{returnSecureToken:true});users.push(u);}
@@ -24,7 +24,7 @@ async function request(user,path,method='GET',body){return fetch(base+path,{meth
  const query={structuredQuery:{from:[{collectionId:'personalEvents'}],where:{fieldFilter:{field:{fieldPath:'ownerUid'},op:'EQUAL',value:s(a.localId)}}}};
  assert.equal((await request(a,':runQuery','POST',query)).status,200,'own list');
  assert.equal((await request(b,':runQuery','POST',query)).status,403,'other account list denied');
- const password=crypto.randomBytes(24).toString('hex'),email=`hibiruka-qa-${crypto.randomUUID()}@example.invalid`;
+ const password=crypto.randomBytes(24).toString('hex'),email=`hibiruka-qa-${crypto.randomUUID()}@example.com`;
  const linked=await auth('update',{idToken:a.idToken,email,password,returnSecureToken:true});assert.equal(linked.localId,a.localId,'link retains records identity');
  const restored=await auth('signInWithPassword',{email,password,returnSecureToken:true});assert.equal(restored.localId,a.localId,'email recovery retains identity');
  assert.equal((await request(restored,'/'+p)).status,200,'restored account reads own event');
