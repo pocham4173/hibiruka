@@ -57,10 +57,13 @@ async function main() {
   }
   const recoveryMatches = (ev, item) => !recoveryAt || (item.at === recoveryAt && item.friendIds?.length === 1 && item.friendIds[0] === selfId);
   const now = nowJst();
-  const snapshot = await db.collection('events').where('nextSendAt','<=',now).get();
+  const legacy = await db.collection('events').where('nextSendAt','<=',now).get();
+  const personal = recoveryAt ? {docs:[]} : await db.collection('personalEvents').where('nextSendAt','<=',now).get();
+  const snapshot = {docs:[...legacy.docs,...personal.docs]};
   if (recoveryAt && snapshot.docs.flatMap(doc => (doc.data().sends || []).filter(item => item.status === 'wait' && recoveryMatches(doc.data(), item))).length > 1) throw new Error('LINE接続情報：該当する自分宛ての予約が複数あるため停止しました。');
   let sent = 0, failed = 0;
   for (const doc of snapshot.docs) {
+    const isPersonal = doc.ref.parent?.id === "personalEvents";
     for (const candidate of doc.data().sends || []) {
       if (candidate.status !== 'wait' || candidate.at > now || !recoveryMatches(doc.data(), candidate)) continue;
       const claimed = await db.runTransaction(async tx => {
@@ -83,8 +86,8 @@ async function main() {
       if (!claimed) continue;
       const {ev,item} = claimed;
       const ids = [...new Set(item.friendIds || [])].filter(id => typeof id === 'string' && id && !id.includes('/'));
-      const recipients = await Promise.all(ids.map(id => db.collection('friends').doc(id).get()));
-      const userIds = [...new Set(recipients.filter(d => d.exists).map(d => d.data()).filter(f => f.status === 'joined' && /^U[0-9a-f]{32}$/i.test(f.lineUserId || '')).map(f => f.lineUserId))];
+      const recipients = await Promise.all(ids.map(id => db.collection(isPersonal ? 'personalFriends' : 'friends').doc(id).get()));
+      const userIds = [...new Set(recipients.filter(d => d.exists).map(d => d.data()).filter(f => (!isPersonal || (typeof ev.ownerUid === 'string' && f.ownerUid === ev.ownerUid)) && f.status === 'joined' && /^U[0-9a-f]{32}$/i.test(f.lineUserId || '')).map(f => f.lineUserId))];
       if (!userIds.length || userIds.length > 500) {
         await updateSend(db,doc.ref,item.id,{status:'fail',error:'送れる相手がいません。LINE登録を確認してください。'}); failed++; continue;
       }
@@ -92,7 +95,7 @@ async function main() {
       if (!check.exists || !check.data().sends?.some(s => s.id === item.id && s.status === 'wait' && recoveryMatches(check.data(), s))) continue;
       try {
         const response = await lineRequest('/v2/bot/message/multicast',token,{
-          method:'POST', headers:{'X-Line-Retry-Key':retryKey(doc.id,item.id)},
+          method:'POST', headers:{'X-Line-Retry-Key':retryKey(isPersonal ? `personal:${ev.ownerUid}:${doc.id}` : doc.id,item.id)},
           body:JSON.stringify({to:userIds,messages:[{type:'text',text:buildText(ev,item.from)}]})
         });
         if (response.ok || (response.status === 409 && response.headers.has('x-line-accepted-request-id'))) {

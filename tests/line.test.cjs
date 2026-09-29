@@ -24,10 +24,12 @@ test('retry key is stable for a reservation and different for another', () => {
   assert.ok(buildText({date:'2026-09-28',title:'予定',memo:'a'.repeat(6000)},'テスト').length<=5000);
 });
 
-function fixture({validate=false,status=200,accepted=false,expired=false,revoked=false,recovery=false}={}) {
+function fixture({validate=false,status=200,accepted=false,expired=false,revoked=false,recovery=false,personal=false,foreign=false}={}) {
   const records={config:{app:{selfFriendId:'self'}},events:{event:{date:expired?'2020-01-01':'2099-01-01',time:'12:00',kind:'plan',title:'テストの予定',sends:[{id:'send',friendIds:['self'],at:'2020-01-01T10:00',status:'wait'}],nextSendAt:'2020-01-01T10:00'}},friends:{self:{status:revoked?'pending':'joined',lineUserId:'U'+'a'.repeat(32)},other:{status:'joined',lineUserId:'U'+'b'.repeat(32)}}};
+  records.personalEvents={}; records.personalFriends={};
+  if(personal){records.personalEvents.event={...records.events.event,ownerUid:'owner-A'};records.events={};records.personalFriends.self={...records.friends.self,ownerUid:foreign?'owner-B':'owner-A'};}
   const clone=x=>structuredClone(x), calls=[];
-  const ref=(collection,id)=>({id,collection,get:async()=>snap(collection,id)});
+  const ref=(collection,id)=>({id,collection,parent:{id:collection},get:async()=>snap(collection,id)});
   const snap=(c,id)=>({id,ref:ref(c,id),exists:!!records[c][id],data:()=>clone(records[c][id])});
   const db = {
     collection: c => ({
@@ -84,4 +86,10 @@ test('recovery only retries the verified self and exact reservation; never other
   assert.equal(f.records.events.event.sends[2].status,'wait');
   const g=fixture({recovery:true});g.records.friends.self.status='pending';
   await assert.rejects(g.main());assert.equal(g.calls.length,1);
+});
+
+test('personal reminders resolve only that owner’s approved friends and isolate retry keys',async()=>{
+  const personal=fixture({personal:true});await personal.main();assert.equal(personal.records.personalEvents.event.sends[0].status,'sent');
+  const legacy=fixture();await legacy.main();assert.notEqual(personal.calls[1].options.headers['X-Line-Retry-Key'],legacy.calls[1].options.headers['X-Line-Retry-Key']);
+  const foreign=fixture({personal:true,foreign:true});await foreign.main();assert.equal(foreign.calls.length,1);assert.equal(foreign.records.personalEvents.event.sends[0].status,'fail');
 });
