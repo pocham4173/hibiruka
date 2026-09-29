@@ -1,0 +1,44 @@
+    // HIBIRUKA_PERSONAL_V1_BEGIN
+    function personalOwner(data) {
+      return request.auth != null && data.ownerUid == request.auth.uid;
+    }
+    match /personalConfig/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['ownerName', 'cats', 'people', 'selfFriendId', 'createdAt', 'version']);
+    }
+    match /personalEvents/{id} {
+      allow read, delete: if personalOwner(resource.data);
+      allow create: if personalOwner(request.resource.data)
+        && request.resource.data.createdAt == request.time;
+      allow update: if personalOwner(resource.data) && personalOwner(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+    match /personalPhotos/{id} {
+      allow read, delete: if personalOwner(resource.data);
+      allow create, update: if personalOwner(request.resource.data)
+        && (!exists(/databases/$(database)/documents/personalPhotos/$(id)) || personalOwner(resource.data))
+        && personalOwner(get(/databases/$(database)/documents/personalEvents/$(request.resource.data.eventId)).data);
+    }
+    match /personalFriends/{id} {
+      allow list: if personalOwner(resource.data);
+      allow get: if request.auth != null && (personalOwner(resource.data)
+        || resource.data.status == 'pending'
+        || resource.data.get('acceptedBy', '') == request.auth.uid);
+      allow create: if personalOwner(request.resource.data)
+        && request.resource.data.keys().hasOnly(['ownerUid','name','status','from','createdAt'])
+        && request.resource.data.status == 'pending' && request.resource.data.createdAt == request.time;
+      allow delete: if personalOwner(resource.data);
+      allow update: if personalOwner(resource.data) && personalOwner(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','from','sentAt','sentCount']);
+      allow update: if request.auth != null && resource.data.status == 'pending'
+        && request.resource.data.status == 'joined'
+        && request.resource.data.acceptedBy == request.auth.uid
+        && request.resource.data.joinedAt == request.time
+        && request.resource.data.lineUserId is string
+        && request.resource.data.lineUserId.matches('^U[0-9a-fA-F]{32}$')
+        && request.resource.data.lineName is string
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status','lineUserId','lineName','joinedAt','acceptedBy']);
+    }
+    // HIBIRUKA_PERSONAL_V1_END
