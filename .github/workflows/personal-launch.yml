@@ -28,6 +28,6 @@ jobs:
       - run: npm install --prefix security --no-audit --no-fund
       - run: ./node_modules/.bin/firebase emulators:exec --only firestore --project demo-hibiruka-isolation 'node --test personal.test.cjs && cd .. && NODE_PATH=security/node_modules node --test tests/*.test.cjs'
         working-directory: security
-      - run: node scripts/personal-smoke.cjs
+      - run: NODE_PATH=security/node_modules node scripts/personal-smoke.cjs
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
