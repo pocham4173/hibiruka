@@ -46,7 +46,9 @@ function fixture({validate=false,status=200,accepted=false,expired=false,revoked
   const context={exports,module:{exports},require:name=>name==='firebase-admin'?{initializeApp:()=>{},credential:{cert:x=>x},firestore:()=>db}:name==='./service-account.cjs'?{parseServiceAccount}:require(name),Date,AbortSignal,console:{log:()=>{},error:()=>{}},process:{env:{FIREBASE_SERVICE_ACCOUNT:json,LINE_CHANNEL_ACCESS_TOKEN:'fake-test-token',VALIDATE_ONLY:String(validate),...(recovery?{RECOVER_SELF_AT:'2020-01-01T10:00'}:{})}},fetch:async(url,options)=>{
     calls.push({url,options});return url.endsWith('/info')?{ok:true,json:async()=>({basicId:'@626hnkgo'})}:{ok:status===200,status,headers:new Headers(accepted?{'x-line-accepted-request-id':'accepted'}:{})};
   }};
-  vm.createContext(context);vm.runInContext(fs.readFileSync(require.resolve('../scripts/send-line.cjs'),'utf8'),context);
+  vm.createContext(context);vm.runInContext(fs.readFileSync(require.resolve('../scripts/line-engine.cjs'),'utf8'),context);
+  const engine=context.module.exports, originalRequire=context.require;context.require=name=>name==='./line-engine.cjs'?engine:originalRequire(name);
+  vm.runInContext(fs.readFileSync(require.resolve('../scripts/send-line.cjs'),'utf8'),context);
   return {main:context.module.exports.main,records,calls};
 }
 
@@ -92,4 +94,12 @@ test('personal reminders resolve only that owner’s approved friends and isolat
   const personal=fixture({personal:true});await personal.main();assert.equal(personal.records.personalEvents.event.sends[0].status,'sent');
   const legacy=fixture();await legacy.main();assert.notEqual(personal.calls[1].options.headers['X-Line-Retry-Key'],legacy.calls[1].options.headers['X-Line-Retry-Key']);
   const foreign=fixture({personal:true,foreign:true});await foreign.main();assert.equal(foreign.calls.length,1);assert.equal(foreign.records.personalEvents.event.sends[0].status,'fail');
+});
+
+// The independent scheduler and the GitHub fallback use the same leases.
+test('an existing sender lease blocks a concurrent runner until expiration',async()=>{
+ const f=fixture();f.records.events.event.sends[0].leaseUntil=Date.now()+180000;
+ await f.main();assert.equal(f.calls.length,1);
+ f.records.events.event.sends[0].leaseUntil=Date.now()-1;
+ await f.main();assert.equal(f.calls.filter(x=>x.url.endsWith('/multicast')).length,1);
 });
