@@ -370,7 +370,7 @@
   <p id="loginError" class="err" role="alert"></p>
   <button id="resetPassword" type="button" class="btn sub">パスワードを忘れた方</button>
   <a class="back-link" href="?intro=1">ホームへ戻る</a>
-  <details><summary>以前の暗証番号で引き継ぐ方</summary><a href="?legacy=1" class="btn sub">引き継ぎ画面へ</a></details>
+  <details><summary>以前の記録を復元</summary><p class="note">以前に6けたの番号を設定した方はこちら。</p><a href="?legacy=1" class="btn sub">以前の番号で復元する</a></details>
 </div></div>
 <!-- 暗証番号 -->
 <div id="pairView" class="wrap hidden">
@@ -378,15 +378,13 @@
     <h2>ヒビルカへようこそ</h2>
     <a id="beginPersonal" class="btn" href="?start=1" style="background:#ad4564;margin:18px 0">はじめる</a>
     <p class="note">自分専用の予定と思い出を作れます。</p>
-    <a class="btn sub" href="?signin=1">使ったことがある方・ログイン</a>
+    <a class="btn sub" href="?signin=1">ログイン</a>
     <a class="back-link" href="?intro=1">使い方を見る</a>
-    <p class="note">メール登録は後からでもできます。端末変更に備えて「設定」で登録してください。</p>
-    <p style="text-align:left;font-size:14px">自分の記録をすでに使っている方は、いつものアイコンから開くか、下から引き継いでください。</p>
-    <details id="pinDetails"><summary>自分の記録を引き継ぐ</summary>
+    <p class="note">登録なしではじめられます。メールの登録はあとから設定でできます。</p>
+    <details id="pinDetails" class="hidden"><summary>以前の記録を復元</summary>
     <h2 style="margin-top:0" id="pinTitle">暗証番号を入れてください</h2>
     <p id="pinText" style="text-align:left;font-size:15px">このブラウザに記録を引き継ぐため、設定済みの6けたの番号を入れてください。</p>
     <input type="password" id="pinInput" inputmode="numeric" maxlength="6" placeholder="●●●●●●" autocomplete="off" style="text-align:center;font-size:26px;letter-spacing:.4em">
-    <input type="password" id="pinInput2" class="hidden" inputmode="numeric" maxlength="6" placeholder="もう一度" autocomplete="off" style="text-align:center;font-size:22px;letter-spacing:.3em;margin-top:10px">
     <button class="btn" id="pinBtn" style="margin-top:14px">ひらく</button>
     <p class="err" id="pinErr"></p>
     <p class="note" id="pinNote" style="text-align:left"></p></details>
@@ -889,12 +887,11 @@ async function startOwner() {
       await db.collection("personalConfig").doc(myUid).set({ownerName:"",createdAt:TS(),version:1});
       personalMode=true; ownerName="あなた"; enterApp(); toast("あなた専用のヒビルカを作りました",4000); return;
     }
-    const lock=await db.collection("config").doc("lock").get();
-    showPin(!lock.exists);
+    show("pairView");
     const begin = new URLSearchParams({start:"1"});
     for (const key of ["tab","view"]) if(qs.has(key)) begin.set(key,qs.get(key));
     $("beginPersonal").href="?"+begin.toString();
-    if(qs.has("legacy")) $("pinDetails").open=true;
+    if(qs.has("legacy")) showPin();
   } catch (e) {
     console.error(e);
     $("slowMsg").classList.remove("hidden");
@@ -927,39 +924,27 @@ function startLogin() {
   };
 }
 
-function showPin(firstTime) {
+function showPin() {
   show("pairView");
-  $("pinDetails").open = firstTime;
-  if (firstTime) {
-    $("pinTitle").textContent = "引き継ぎ用の番号を決める";
-    $("pinText").innerHTML = "ヒビルカを開くための<b>6けたの数字</b>を決めてください。<br>別のブラウザや端末に記録を引き継ぐときに使います。";
-    $("pinInput2").classList.remove("hidden");
-    $("pinBtn").textContent = "この番号にする";
-    $("pinNote").textContent = "忘れないように、メモしておいてください。";
-  }
+  $("pinDetails").classList.remove("hidden");
+  $("pinDetails").open = true;
+  $("pinTitle").textContent = "以前の番号で復元する";
+  $("pinNote").textContent = "以前に設定した番号を使います。新しい番号の登録は不要です。";
+  $("pinBtn").textContent = "記録を開く";
   $("pinBtn").onclick = async () => {
     const p = $("pinInput").value.trim();
     $("pinErr").textContent = "";
-    if (!/^\d{6}$/.test(p)) { $("pinErr").textContent = "6けたの数字を入れてください"; return; }
-    if (firstTime && p !== $("pinInput2").value.trim()) { $("pinErr").textContent = "2回目の番号が違います"; return; }
+    if (!/^\d{6}$/.test(p)) { $("pinErr").textContent = "以前に設定した6けたの数字を入れてください"; return; }
     $("pinBtn").disabled = true;
     try {
       const h = await pinHash(p);
-      if (firstTime) {
-        const b = db.batch();
-        b.set(db.collection("config").doc("secret"), { pinHash: h });
-        b.set(db.collection("config").doc("lock"), { set: true, at: TS() });
-        b.set(db.collection("members").doc(myUid), { pinHash: h, at: TS() });
-        await b.commit();
-        toast("暗証番号を決めました", 3000);
-      } else {
-        await db.collection("members").doc(myUid).set({ pinHash: h, at: TS() });
-        toast("ひらきました", 2500);
-      }
+      // Firestore rules verify the existing secret before allowing membership.
+      await db.collection("members").doc(myUid).set({ pinHash: h, at: TS() });
+      personalMode = false;
       enterApp();
+      toast("以前の記録を開きました", 2500);
     } catch (e) {
-      console.error(e);
-      $("pinErr").textContent = firstTime ? "決められませんでした。もう一度お試しください。" : "暗証番号が違います";
+      $("pinErr").textContent = "復元できませんでした。以前の番号と通信を確認してください。";
     } finally { $("pinBtn").disabled = false; }
   };
 }

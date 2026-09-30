@@ -66,3 +66,8 @@ test('login is an autofill-compatible form with an accessible password toggle',(
 test('successful login navigates without clearing the submitted password',async()=>{
  const a=app({url:'?signin=1'});try{a.w.h.startLogin();a.d.getElementById('loginEmail').value='a@example.test';a.d.getElementById('loginPassword').value='long-password';await a.d.getElementById('loginForm').onsubmit({preventDefault(){}});assert(a.calls.some(c=>c[0]==='signin'));assert(a.calls.some(c=>c[0]==='navigate'&&c[1]==='./'));assert.equal(a.d.getElementById('loginPassword').value,'long-password');}finally{a.close();}
 });
+
+test('welcome never asks for a new PIN; restoration appears only through the explicit legacy link',async()=>{
+ const a=app({url:''});try{await a.w.h.startOwner();assert(!a.d.getElementById('pairView').classList.contains('hidden'));assert(a.d.getElementById('pinDetails').classList.contains('hidden'));assert.equal(a.d.getElementById('pinInput2'),null);assert(!a.calls.some(c=>c[0]==='set'));}finally{a.close();}
+ const b=app({url:'?legacy=1'});try{await b.w.h.startOwner();assert(!b.d.getElementById('pinDetails').classList.contains('hidden'));assert(b.d.getElementById('pinDetails').open);assert.equal(b.d.getElementById('pinTitle').textContent,'以前の番号で復元する');assert(!b.calls.some(c=>c[0]==='set'));}finally{b.close();}
+});
