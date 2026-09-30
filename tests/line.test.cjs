@@ -103,3 +103,19 @@ test('an existing sender lease blocks a concurrent runner until expiration',asyn
  f.records.events.event.sends[0].leaseUntil=Date.now()-1;
  await f.main();assert.equal(f.calls.filter(x=>x.url.endsWith('/multicast')).length,1);
 });
+
+test('malformed reservations cannot stop a different owner’s valid notification',async()=>{
+ const f=fixture({personal:true});
+ f.records.events.bad={date:'2099-01-01',kind:'plan',sends:{broken:true},nextSendAt:'2000-01-01T00:00'};
+ f.records.events.badItems={date:'2099-01-01',kind:'plan',sends:[null,{id:'broken',status:'wait',at:'bad',friendIds:{}}],nextSendAt:'2000-01-01T00:00'};
+ await f.main();
+ assert.equal(f.records.events.bad.nextSendAt,null);
+ assert.equal(f.records.events.badItems.nextSendAt,null);
+ assert.equal(f.records.personalEvents.event.sends[0].status,'sent');
+});
+test('a short scheduler delay does not discard an at-event reminder',async()=>{
+ const f=fixture();const jst=new Date(Date.now()+9*3600000-2*60000).toISOString().slice(0,16);
+ f.records.events.event.date=jst.slice(0,10);f.records.events.event.time=jst.slice(11);
+ f.records.events.event.sends[0].at=jst;
+ await f.main();assert.equal(f.records.events.event.sends[0].status,'sent');
+});

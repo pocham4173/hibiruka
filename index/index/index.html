@@ -1017,6 +1017,7 @@ function goTab(t) {
    ========================================================= */
 let form = { cat: "", who: new Set(), fav: false, photos: [] }; // photos: [{thumb, full}] 新規 or {id, thumb} 既存
 let editingId = null;
+let draftRecordId = null;
 
 function catColor(i) { return "c" + (i % 4); }
 function catOf(name) { return cats.find(c => c.name === name) || { name, icon: "pin" }; }
@@ -1040,6 +1041,7 @@ function setupForm() {
 }
 function resetForm() {
   editingId = null;
+  draftRecordId = null;
   form = { cat: "", who: new Set(), fav: false, photos: [] };
   $("fKind").value = "plan"; $("fDate").value = todayStr(); $("fTime").value = "";
   $("fPlace").value = ""; $("fTitle").value = ""; $("fMemo").value = ""; $("fLink").value = "";
@@ -1145,18 +1147,25 @@ async function saveRecord() {
     thumbs: form.photos.map(p => p.thumb), updatedAt: TS()
   };
   if (!data.title && !data.place) { toast("「どこで？」か「なにをする？」を入れてください"); $("fTitle").focus(); return; }
+  if ($("saveBtn").disabled) return;
+  if (form.photos.some(p => !p.full)) { toast("写真を読み込めませんでした。記録を開き直してください。"); return; }
   $("saveBtn").disabled = true;
   try {
-    let id = editingId;
+    const id = editingId || (draftRecordId ||= recordCollection("events").doc().id);
     const wasNew = !editingId;
     const firstRecord = personalMode && wasNew && events.length === 0 && !guideDone();
-    if (editingId) await recordCollection("events").doc(editingId).update(data);
-    else { if(personalMode) data.ownerUid=myUid; data.sends = []; data.nextSendAt = null; data.createdAt = TS(); id = (await recordCollection("events").add(data)).id; }
-    // 写真（大きいほう）は別に保存
-    const batch = db.batch();
+    const eventRef = recordCollection("events").doc(id);
+    // Reserve one ID per draft. An acknowledged-late write must not create a second record.
+    if (!editingId) await db.runTransaction(async tx => {
+      const existing = await tx.get(eventRef);
+      if (!existing.exists) tx.set(eventRef, ownedData({...data, thumbs: [], sends: [], nextSendAt: null, createdAt: TS()}));
+    });
     const old = await ownedQuery("photos").where("eventId", "==", id).get();
+    // Existing full photos and their thumbnails change in the same commit.
+    const batch = db.batch();
+    batch.update(eventRef, data);
     old.forEach(d => batch.delete(d.ref));
-    form.photos.forEach((p, i) => { if (p.full) batch.set(recordCollection("photos").doc(`${id}_${i}`), ownedData({ eventId: id, i, data: p.full })); });
+    form.photos.forEach((p, i) => batch.set(recordCollection("photos").doc(`${id}_${i}`), ownedData({ eventId: id, i, data: p.full })));
     await batch.commit();
     const saved = { ...data, id, sends: events.find(x => x.id === id)?.sends || [] };
     if (firstRecord) { finishGuide(); $("savedNextSteps").classList.remove("hidden"); }
@@ -1182,8 +1191,13 @@ async function editRecord(id) {
   try {
     const ps = await ownedQuery("photos").where("eventId", "==", id).get();
     ps.forEach(d => { const x = d.data(); if (form.photos[x.i]) form.photos[x.i].full = x.data; });
-  } catch {}
-  form.photos.forEach(p => { if (!p.full) p.full = p.thumb; });
+    if (form.photos.some(p => !p.full)) throw new Error("Missing full photo");
+  } catch {
+    resetForm();
+    toast("写真を読み込めなかったため、編集を止めました。電波のよい所で開き直してください。");
+    goTab("list");
+    return;
+  }
   renderCats(); renderWho(); renderPhotos(); updateSaveNote(); updateMapLink();
   goTab("rec");
 }
