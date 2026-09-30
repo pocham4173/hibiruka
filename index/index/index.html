@@ -1156,10 +1156,14 @@ async function saveRecord() {
     const firstRecord = personalMode && wasNew && events.length === 0 && !guideDone();
     const eventRef = recordCollection("events").doc(id);
     // Reserve one ID per draft. An acknowledged-late write must not create a second record.
-    if (!editingId) await db.runTransaction(async tx => {
-      const existing = await tx.get(eventRef);
-      if (!existing.exists) tx.set(eventRef, ownedData({...data, thumbs: [], sends: [], nextSendAt: null, createdAt: TS()}));
-    });
+    if (!editingId) {
+      // Owner-only rules reject reads of a document that does not exist yet.
+      // On retry, an existing owned document is readable; preserve its metadata.
+      let existing;
+      try { existing = await eventRef.get(); }
+      catch (error) { if (error.code !== "permission-denied") throw error; }
+      if (!existing?.exists) await eventRef.set(ownedData({...data, thumbs: [], sends: [], nextSendAt: null, createdAt: TS()}));
+    }
     const old = await ownedQuery("photos").where("eventId", "==", id).get();
     // Existing full photos and their thumbnails change in the same commit.
     const batch = db.batch();
