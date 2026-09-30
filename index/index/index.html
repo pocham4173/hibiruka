@@ -114,7 +114,7 @@
   .step small { font-weight: 400; font-size: 12.5px; color: var(--muted); }
   .lbl { display: block; font-weight: 600; margin: 16px 0 6px; font-size: 14.5px; }
   .lbl small { font-weight: 400; color: var(--muted); margin-left: 6px; font-size: 12.5px; }
-  input[type=text], input[type=date], input[type=time], input[type=url], input[type=tel], input[type=password], select, textarea {
+  input[type=text], input[type=email], input[type=date], input[type=time], input[type=url], input[type=tel], input[type=password], select, textarea {
     width: 100%; font-size: 16px; padding: 12px 13px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--text); -webkit-appearance: none; appearance: none;
   }
   select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='none' stroke='%23857d7f' stroke-width='1.6'%3E%3Cpath d='m5 8 5 5 5-5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 40px; }
@@ -340,6 +340,7 @@
   .simple-dialog::backdrop { background:rgb(0 0 0 / .45); }
   #installGuide li { margin:16px 0; font-size:17px; }
 
+  .password-toggle { display:block; background:none; border:0; min-height:44px; padding:8px 0; cursor:pointer; font:inherit; color:var(--navy); }
   .start-actions { display:flex; flex-wrap:wrap; gap:10px; }
   .start-actions .btn { flex:1 1 150px; width:auto; min-height:44px; padding:12px 16px; font-size:16px; }
   #firstRecordGuide, #savedNextSteps { background:#fff9f2; border-color:#ead5b9; }
@@ -361,8 +362,10 @@
 <div id="loginView" class="wrap hidden"><div class="card">
   <h2>自分のヒビルカにログイン</h2>
   <p class="note">「設定」で登録したメールとパスワードを入れてください。</p>
-  <form id="loginForm"><label class="lbl" for="loginEmail">メールアドレス</label><input id="loginEmail" type="email" autocomplete="username" required>
-  <label class="lbl" for="loginPassword">パスワード</label><input id="loginPassword" type="password" autocomplete="current-password" required minlength="8">
+  <form id="loginForm" method="post" action="./" autocomplete="on"><label class="lbl" for="loginEmail">メールアドレス</label><input id="loginEmail" name="username" type="email" inputmode="email" autocapitalize="none" spellcheck="false" autocomplete="username" required>
+  <label class="lbl" for="loginPassword">パスワード</label><input id="loginPassword" name="password" type="password" autocomplete="current-password" required minlength="8">
+  <button class="back-link password-toggle" type="button" data-password="loginPassword" aria-controls="loginPassword" aria-pressed="false">パスワードを表示</button>
+  <p class="note">保存したパスワードを選ぶと、自動入力できます。</p>
   <button id="loginSubmit" class="btn" type="submit" style="margin-top:16px;background:#ad4564">ログイン</button></form>
   <p id="loginError" class="err" role="alert"></p>
   <button id="resetPassword" type="button" class="btn sub">パスワードを忘れた方</button>
@@ -562,10 +565,11 @@
       <button class="btn sub" id="pinChangeBtn" style="margin-top:12px">暗証番号を変える</button>
     </div>
     <div class="card" id="accountCard"><h2>機種変更・別の端末でも使う</h2>
-      <p class="note" id="accountStatus">メールを登録すると、同じ記録を別の端末でも開けます。登録前にブラウザのデータを消すと、記録に戻れなくなることがあります。</p>
-      <form id="accountForm"><label class="lbl" for="accountEmail">メールアドレス</label><input id="accountEmail" type="email" autocomplete="username" required>
-      <label class="lbl" for="accountPassword">パスワード（8文字以上）</label><input id="accountPassword" type="password" autocomplete="new-password" minlength="8" required>
-      <label class="lbl" for="accountPasswordAgain">もう一度</label><input id="accountPasswordAgain" type="password" autocomplete="new-password" minlength="8" required>
+      <p class="note" id="accountStatus">登録はあとからでも大丈夫。同じ記録を別のスマホやブラウザで開くための設定です。登録前にブラウザのデータを消すと、記録に戻れなくなることがあります。</p>
+      <form id="accountForm" method="post" action="./?tab=set" autocomplete="on"><label class="lbl" for="accountEmail">メールアドレス</label><input id="accountEmail" name="email" type="email" inputmode="email" autocapitalize="none" spellcheck="false" autocomplete="username" required>
+      <label class="lbl" for="accountPassword">パスワード（8文字以上）</label><input id="accountPassword" name="new-password" type="password" autocomplete="new-password" minlength="8" required>
+      <button class="back-link password-toggle" type="button" data-password="accountPassword" aria-controls="accountPassword" aria-pressed="false">パスワードを表示</button>
+      <p class="note">スマホが提案するパスワードも使えます。登録後に「保存」が出たら選んでください。</p>
       <button class="btn sub" id="accountSave" type="submit" style="margin-top:16px">メールとパスワードを登録</button></form>
       <p id="accountError" class="err" role="alert"></p>
       <button class="btn sub hidden" id="accountLogout" type="button">ログアウト</button>
@@ -897,14 +901,20 @@ async function startOwner() {
     $("slowMsg").innerHTML='開けませんでした。通信を確認して、もう一度お試しください。<a class="btn sub" href="?intro=1">ホームへ戻る</a>';
   } finally { clearTimeout(slow); }
 }
+function setupPasswordToggles() {
+  document.querySelectorAll("[data-password]").forEach(button => {
+    button.onclick=()=>{const input=$(button.dataset.password), visible=input.type==="password";input.type=visible?"text":"password";button.setAttribute("aria-pressed",String(visible));button.textContent=visible?"パスワードを隠す":"パスワードを表示";};
+  });
+}
 function startLogin() {
-  show("loginView");
+  show("loginView"); setupPasswordToggles();
   $("loginForm").onsubmit=async e=>{
     e.preventDefault();$("loginError").textContent="";$("loginSubmit").disabled=true;
     try {
       await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
       await auth.signInWithEmailAndPassword($("loginEmail").value.trim(),$("loginPassword").value);
-      $("loginPassword").value="";location.assign("./");
+      // Keep the submitted form intact until navigation so password managers can recognize success.
+      location.assign("./");
     } catch { $("loginError").textContent="ログインできませんでした。メール・パスワードと通信を確認してください。"; }
     finally { $("loginSubmit").disabled=false; }
   };
@@ -1493,18 +1503,23 @@ async function cancelSend(evId, sendId) {
    設定
    ========================================================= */
 function setupAccount() {
+  setupPasswordToggles();
   const user=auth.currentUser, linked=!!user?.email;
   $("accountForm").classList.toggle("hidden",linked);$("accountLogout").classList.toggle("hidden",!linked);
   if(linked) $("accountStatus").textContent="登録済み："+user.email+"。別の端末では「ログイン」から同じ記録を開けます。";
+  if(linked && qs.get("account")==="saved") $("accountStatus").textContent="登録できました。スマホにパスワードの保存が表示されたら「保存」を選んでください。次回から同じブラウザではログイン状態が続きます。";
   $("accountForm").onsubmit=async e=>{
     e.preventDefault();$("accountError").textContent="";
     const password=$("accountPassword").value;
-    if(password.length<8 || password!==$("accountPasswordAgain").value){$("accountError").textContent="8文字以上で、同じパスワードを2回入れてください。";return;}
+    if(password.length<8){$("accountError").textContent="パスワードは8文字以上にしてください。";return;}
+    if(!$("accountEmail").checkValidity()){$("accountError").textContent="メールアドレスを確認してください。";return;}
     $("accountSave").disabled=true;
     try{
       const credential=firebase.auth.EmailAuthProvider.credential($("accountEmail").value.trim(),password);
+      await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
       await auth.currentUser.linkWithCredential(credential);
-      $("accountPassword").value="";$("accountPasswordAgain").value="";setupAccount();toast("登録しました。このメールで引き継げます。",4000);
+      // Navigate after successful linking without clearing credentials first. Never store the password in app storage.
+      location.assign("./?tab=set&account=saved");
     }catch(e){$("accountError").textContent=e.code==="auth/email-already-in-use" ? "このメールは登録済みです。別のメールを使ってください。今の記録は保存されています。" : "登録できませんでした。メールと通信を確認してください。";}
     finally{$("accountSave").disabled=false;}
   };

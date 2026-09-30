@@ -20,12 +20,13 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
  });
  const db={collection:name=>query(name),batch:()=>({set:(r,x)=>r.set(x),delete:r=>r.delete(),commit:async()=>{}}),runTransaction:async fn=>fn({get:r=>r.get(),set:(r,x,opt)=>r.set(x,opt),update:(r,x)=>r.update(x)})};
  const user={uid:'A',isAnonymous:!linked,...(linked?{email:'a@example.test'}:{}),linkWithCredential:async c=>{user.email=c.email;user.isAnonymous=false;calls.push(['link',user.uid]);}};
- const auth={currentUser:user,setPersistence:async()=>{},signInAnonymously:async()=>{calls.push(['anonymous']);return{user};}};
+ const auth={currentUser:user,signInWithEmailAndPassword:async()=>{calls.push(['signin']);},setPersistence:async()=>{},signInAnonymously:async()=>{calls.push(['anonymous']);return{user};}};
  const authFn=()=>auth;authFn.Auth={Persistence:{LOCAL:'local'}};authFn.EmailAuthProvider={credential:(email,password)=>({email,password})};
  const firestore=()=>db;firestore.FieldValue={serverTimestamp:()=>1,arrayUnion:x=>[x],arrayRemove:()=>[],increment:x=>x};
  w.firebase={initializeApp:()=>{},auth:authFn,firestore};w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.console.error=(...args)=>errors.push(args);w.liff={init:async()=>{},isLoggedIn:()=>true,getProfile:async()=>({userId:'U'+'a'.repeat(32),displayName:'A'}),isInClient:()=>false};
  const script=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean).pop();
- w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */'))+'\nconst qs=new URLSearchParams(location.search);globalThis.h={entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
+ w.testNavigate=url=>calls.push(['navigate',url]);
+ w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
  return{w,d,data,calls,queries,close:()=>{w.close();assert.equal(errors.length,0,errors.map(String).join(' '));}};
 }
 test('new user gets a private profile and all list queries are owner-filtered',async()=>{
@@ -39,7 +40,7 @@ test('legacy owner keeps existing workspace even if start link is opened',async(
 });
 test('returning email user stays signed in; linking anonymous account preserves UID and records',async()=>{
  const a=app({returning:true,linked:true});try{await a.w.h.startOwner();assert(a.w.h.personal);assert(!a.calls.some(c=>c[0]==='anonymous'));assert(a.d.getElementById('accountForm').classList.contains('hidden'));}finally{a.close();}
- const b=app();try{await b.w.h.startOwner();b.d.getElementById('accountEmail').value='a@example.test';b.d.getElementById('accountPassword').value='long-password';b.d.getElementById('accountPasswordAgain').value='long-password';await b.d.getElementById('accountForm').onsubmit({preventDefault(){}});assert(b.calls.some(c=>c[0]==='link'&&c[1]==='A'));assert(b.data.has('personalConfig/A'));}finally{b.close();}
+ const b=app();try{await b.w.h.startOwner();b.d.getElementById('accountEmail').value='a@example.test';b.d.getElementById('accountPassword').value='long-password';await b.d.getElementById('accountForm').onsubmit({preventDefault(){}});assert(b.calls.some(c=>c[0]==='link'&&c[1]==='A'));assert(b.data.has('personalConfig/A'));}finally{b.close();}
 });
 test('personal invite acceptance preserves current account and records acceptance identity',async()=>{
  const a=app({url:'?invite=token&scope=personal',invite:true,linked:true});try{await a.w.h.startInvite();await a.d.getElementById('invAcceptBtn').onclick();const f=a.data.get('personalFriends/token');assert.equal(f.status,'joined');assert.equal(f.acceptedBy,'A');assert.equal(f.ownerUid,'sender');assert(!a.calls.some(c=>c[0]==='anonymous'));}finally{a.close();}
@@ -50,4 +51,18 @@ test('first record guidance opens the chosen form and can be dismissed without l
 });
 test('LIFF menu destinations are separated from invitations and explicit parameters win',()=>{
  const a=app();try{const p=a.w.h.entryParams('?liff.state='+encodeURIComponent('/?tab=list&view=mem'));assert.equal(p.get('view'),'mem');assert.equal(p.has('invite'),false);const q=a.w.h.entryParams('?view=cal&liff.state='+encodeURIComponent('/?view=mem&invite=t&scope=personal&redirect=https://evil.test'));assert.equal(q.get('view'),'cal');assert.equal(q.get('invite'),'t');assert.equal(q.has('redirect'),false);}finally{a.close();}
+});
+
+test('registration supports password managers and one password entry without storing credentials',async()=>{
+ const a=app();try{await a.w.h.startOwner();const d=a.d;assert.equal(d.getElementById('accountPasswordAgain'),null);assert.equal(d.getElementById('accountForm').method,'post');assert.equal(d.getElementById('accountPassword').autocomplete,'new-password');assert(d.getElementById('accountEmail').name);
+ const toggle=d.querySelector('[data-password="accountPassword"]');toggle.click();assert.equal(d.getElementById('accountPassword').type,'text');toggle.click();assert.equal(d.getElementById('accountPassword').type,'password');
+ d.getElementById('accountEmail').value='a@example.test';d.getElementById('accountPassword').value='long-password';await d.getElementById('accountForm').onsubmit({preventDefault(){}});assert(a.calls.some(c=>c[0]==='link'));assert(a.calls.some(c=>c[0]==='navigate'&&c[1]==='./?tab=set&account=saved'));assert.equal(d.getElementById('accountPassword').value,'long-password');assert(!JSON.stringify([...a.data]).includes('long-password'));assert(!JSON.stringify(a.w.localStorage).includes('long-password'));
+ }finally{a.close();}
+});
+test('login is an autofill-compatible form with an accessible password toggle',()=>{
+ const a=app({url:'?signin=1'});try{a.w.h.startLogin();const d=a.d;assert.equal(d.getElementById('loginForm').method,'post');assert.equal(d.getElementById('loginEmail').autocomplete,'username');assert.equal(d.getElementById('loginPassword').autocomplete,'current-password');assert.equal(d.getElementById('loginEmail').getAttribute('autocapitalize'),'none');d.querySelector('[data-password="loginPassword"]').click();assert.equal(d.getElementById('loginPassword').type,'text');}finally{a.close();}
+});
+
+test('successful login navigates without clearing the submitted password',async()=>{
+ const a=app({url:'?signin=1'});try{a.w.h.startLogin();a.d.getElementById('loginEmail').value='a@example.test';a.d.getElementById('loginPassword').value='long-password';await a.d.getElementById('loginForm').onsubmit({preventDefault(){}});assert(a.calls.some(c=>c[0]==='signin'));assert(a.calls.some(c=>c[0]==='navigate'&&c[1]==='./'));assert.equal(a.d.getElementById('loginPassword').value,'long-password');}finally{a.close();}
 });
