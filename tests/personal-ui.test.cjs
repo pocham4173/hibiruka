@@ -10,7 +10,7 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
  if(returning)data.set('personalConfig/A',{ownerName:'Alice'});
  if(invite)data.set('personalFriends/token',{ownerUid:'sender',from:'Sender',name:'A',status:'pending'});
  const snap=path=>({id:path.split('/').pop(),exists:data.has(path),data:()=>data.get(path),ref:ref(path)});
- const ref=path=>({path,id:path.split('/').pop(),get:async()=>snap(path),set:async(x,opt)=>{calls.push(['set',path]);data.set(path,opt?.merge?{...data.get(path),...x}:x);},update:async(x)=>{calls.push(['update',path]);data.set(path,{...data.get(path),...x});},delete:async()=>data.delete(path),onSnapshot:cb=>{cb(snap(path));return()=>{};}});
+ const ref=path=>({path,id:path.split('/').pop(),get:async()=>{if(db.denyMissing && !data.has(path)){const error=new Error("Missing owner");error.code="permission-denied";throw error;}return snap(path);},set:async(x,opt)=>{calls.push(['set',path]);data.set(path,opt?.merge?{...data.get(path),...x}:x);},update:async(x)=>{calls.push(['update',path]);data.set(path,{...data.get(path),...x});},delete:async()=>data.delete(path),onSnapshot:cb=>{cb(snap(path));return()=>{};}});
  const query=(name,filters=[])=>({
   doc:id=>ref(name+'/'+(id||'new'+(++serial))),
   where:(...filter)=>query(name,[...filters,filter]),orderBy:()=>query(name,filters),
@@ -74,7 +74,7 @@ test('welcome never asks for a new PIN; restoration appears only through the exp
 
 test('photo commit failure preserves full images and retry uses the same record ID',async()=>{
  const a=app();try{
- await a.w.h.startOwner();a.d.querySelector('#catPills [data-cat]').click();
+ await a.w.h.startOwner();a.db.denyMissing=true;a.d.querySelector('#catPills [data-cat]').click();
  a.d.getElementById('fKind').value='memory';a.d.getElementById('fDate').value='2020-01-01';a.d.getElementById('fTitle').value='Memory';
  a.w.h.setPhotos([{thumb:'small',full:'original-full'}]);a.db.failCommit=true;
  await a.w.h.saveRecord();assert.equal(a.errors.length,1);a.errors.length=0;
