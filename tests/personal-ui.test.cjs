@@ -18,7 +18,7 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
   get:async()=>{queries.push({name,filters});const docs=[...data.keys()].filter(p=>p.startsWith(name+'/')&&filters.every(([k,op,v])=>data.get(p)[k]===v)).map(snap);return{docs,forEach:f=>docs.forEach(f)};},
   onSnapshot:cb=>{queries.push({name,filters});cb({docs:[]});return()=>{};}
  });
- const db={collection:name=>query(name),batch:()=>({set:(r,x)=>r.set(x),delete:r=>r.delete(),commit:async()=>{}}),runTransaction:async fn=>fn({get:r=>r.get(),set:(r,x,opt)=>r.set(x,opt),update:(r,x)=>r.update(x)})};
+ const db={collection:name=>query(name),batch:()=>{const writes=[];return{set:(r,x)=>writes.push(()=>r.set(x)),update:(r,x)=>writes.push(()=>r.update(x)),delete:r=>writes.push(()=>r.delete()),commit:async()=>{if(db.failCommit){db.failCommit=false;throw new Error("test offline");}for(const write of writes)await write();}}},runTransaction:async fn=>fn({get:r=>r.get(),set:(r,x,opt)=>r.set(x,opt),update:(r,x)=>r.update(x)})};
  const user={uid:'A',isAnonymous:!linked,...(linked?{email:'a@example.test'}:{}),linkWithCredential:async c=>{user.email=c.email;user.isAnonymous=false;calls.push(['link',user.uid]);}};
  const auth={currentUser:user,signInWithEmailAndPassword:async()=>{calls.push(['signin']);},setPersistence:async()=>{},signInAnonymously:async()=>{calls.push(['anonymous']);return{user};}};
  const authFn=()=>auth;authFn.Auth={Persistence:{LOCAL:'local'}};authFn.EmailAuthProvider={credential:(email,password)=>({email,password})};
@@ -26,8 +26,8 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
  w.firebase={initializeApp:()=>{},auth:authFn,firestore};w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.console.error=(...args)=>errors.push(args);w.liff={init:async()=>{},isLoggedIn:()=>true,getProfile:async()=>({userId:'U'+'a'.repeat(32),displayName:'A'}),isInClient:()=>false};
  const script=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean).pop();
  w.testNavigate=url=>calls.push(['navigate',url]);
- w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
- return{w,d,data,calls,queries,close:()=>{w.close();assert.equal(errors.length,0,errors.map(String).join(' '));}};
+ w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={editRecord,setEvents:value=>events=value,setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
+ return{w,d,data,calls,queries,db,errors,close:()=>{w.close();assert.equal(errors.length,0,errors.map(String).join(' '));}};
 }
 test('new user gets a private profile and all list queries are owner-filtered',async()=>{
  const a=app();try{await a.w.h.startOwner();assert(a.w.h.personal);assert(a.data.has('personalConfig/A'));assert(!a.data.has('members/A'));for(const q of a.queries.filter(q=>['personalEvents','personalFriends'].includes(q.name)))assert.equal(JSON.stringify(q.filters),JSON.stringify([['ownerUid','==','A']]));assert(a.d.getElementById('legacyTransfer').classList.contains('hidden'));}finally{a.close();}
@@ -70,4 +70,25 @@ test('successful login navigates without clearing the submitted password',async(
 test('welcome never asks for a new PIN; restoration appears only through the explicit legacy link',async()=>{
  const a=app({url:''});try{await a.w.h.startOwner();assert(!a.d.getElementById('pairView').classList.contains('hidden'));assert(a.d.getElementById('pinDetails').classList.contains('hidden'));assert.equal(a.d.getElementById('pinInput2'),null);assert(!a.calls.some(c=>c[0]==='set'));}finally{a.close();}
  const b=app({url:'?legacy=1'});try{await b.w.h.startOwner();assert(!b.d.getElementById('pinDetails').classList.contains('hidden'));assert(b.d.getElementById('pinDetails').open);assert.equal(b.d.getElementById('pinTitle').textContent,'以前の番号で復元する');assert(!b.calls.some(c=>c[0]==='set'));}finally{b.close();}
+});
+
+test('photo commit failure preserves full images and retry uses the same record ID',async()=>{
+ const a=app();try{
+ await a.w.h.startOwner();a.d.querySelector('#catPills [data-cat]').click();
+ a.d.getElementById('fKind').value='memory';a.d.getElementById('fDate').value='2020-01-01';a.d.getElementById('fTitle').value='Memory';
+ a.w.h.setPhotos([{thumb:'small',full:'original-full'}]);a.db.failCommit=true;
+ await a.w.h.saveRecord();assert.equal(a.errors.length,1);a.errors.length=0;
+ const id=[...a.data.keys()].find(k=>k.startsWith('personalEvents/'));
+ assert.equal(a.data.get(id).thumbs.length,0);
+ await a.w.h.saveRecord();assert.equal([...a.data.keys()].filter(k=>k.startsWith('personalEvents/')).length,1);
+ assert.equal(a.data.get(id).thumbs[0],'small');assert.equal(a.data.get(id.replace('personalEvents/','personalPhotos/')+'_0').data,'original-full');
+ }finally{a.close();}
+});
+test('missing original photo stops editing instead of overwriting it with a thumbnail',async()=>{
+ const a=app();try{
+ await a.w.h.startOwner();const event={id:'old',ownerUid:'A',cat:'遊び',date:'2020-01-01',kind:'memory',title:'Old',thumbs:['small']};
+ a.data.set('personalEvents/old',event);a.w.h.setEvents([event]);await a.w.h.editRecord('old');
+ assert(a.d.getElementById('tab-rec').classList.contains('hidden'));
+ assert.equal(a.data.get('personalEvents/old').thumbs[0],'small');assert(!a.data.has('personalPhotos/old_0'));
+ }finally{a.close();}
 });
