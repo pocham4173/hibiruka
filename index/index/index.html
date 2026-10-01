@@ -1117,23 +1117,33 @@ function shrink(file, max, q) {
   });
 }
 async function addPhotos(ev) {
-  const files = [...ev.target.files].slice(0, MAX_PHOTOS - form.photos.length);
+  const targetForm = form;
+  const files = [...ev.target.files].slice(0, MAX_PHOTOS - targetForm.photos.length);
   ev.target.value = "";
-  for (const f of files) {
-    try { form.photos.push({ thumb: await shrink(f, 220, 0.7), full: await shrink(f, 1000, 0.72) }); }
-    catch { toast("この写真は読み込めませんでした"); }
-  }
+  targetForm.photoPending = (targetForm.photoPending || 0) + 1;
   renderPhotos();
+  try {
+    for (const f of files) {
+      try {
+        const photo = { thumb: await shrink(f, 220, 0.7), full: await shrink(f, 1000, 0.72) };
+        if (form === targetForm && targetForm.photos.length < MAX_PHOTOS) targetForm.photos.push(photo);
+      } catch { if (form === targetForm) toast("この写真は読み込めませんでした"); }
+    }
+  } finally {
+    targetForm.photoPending--;
+    if (form === targetForm) renderPhotos();
+  }
 }
 function renderPhotos() {
   const box = $("fPhotos");
   box.innerHTML = form.photos.map((p, i) => `<div class="ph"><img src="${p.thumb}" alt=""><button data-rm="${i}" aria-label="外す">✕</button></div>`).join("") +
     (form.photos.length < MAX_PHOTOS ? `<label class="addph" for="fPhotoInput">${icon("camera")}写真を追加</label>` : "");
   box.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { form.photos.splice(+b.dataset.rm, 1); renderPhotos(); });
-  $("phCount").textContent = `${form.photos.length}/${MAX_PHOTOS}枚`;
+  $("phCount").textContent = `${form.photos.length}/${MAX_PHOTOS}枚${form.photoPending ? "（写真を準備中…）" : ""}`;
 }
 
 async function saveRecord() {
+  if (form.photoPending) { toast("写真を準備しています。少し待ってから保存してください。"); return; }
   if (!form.cat) { toast("遊び・食事など、記録の種類を1つ選んでください"); $("recEyebrow").focus(); return; }
   const date = $("fDate").value;
   if (!date) { toast("日付を入れてください"); return; }
@@ -1149,35 +1159,38 @@ async function saveRecord() {
   if (!data.title && !data.place) { toast("「どこで？」か「なにをする？」を入れてください"); $("fTitle").focus(); return; }
   if ($("saveBtn").disabled) return;
   if (form.photos.some(p => !p.full)) { toast("写真を読み込めませんでした。記録を開き直してください。"); return; }
-  $("saveBtn").disabled = true;
+  const savingForm = form;
+  const photos = form.photos.map(p => ({...p}));
+  const controls = [...document.querySelectorAll('#tab-rec input, #tab-rec textarea, #tab-rec select, #tab-rec button')].filter(el => !el.disabled);
+  controls.forEach(el => { el.disabled = true; });
+  $("saveBtn").textContent = "保存しています…";
   try {
     const id = editingId || (draftRecordId ||= recordCollection("events").doc().id);
     const wasNew = !editingId;
     const firstRecord = personalMode && wasNew && events.length === 0 && !guideDone();
     const eventRef = recordCollection("events").doc(id);
-    // Reserve one ID per draft. An acknowledged-late write must not create a second record.
-    if (!editingId) {
-      // Owner-only rules reject reads of a document that does not exist yet.
-      // On retry, an existing owned document is readable; preserve its metadata.
-      let existing;
-      try { existing = await eventRef.get(); }
+    // Reuse the same draft ID after a lost response without resetting notifications or createdAt.
+    let existing;
+    if (wasNew) {
+      try { existing = await eventRef.get({source: "server"}); }
       catch (error) { if (error.code !== "permission-denied") throw error; }
-      if (!existing?.exists) await eventRef.set(ownedData({...data, thumbs: [], sends: [], nextSendAt: null, createdAt: TS()}));
     }
-    const old = await ownedQuery("photos").where("eventId", "==", id).get();
-    // Existing full photos and their thumbnails change in the same commit.
+    const old = await ownedQuery("photos").where("eventId", "==", id).get({source: "server"});
     const batch = db.batch();
-    batch.update(eventRef, data);
-    old.forEach(d => batch.delete(d.ref));
-    form.photos.forEach((p, i) => batch.set(recordCollection("photos").doc(`${id}_${i}`), ownedData({ eventId: id, i, data: p.full })));
+    if (wasNew && !existing?.exists) batch.set(eventRef, ownedData({...data, sends: [], nextSendAt: null, createdAt: TS()}));
+    else batch.update(eventRef, data);
+    const photoIds = new Set(photos.map((p, i) => `${id}_${i}`));
+    old.forEach(d => { if (!photoIds.has(d.id)) batch.delete(d.ref); });
+    photos.forEach((p, i) => batch.set(recordCollection("photos").doc(`${id}_${i}`), ownedData({ eventId: id, i, data: p.full })));
     await batch.commit();
+    if (form !== savingForm) { toast("記録を保存しました"); return; }
     const saved = { ...data, id, sends: events.find(x => x.id === id)?.sends || [] };
     if (firstRecord) { finishGuide(); $("savedNextSteps").classList.remove("hidden"); }
     resetForm(); selectView(isPlan(saved) ? "cal" : "mem"); goTab("list");
     if (isPlan(saved)) openSend(id, saved);
     else toast(wasNew ? "記録しました" : "変更を保存しました");
   } catch (e) { console.error(e); toast("保存できませんでした。電波のよい所でもう一度お試しください。"); }
-  finally { $("saveBtn").disabled = false; }
+  finally { controls.forEach(el => { el.disabled = false; }); updateSaveNote(); }
 }
 async function editRecord(id) {
   const e = events.find(x => x.id === id); if (!e) return;
