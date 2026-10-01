@@ -27,7 +27,8 @@ test('invitation capability allows only pending acceptance, no ownership change 
  await assertSucceeds(getDoc(doc(B,'personalFriends/token')));await assertFails(getDocs(collection(B,'personalFriends')));
  await assertFails(updateDoc(ref,{status:'joined',lineUserId:'U'+'a'.repeat(32)}));
  await assertFails(updateDoc(doc(B,'personalFriends/token'),{ownerUid:'person-B'}));
- await assertSucceeds(updateDoc(doc(B,'personalFriends/token'),{status:'joined',lineUserId:'U'+'b'.repeat(32),lineName:'B',joinedAt:serverTimestamp(),acceptedBy:'person-B'}));
+ await assertFails(updateDoc(doc(B,'personalFriends/token'),{status:'joined',lineUserId:'U'+'b'.repeat(32),lineName:'B',joinedAt:serverTimestamp(),acceptedBy:'person-B'}));
+ await env.withSecurityRulesDisabled(async c=>{await updateDoc(doc(c.firestore(),'personalFriends/token'),{status:'joined',lineUserId:'U'+'b'.repeat(32),lineName:'B',joinedAt:serverTimestamp(),acceptedBy:'person-B',verificationVersion:1});});
  await assertFails(updateDoc(doc(B,'personalFriends/token'),{lineUserId:'U'+'c'.repeat(32)}));
  const C=env.authenticatedContext('person-C').firestore();await assertFails(getDoc(doc(C,'personalFriends/token')));
  await assertSucceeds(updateDoc(ref,{name:'renamed'}));await assertFails(deleteDoc(doc(B,'personalFriends/token')));
@@ -65,4 +66,13 @@ test('legacy owner can atomically create an event and its four photos with exist
  for(let i=0;i<4;i++)b.set(doc(L,'photos/atomic-legacy_'+i),{eventId:'atomic-legacy',i,data:'full-'+i});
  await assertSucceeds(b.commit());
  await assertFails(getDoc(doc(B,'photos/atomic-legacy_0')));
+});
+
+test('legacy owner can manage names but cannot forge LINE identity or acceptance',async()=>{
+ const L=env.authenticatedContext('legacy-owner').firestore(),ref=doc(L,'friends/legacy-invite');
+ await assertSucceeds(setDoc(ref,{name:'Friend',from:'Owner',status:'pending',createdAt:serverTimestamp()}));
+ await assertFails(updateDoc(ref,{status:'joined',lineUserId:'U'+'a'.repeat(32)}));
+ await assertFails(updateDoc(doc(B,'friends/legacy-invite'),{status:'joined',lineUserId:'U'+'b'.repeat(32),acceptedBy:'person-B',joinedAt:serverTimestamp()}));
+ await assertSucceeds(updateDoc(ref,{name:'Renamed',sentAt:serverTimestamp()}));
+ await assertFails(setDoc(doc(L,'friends/forged'),{name:'Fake',status:'joined',lineUserId:'U'+'a'.repeat(32),createdAt:serverTimestamp()}));
 });

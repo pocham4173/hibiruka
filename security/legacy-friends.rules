@@ -1,0 +1,14 @@
+    match /friends/{id} {
+      allow list: if isOwner();
+      // Old accepted links retain their existing capability-based confirmation view.
+      allow get: if isOwner() || (request.auth != null &&
+        (resource.data.status == 'pending' || resource.data.get('acceptedBy', '') == request.auth.uid ||
+         (resource.data.status == 'joined' && resource.data.get('acceptedBy', '') == '')));
+      allow create: if isOwner() && request.resource.data.status == 'pending'
+        && request.resource.data.keys().hasOnly(['name','status','from','createdAt'])
+        && request.resource.data.createdAt == request.time;
+      allow update: if isOwner() && request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly(['name','from','sentAt','sentCount']);
+      allow delete: if isOwner();
+      // Acceptance and identity fields are written only by the verified server.
+    }

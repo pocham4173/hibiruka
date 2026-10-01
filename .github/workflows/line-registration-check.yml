@@ -1,0 +1,28 @@
+name: LINE本人確認の移行前テスト
+on:
+  push:
+    branches: [codex/verified-line-registration]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm install --prefix scripts firebase-admin@12 --omit=dev --no-audit --no-fund
+      - run: node scripts/personal-rules.cjs prepare
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - run: npm install --prefix security --no-audit --no-fund
+      - run: ./node_modules/.bin/firebase emulators:exec --only firestore --project demo-hibiruka-isolation 'node --test personal.test.cjs && cd .. && NODE_PATH=security/node_modules node --test tests/*.test.cjs tests/*.test.mjs'
+        working-directory: security
+      - run: npm ci --prefix line-worker --no-audit --no-fund
+      - run: line-worker/node_modules/.bin/wrangler deploy --dry-run --config line-auth/wrangler.jsonc --outdir /tmp/hibiruka-auth-build
