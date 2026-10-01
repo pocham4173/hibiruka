@@ -18,7 +18,7 @@
       allow read, delete: if personalOwner(resource.data);
       allow create, update: if personalOwner(request.resource.data)
         && (!exists(/databases/$(database)/documents/personalPhotos/$(id)) || personalOwner(resource.data))
-        && personalOwner(get(/databases/$(database)/documents/personalEvents/$(request.resource.data.eventId)).data);
+        && personalOwner(getAfter(/databases/$(database)/documents/personalEvents/$(request.resource.data.eventId)).data);
     }
     match /personalFriends/{id} {
       allow list: if personalOwner(resource.data);

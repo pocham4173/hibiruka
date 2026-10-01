@@ -1,6 +1,6 @@
 const {test,before,after}=require('node:test');
 const {initializeTestEnvironment,assertSucceeds,assertFails}=require('@firebase/rules-unit-testing');
-const {doc,setDoc,getDoc,getDocs,collection,query,where,updateDoc,serverTimestamp,deleteDoc}=require('firebase/firestore');
+const {doc,setDoc,getDoc,getDocs,collection,query,where,updateDoc,serverTimestamp,deleteDoc,writeBatch}=require('firebase/firestore');
 const fs=require('node:fs');let env,A,B;
 before(async()=>{env=await initializeTestEnvironment({projectId:'demo-hibiruka-isolation',firestore:{rules:fs.readFileSync('/tmp/hibiruka-combined.rules','utf8')}});A=env.authenticatedContext('person-A').firestore();B=env.authenticatedContext('person-B').firestore();});
 after(async()=>{await env?.cleanup();});
@@ -35,4 +35,33 @@ test('invitation capability allows only pending acceptance, no ownership change 
 test('new users cannot enter legacy records or install a legacy membership',async()=>{
  await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();await setDoc(doc(d,'config/secret'),{pinHash:'legacy-secret'});await setDoc(doc(d,'events/legacy'),{title:'private'});});
  await assertFails(getDoc(doc(A,'events/legacy')));await assertFails(setDoc(doc(A,'members/person-A'),{pinHash:'wrong'}));
+});
+
+test('one batch creates a private event with four photos and rejects partial or foreign ownership',async()=>{
+ const b=writeBatch(A);
+ b.set(doc(A,'personalEvents/atomic'),{ownerUid:'person-A',createdAt:serverTimestamp(),thumbs:['1','2','3','4'],kind:'memory'});
+ for(let i=0;i<4;i++)b.set(doc(A,'personalPhotos/atomic_'+i),{ownerUid:'person-A',eventId:'atomic',i,data:'full-'+i});
+ await assertSucceeds(b.commit());
+ for(let i=0;i<4;i++)await assertSucceeds(getDoc(doc(A,'personalPhotos/atomic_'+i)));
+ await assertFails(getDoc(doc(B,'personalPhotos/atomic_0')));
+ const bad=writeBatch(A);
+ bad.set(doc(A,'personalEvents/rejected'),{ownerUid:'person-A',createdAt:serverTimestamp()});
+ bad.set(doc(A,'personalPhotos/rejected_0'),{ownerUid:'person-B',eventId:'rejected',data:'bad'});
+ await assertFails(bad.commit());
+ await env.withSecurityRulesDisabled(async c=>{
+   const event=await getDoc(doc(c.firestore(),'personalEvents/rejected'));
+   require('node:assert/strict').equal(event.exists(),false);
+ });
+ await assertFails(setDoc(doc(A,'personalPhotos/orphan'),{ownerUid:'person-A',eventId:'missing',data:'orphan'}));
+});
+test('legacy owner can atomically create an event and its four photos with existing rules',async()=>{
+ await env.withSecurityRulesDisabled(async c=>{
+   await setDoc(doc(c.firestore(),'config/secret'),{pinHash:'legacy-atomic-secret'});
+   await setDoc(doc(c.firestore(),'members/legacy-owner'),{pinHash:'legacy-atomic-secret'});
+ });
+ const L=env.authenticatedContext('legacy-owner').firestore(),b=writeBatch(L);
+ b.set(doc(L,'events/atomic-legacy'),{createdAt:serverTimestamp(),kind:'memory',date:'2020-01-01',thumbs:['1','2','3','4']});
+ for(let i=0;i<4;i++)b.set(doc(L,'photos/atomic-legacy_'+i),{eventId:'atomic-legacy',i,data:'full-'+i});
+ await assertSucceeds(b.commit());
+ await assertFails(getDoc(doc(B,'photos/atomic-legacy_0')));
 });
