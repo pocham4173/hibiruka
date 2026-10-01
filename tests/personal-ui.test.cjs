@@ -3,7 +3,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const {JSDOM}=require(process.env.HIBIRUKA_JSDOM_PATH || 'jsdom');
 const html=fs.readFileSync('index/index/index.html','utf8');
-function app({url='?start=1',legacy=false,linked=false,returning=false,invite=false}={}){
+function app({url='?start=1',legacy=false,linked=false,returning=false,invite=false, delayed=false}={}){
  const dom=new JSDOM(html,{url:'https://example.test/index/'+url,runScripts:'outside-only'}),w=dom.window,d=w.document;
  const data=new Map(),calls=[],queries=[],errors=[];let serial=0;
  if(legacy)data.set('members/A',{pinHash:'test'});
@@ -16,7 +16,7 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
   where:(...filter)=>query(name,[...filters,filter]),orderBy:()=>query(name,filters),
   add:async x=>{const r=ref(name+'/new'+(++serial));await r.set(x);return r;},
   get:async()=>{queries.push({name,filters});const docs=[...data.keys()].filter(p=>p.startsWith(name+'/')&&filters.every(([k,op,v])=>data.get(p)[k]===v)).map(snap);return{docs,forEach:f=>docs.forEach(f)};},
-  onSnapshot:cb=>{queries.push({name,filters});cb({docs:[]});return()=>{};}
+  onSnapshot:(options,success,error)=>{const cb=typeof options==="function"?options:success;queries.push({name,filters});if(name.endsWith("Events")||name==="events"){db.recordsCallback=cb;db.recordsError=error;if(delayed)return()=>{};}cb({docs:[],metadata:{fromCache:false}});return()=>{};}
  });
  const db={collection:name=>query(name),batch:()=>{const writes=[];return{set:(r,x)=>writes.push(()=>r.set(x)),update:(r,x)=>writes.push(()=>r.update(x)),delete:r=>writes.push(()=>r.delete()),commit:async()=>{if(db.failCommit){db.failCommit=false;throw new Error("test offline");}for(const write of writes)await write();if(db.failAcknowledgement){db.failAcknowledgement=false;throw new Error("test response lost");}}}},runTransaction:async fn=>fn({get:r=>r.get(),set:(r,x,opt)=>r.set(x,opt),update:(r,x)=>r.update(x)})};
  const user={uid:'A',isAnonymous:!linked,...(linked?{email:'a@example.test'}:{}),linkWithCredential:async c=>{user.email=c.email;user.isAnonymous=false;calls.push(['link',user.uid]);}};
@@ -123,5 +123,26 @@ test('saving waits until selected photos finish preparing',async()=>{
  await a.w.h.saveRecord();assert(![...a.data.keys()].some(k=>k.startsWith('personalEvents/')));
  finish('thumb');await new Promise(resolve=>setImmediate(resolve));finish('full');await preparing;
  await a.w.h.saveRecord();const photo=[...a.data.values()].find(v=>v.data==='full');assert(photo);
+ }finally{a.close();}
+});
+
+test('loading and empty offline cache never claim that records are missing; server result resolves loading',async()=>{
+ const a=app({returning:true,delayed:true});try{
+ await a.w.h.startOwner();const box=a.d.getElementById('listBox');
+ assert.match(box.textContent,/読み込み中/);assert.equal(a.d.getElementById('listCount').textContent,'');
+ assert(a.d.getElementById('firstRecordGuide').classList.contains('hidden'));
+ a.db.recordsCallback({docs:[],metadata:{fromCache:true}});assert.match(box.textContent,/確認中/);assert.doesNotMatch(box.textContent,/ありません/);
+ a.db.recordsCallback({docs:[],metadata:{fromCache:false}});assert.equal(a.d.getElementById('listCount').textContent,'0件');
+ }finally{a.close();}
+});
+test('read failure offers retry, preserves previously loaded records and recovers',async()=>{
+ const a=app({returning:true,delayed:true});try{
+ await a.w.h.startOwner();const box=a.d.getElementById('listBox');
+ a.db.recordsError({code:'unavailable'});assert.match(box.textContent,/読み込めません/);assert.doesNotMatch(box.textContent,/ありません/);
+ box.querySelector('[data-retry-records]').click();assert.match(box.textContent,/読み込み中/);
+ const snapshot={docs:[{id:'kept',data:()=>({title:'大切な予定',date:'2099-01-01',time:'09:00',kind:'plan'})}],metadata:{fromCache:false}};
+ a.db.recordsCallback(snapshot);assert.match(box.textContent,/大切な予定/);
+ a.db.recordsError({code:'permission-denied'});assert.match(box.textContent,/大切な予定/);assert.match(box.textContent,/読み込めません/);
+ box.querySelector('[data-retry-records]').click();a.db.recordsCallback(snapshot);assert.match(box.textContent,/大切な予定/);assert.doesNotMatch(box.textContent,/読み込めません/);
  }finally{a.close();}
 });

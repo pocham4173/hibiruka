@@ -860,6 +860,7 @@ async function pinHash(pin) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("hibiruka:" + CONFIG.firebase.projectId + ":" + pin));
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
 }
+let recordsState = "loading", recordsStop = null, recordsEpoch = 0;
 let personalMode = false;
 const personalNames = {events:"personalEvents", photos:"personalPhotos", friends:"personalFriends"};
 function recordCollection(name) { return db.collection(personalMode ? personalNames[name] : name); }
@@ -951,6 +952,7 @@ function showPin() {
 
 function enterApp() {
   unsub.forEach(stop=>stop()); unsub=[];
+  recordsState = "loading"; events = [];
   show("app");
   setupAccount();
   $("legacyTransfer").classList.toggle("hidden", personalMode);
@@ -965,10 +967,8 @@ function enterApp() {
     renderWho(); renderFriends(); renderSelfLine(); renderFilters(); renderList();
     if (!$("sendSheet").classList.contains("hidden")) renderSendWho();
   }, denied));
-  unsub.push((personalMode ? ownedQuery("events") : recordCollection("events").orderBy("date")).onSnapshot(s => {
-    events = s.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderList(); renderFirstRecordGuide();
-  }, denied));
+  watchRecords();
+  unsub.push(() => { recordsEpoch++; if (recordsStop) recordsStop(); recordsStop = null; });
   unsub.push(appRef().onSnapshot(s => {
     const d = s.exists ? s.data() : {};
     cats = (d.cats && d.cats.length) ? d.cats : DEFAULT_CATS.slice();
@@ -981,13 +981,31 @@ function enterApp() {
     renderCats(); renderWho(); renderFilters(); renderPeople(); renderList();
   }, denied));
 }
+function watchRecords() {
+  if (recordsStop) recordsStop();
+  const epoch = ++recordsEpoch;
+  recordsState = "loading";
+  renderList(); renderFirstRecordGuide();
+  recordsStop = (personalMode ? ownedQuery("events") : recordCollection("events").orderBy("date")).onSnapshot({includeMetadataChanges:true}, s => {
+    if (epoch !== recordsEpoch) return;
+    const cached = s.metadata && s.metadata.fromCache;
+    // An empty local cache is not proof that the user's records are empty.
+    if (!cached || s.docs.length) events = s.docs.map(d => ({id:d.id,...d.data()}));
+    recordsState = cached ? "cached" : "ready";
+    renderList(); renderFirstRecordGuide();
+  }, () => {
+    if (epoch !== recordsEpoch) return;
+    recordsState = "error";
+    renderList(); renderFirstRecordGuide();
+  });
+}
 const appRef = () => personalMode ? db.collection("personalConfig").doc(myUid) : db.collection("config").doc("app");
 
 // Optional guidance belongs to this browser and UID, not shared records.
 function guideKey() { return "hibiruka:first-record:" + myUid; }
 function guideDone() { try { return localStorage.getItem(guideKey()) === "done"; } catch { return false; } }
 function finishGuide() { try { localStorage.setItem(guideKey(), "done"); } catch {} $("firstRecordGuide").classList.add("hidden"); }
-function renderFirstRecordGuide() { $("firstRecordGuide").classList.toggle("hidden", !personalMode || events.length > 0 || guideDone()); }
+function renderFirstRecordGuide() { $("firstRecordGuide").classList.toggle("hidden", recordsState !== "ready" || !personalMode || events.length > 0 || guideDone()); }
 function setupFirstRecordGuide() {
   const create = kind => { resetForm(); $("fKind").value=kind; updateSaveNote(); goTab("rec"); $("recEyebrow").focus(); };
   $("firstPlan").onclick=()=>create("plan"); $("firstMemory").onclick=()=>create("memory");
@@ -1342,6 +1360,17 @@ function memoryCover(e) {
 }
 function renderList() {
   if (!$("listBox") || !calMonth) return;
+  const waiting = recordsState !== "ready";
+  const message = recordsState === "error" ? "記録を読み込めませんでした。通信を確認して、もう一度お試しください。" : recordsState === "cached" ? "保存済みの記録を確認中です。通信が戻ると更新します。" : "記録を読み込み中…";
+  const notice = waiting ? `<div class="card" role="status"><p>${message}</p>${recordsState === "error" ? '<button type="button" class="btn sub" data-retry-records>もう一度読み込む</button>' : ''}</div>` : "";
+  $("listBox").setAttribute("aria-busy", String(recordsState === "loading"));
+  if (waiting && !events.length) {
+    $("calBox").classList.add("hidden"); $("calActions").classList.add("hidden");
+    $("listTitle").textContent = "予定・思い出"; $("listCount").textContent = "";
+    $("listBox").innerHTML = notice;
+    const retry = $("listBox").querySelector("[data-retry-records]"); if (retry) retry.onclick = watchRecords;
+    return;
+  }
   const t = todayStr(), list = filtered();
   $("calBox").classList.toggle("hidden", view !== "cal");
   let items = [], title = "", html = "";
@@ -1367,7 +1396,8 @@ function renderList() {
   }
   $("listTitle").textContent = title;
   $("listCount").textContent = `${items.length}件`;
-  $("listBox").innerHTML = html;
+  $("listBox").innerHTML = notice + (waiting && !items.length ? "" : html);
+  const retry = $("listBox").querySelector("[data-retry-records]"); if (retry) retry.onclick = watchRecords;
   $("listBox").querySelectorAll("[data-open]").forEach(el => el.onclick = (ev) => { if (ev.target.closest("[data-cancel],[data-stop]")) return; openDetail(el.dataset.open); });
   $("listBox").querySelectorAll("[data-cancel]").forEach(b => b.onclick = (ev) => { ev.stopPropagation(); const [a, c] = b.dataset.cancel.split("|"); cancelSend(a, c); });
 }
