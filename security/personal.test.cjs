@@ -56,8 +56,9 @@ test('one batch creates a private event with four photos and rejects partial or 
 });
 test('legacy owner can atomically create an event and its four photos with existing rules',async()=>{
  await env.withSecurityRulesDisabled(async c=>{
-   await setDoc(doc(c.firestore(),'config/secret'),{pinHash:'legacy-atomic-secret'});
-   await setDoc(doc(c.firestore(),'members/legacy-owner'),{pinHash:'legacy-atomic-secret'});
+   const d=c.firestore();
+   await setDoc(doc(d,'config/secret'),{pinHash:'legacy-atomic-secret'});
+   await setDoc(doc(d,'members/legacy-owner'),{pinHash:'legacy-atomic-secret'});
  });
  const L=env.authenticatedContext('legacy-owner').firestore(),b=writeBatch(L);
  b.set(doc(L,'events/atomic-legacy'),{createdAt:serverTimestamp(),kind:'memory',date:'2020-01-01',thumbs:['1','2','3','4']});
