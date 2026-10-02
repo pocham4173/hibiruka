@@ -478,7 +478,7 @@
 
     <div class="pills" id="filterPills"></div>
     <div id="whoFilterBox" class="hidden" style="margin-top:10px"><div class="chips" id="whoFilter"></div></div>
-    <button class="chip add" id="catEditBtn2" style="margin-top:12px">✏️ 項目を追加・削除</button>
+    <button class="chip add" id="catEditBtn2" style="margin-top:12px">✏️ 項目を編集</button>
 
     <div id="calBox" class="card hidden" style="margin-top:16px">
       <div class="cal-head"><button type="button" id="calPrev" aria-label="前の月">‹</button><b id="calTitle"></b><button type="button" id="calNext" aria-label="次の月">›</button></div>
@@ -703,7 +703,7 @@
 
 <!-- 項目の編集 -->
 <div id="catSheet" class="sheet-bg hidden"><div class="sheet">
-  <h2>項目を追加・削除</h2>
+  <h2>項目を編集</h2>
   <div id="catList"></div>
   <div class="row2" style="margin-top:14px;grid-template-columns:1fr auto">
     <input type="text" id="catNew" placeholder="例：ライブ、ナジャ">
@@ -712,6 +712,15 @@
   <button class="btn sub" id="catCloseBtn" style="margin-top:18px">閉じる</button>
 </div></div>
 
+<dialog id="catRename" class="simple-dialog"><form id="catRenameForm">
+<h2>項目の名前を変更</h2>
+<label class="lbl" for="catRenameName">新しい名前</label>
+<input id="catRenameName" type="text" maxlength="40" required autocomplete="off">
+<p class="note">これまでの写真や記録も、この名前でまとまります。</p>
+<p id="catRenameError" class="err" role="alert"></p>
+<button id="catRenameSave" type="submit" class="btn">保存する</button>
+<button id="catRenameCancel" type="button" class="btn sub">やめる</button>
+</form></dialog>
 <div id="toast"></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -1039,6 +1048,7 @@ let draftRecordId = null;
 
 function catColor(i) { return "c" + (i % 4); }
 function catOf(name) { return cats.find(c => c.name === name) || { name, icon: "pin" }; }
+function catLabel(name) { const c = catOf(name); return c.label || c.name || ""; }
 function catIndex(name) { const i = cats.findIndex(c => c.name === name); return i < 0 ? 0 : i; }
 
 function setupForm() {
@@ -1074,11 +1084,11 @@ function renderCats() {
   const choices = cats.slice();
   if (editingId && form.cat && !choices.some(c => c.name === form.cat)) choices.push({name:form.cat,icon:"pin"});
   if (!choices.some(c => c.name === form.cat)) form.cat = "";
-  $("catPills").innerHTML = choices.map((c, i) => `<button type="button" class="pill ${catColor(i)} ${c.name === form.cat ? "on" : ""}" aria-pressed="${c.name === form.cat}" data-cat="${esc(c.name)}">${icon(c.icon)}${c.name === form.cat ? "✓ " : ""}${esc(c.name)}</button>`).join("");
+  $("catPills").innerHTML = choices.map((c, i) => `<button type="button" class="pill ${catColor(i)} ${c.name === form.cat ? "on" : ""}" aria-pressed="${c.name === form.cat}" data-cat="${esc(c.name)}">${icon(c.icon)}${c.name === form.cat ? "✓ " : ""}${esc(c.label || c.name)}</button>`).join("");
   $("catPills").querySelectorAll("[data-cat]").forEach(b => b.onclick = () => { form.cat = b.dataset.cat; renderCats(); });
   const c = catOf(form.cat), i = catIndex(form.cat);
   $("fIcon").className = "ic " + catColor(i); $("fIcon").innerHTML = icon(c.icon);
-  $("fHead").textContent = form.cat ? `${form.cat}の記録` : "上で記録の種類を選んでください";
+  $("fHead").textContent = form.cat ? `${catLabel(form.cat)}の記録` : "上で記録の種類を選んでください";
 }
 function renderWho() {
   if (!$("fWho")) return;
@@ -1105,7 +1115,7 @@ function gcalUrl(e) {
   let dates;
   if (e.time) { const [h, m] = e.time.split(":").map(Number); const st = `${d}T${pad(h)}${pad(m)}00`; const en = new Date(...e.date.split("-").map((v, i) => i === 1 ? v - 1 : +v), h + 1, m); dates = `${st}/${ymd(en).replace(/-/g, "")}T${pad(en.getHours())}${pad(en.getMinutes())}00`; }
   else dates = `${d}/${addDays(e.date, 1).replace(/-/g, "")}`;
-  const p = new URLSearchParams({ action: "TEMPLATE", text: e.title || e.place || e.cat || "予定", dates, ctz: "Asia/Tokyo" });
+  const p = new URLSearchParams({ action: "TEMPLATE", text: e.title || e.place || catLabel(e.cat) || "予定", dates, ctz: "Asia/Tokyo" });
   if (e.place) p.set("location", e.place);
   const det = [e.memo, (e.who || []).length ? "一緒に：" + e.who.join("・") : "", e.link].filter(Boolean).join("\n");
   if (det) p.set("details", det);
@@ -1238,7 +1248,7 @@ async function editRecord(id) {
 }
 async function deleteRecord(id) {
   const e = events.find(x => x.id === id); if (!e) return;
-  if (!confirm(`「${e.title || e.place || e.cat}」を消しますか？`)) return;
+  if (!confirm(`「${e.title || e.place || catLabel(e.cat)}」を消しますか？`)) return;
   try {
     const ps = await ownedQuery("photos").where("eventId", "==", id).get();
     const b = db.batch(); ps.forEach(d => b.delete(d.ref)); b.delete(recordCollection("events").doc(id)); await b.commit();
@@ -1251,7 +1261,7 @@ function openCatSheet() {
   renderCatList();
   $("catAddBtn").onclick = async () => {
     const n = $("catNew").value.trim(); if (!n) return;
-    if (cats.some(c => c.name === n)) { toast("同じ名前があります"); return; }
+    if (cats.some(c => c.name === n || (c.label || c.name) === n)) { toast("同じ名前があります"); return; }
     await saveCats([...cats, { name: n, icon: "pin" }]); $("catNew").value = "";
   };
   $("catCloseBtn").onclick = closeSheets;
@@ -1259,19 +1269,47 @@ function openCatSheet() {
   $("catSheet").classList.remove("hidden");
 }
 function renderCatList() {
-  $("catList").innerHTML = cats.map((c, i) => `<div class="friend"><div class="name" style="display:flex;align-items:center;gap:8px"><span class="pill ${catColor(i)}" style="padding:6px;box-shadow:none">${icon(c.icon)}</span>${esc(c.name)}</div>
-    <button class="icon-btn" data-up="${i}" aria-label="上へ">▲</button><button class="icon-btn" data-dcat="${i}" aria-label="消す">${icon("trash")}</button></div>`).join("");
+  $("catList").innerHTML = cats.map((c, i) => `<div class="friend"><div class="name" style="display:flex;align-items:center;gap:8px"><span class="pill ${catColor(i)}" style="padding:6px;box-shadow:none">${icon(c.icon)}</span>${esc(c.label || c.name)}</div>
+    <button type="button" class="btn sub small" style="width:auto" data-rename-cat="${i}">名前変更</button><button class="icon-btn" data-up="${i}" aria-label="上へ">▲</button><button class="icon-btn" data-dcat="${i}" aria-label="消す">${icon("trash")}</button></div>`).join("");
+  $("catList").querySelectorAll("[data-rename-cat]").forEach(b => b.onclick = () => openCatRename(cats[+b.dataset.renameCat].name));
   $("catList").querySelectorAll("[data-dcat]").forEach(b => b.onclick = async () => {
     if (cats.length <= 1) { toast("1つは残してください"); return; }
-    const c = cats[+b.dataset.dcat]; if (!confirm(`「${c.name}」を消しますか？（記録は消えません）`)) return;
+    const c = cats[+b.dataset.dcat]; if (!confirm(`「${c.label || c.name}」を消しますか？（記録は消えません）`)) return;
     await saveCats(cats.filter((_, i) => i !== +b.dataset.dcat));
   });
   $("catList").querySelectorAll("[data-up]").forEach(b => b.onclick = async () => {
     const i = +b.dataset.up; if (i === 0) return; const a = cats.slice(); [a[i - 1], a[i]] = [a[i], a[i - 1]]; await saveCats(a);
   });
 }
+function openCatRename(key) {
+  const dialog = $("catRename"), input = $("catRenameName"), error = $("catRenameError"), save = $("catRenameSave");
+  input.value = catLabel(key); error.textContent = ""; save.disabled = false;
+  $("catRenameCancel").onclick = () => dialog.close();
+  $("catRenameForm").onsubmit = async ev => {
+    ev.preventDefault();
+    const label = input.value.trim();
+    if (!label || label.length > 40) { error.textContent = "名前を1〜40文字で入力してください。"; return; }
+    save.disabled = true; error.textContent = "";
+    try {
+      // Keep the stored key so historical records, photos and filters stay connected.
+      const updated = await db.runTransaction(async tx => {
+        const ref = appRef(), snapshot = await tx.get(ref);
+        const current = snapshot.exists && snapshot.data().cats?.length ? snapshot.data().cats : DEFAULT_CATS.slice();
+        if (!current.some(c => c.name === key)) throw new Error("この項目は削除されています。開き直してください。");
+        if (current.some(c => c.name !== key && (c.name === label || (c.label || c.name) === label))) throw new Error("同じ名前の項目があります。");
+        const next = current.map(c => c.name === key ? {...c, label} : c);
+        tx.set(ref, {cats:next}, {merge:true});
+        return next;
+      });
+      cats = updated; renderCatList(); renderCats(); renderFilters(); renderList();
+      dialog.close(); toast("名前を変更しました");
+    } catch (e) { error.textContent = e.message?.includes("項目") ? e.message : "保存できませんでした。通信を確認して、もう一度お試しください。"; }
+    finally { save.disabled = false; }
+  };
+  dialog.showModal(); input.focus();
+}
 async function saveCats(a) {
-  try { await appRef().set({ cats: a }, { merge: true }); cats = a; renderCatList(); renderCats(); renderFilters(); }
+  try { await appRef().set({ cats: a }, { merge: true }); cats = a; renderCatList(); renderCats(); renderFilters(); renderList(); }
   catch (e) { console.error(e); toast("保存できませんでした"); }
 }
 
@@ -1309,7 +1347,7 @@ function setupList() {
 function renderFilters() {
   if (!$("filterPills")) return;
   renderWhoFilter();
-  const all = [{ key: "", label: "すべて", ic: "book" }, { key: "__who", label: "誰と", ic: "users" }, ...cats.map(c => ({ key: c.name, label: c.name, ic: c.icon }))];
+  const all = [{ key: "", label: "すべて", ic: "book" }, { key: "__who", label: "誰と", ic: "users" }, ...cats.map(c => ({ key: c.name, label: c.label || c.name, ic: c.icon }))];
   $("filterPills").innerHTML = all.map((f, i) => {
     const on = f.key === "__who" ? !!filterWho : (f.key === filterCat && !(f.key === "" && filterWho));
     return `<button class="pill ${catColor(i)} ${on ? "on" : ""}" data-f="${esc(f.key)}">${icon(f.ic)}${esc(f.label)}${f.key === "__who" && filterWho ? "：" + esc(filterWho) : ""}</button>`;
@@ -1340,14 +1378,14 @@ function card(e) {
   const p = parts(e.date), t = todayStr();
   const cls = e.date === t ? "today" : (isPlan(e) ? "" : "past");
   const c = catOf(e.cat);
-  const ttl = e.title || e.place || e.cat || "記録";
+  const ttl = e.title || e.place || catLabel(e.cat) || "記録";
   const meta = [e.time ? `🕐 ${esc(e.time)}` : "", e.place ? `<a href="${mapUrl(e.place)}" target="_blank" rel="noopener" data-stop>📍 ${esc(e.place)}</a>` : ""].filter(Boolean).join("　");
   return `<div class="card"><div class="ev ${cls}" data-open="${e.id}">
     <div class="date"><div class="m">${e.date === t ? "今日" : p.m + "月"}</div><div class="d">${p.d}</div><div class="w">${p.w}</div></div>
     <div class="body">
       <div class="ttl">${icon(c.icon)}<span>${esc(ttl)}</span>${e.fav ? `<span class="fav-mark">♥</span>` : ""}</div>
       ${meta ? `<div class="meta">${meta}</div>` : ""}
-      <div class="tags"><span class="tag cat">${esc(e.cat || "")}</span>${(e.who || []).map(n => `<span class="tag">${esc(n)}</span>`).join("")}</div>
+      <div class="tags"><span class="tag cat">${esc(catLabel(e.cat))}</span>${(e.who || []).map(n => `<span class="tag">${esc(n)}</span>`).join("")}</div>
       ${(e.thumbs || []).length ? `<div class="thumbs">${e.thumbs.slice(0, 4).map(s => `<img src="${s}" alt="">`).join("")}</div>` : ""}
       ${sendRows(e)}
     </div></div></div>`;
@@ -1356,7 +1394,7 @@ function emptyBox(ic, t, s) { return `<div class="card empty"><div class="ic">${
 function memoryCover(e) {
   const p = parts(e.date), category = catOf(e.cat);
   const detail = e.memo || e.place || ((e.who || []).length ? e.who.join("・") + "と" : "この日の記録");
-  return `<div class="img memory-cover ${catColor(catIndex(e.cat))}"><div class="cover-top"><span>${esc(e.cat || "記録")}</span>${icon(category.icon)}</div><div class="cover-date">${p.m}<span style="font-size:16px">月</span> ${p.d}<span style="font-size:16px">日</span></div><div class="cover-note">${esc(detail)}</div></div>`;
+  return `<div class="img memory-cover ${catColor(catIndex(e.cat))}"><div class="cover-top"><span>${esc(catLabel(e.cat) || "記録")}</span>${icon(category.icon)}</div><div class="cover-date">${p.m}<span style="font-size:16px">月</span> ${p.d}<span style="font-size:16px">日</span></div><div class="cover-note">${esc(detail)}</div></div>`;
 }
 function renderList() {
   if (!$("listBox") || !calMonth) return;
@@ -1384,7 +1422,7 @@ function renderList() {
     html = items.length ? `<div class="album">${items.map(e => {
       const p = parts(e.date);
       return `<div class="m" data-open="${e.id}">${(e.thumbs || [])[0] ? `<div class="img"><img src="${e.thumbs[0]}" alt=""></div>` : memoryCover(e)}
-      <div class="t"><b>${esc(e.title || e.place || e.cat)}${e.fav ? ' <span class="fav-mark">♥</span>' : ""}</b><small>${p.y}.${p.m}.${p.d}　${esc(e.cat || "")}</small>${e.place ? `<div><a class="memory-map" href="${mapUrl(e.place)}" target="_blank" rel="noopener" data-stop>📍 地図で見る</a></div>` : ""}</div></div>`;
+      <div class="t"><b>${esc(e.title || e.place || catLabel(e.cat))}${e.fav ? ' <span class="fav-mark">♥</span>' : ""}</b><small>${p.y}.${p.m}.${p.d}　${esc(catLabel(e.cat))}</small>${e.place ? `<div><a class="memory-map" href="${mapUrl(e.place)}" target="_blank" rel="noopener" data-stop>📍 地図で見る</a></div>` : ""}</div></div>`;
     }).join("")}</div>` : emptyBox("image", "思い出はまだありません。", "行ったところや、あったことを残そう");
   } else if (view === "fav") {
     title = "また行きたい"; items = list.filter(e => e.fav).sort((a, b) => a.date < b.date ? 1 : -1);
@@ -1423,7 +1461,7 @@ async function openDetail(id) {
   const c = catOf(e.cat);
   const plan = isPlan(e);
   $("detailBody").innerHTML = `
-    <div class="form-head"><div class="ic ${catColor(catIndex(e.cat))}">${icon(c.icon)}</div><div><div class="eyebrow" style="margin:0">${plan ? "予定" : "思い出"}・${esc(e.cat || "")}</div><h2 style="margin:0">${esc(e.title || e.place || e.cat)}${e.fav ? ' <span class="fav-mark">♥</span>' : ""}</h2></div></div>
+    <div class="form-head"><div class="ic ${catColor(catIndex(e.cat))}">${icon(c.icon)}</div><div><div class="eyebrow" style="margin:0">${plan ? "予定" : "思い出"}・${esc(catLabel(e.cat))}</div><h2 style="margin:0">${esc(e.title || e.place || catLabel(e.cat))}${e.fav ? ' <span class="fav-mark">♥</span>' : ""}</h2></div></div>
     <div class="detail-photos" id="dPhotos">${(e.thumbs || []).map(s => `<img src="${s}" alt="">`).join("")}</div>
     <div class="ev-mini" style="margin-top:8px">📅 ${fmtDate(e.date)}${e.time ? " " + esc(e.time) : ""}
       ${e.place ? `<br>📍 <a href="${mapUrl(e.place)}" target="_blank" rel="noopener">${esc(e.place)}</a>` : ""}${(e.who || []).length ? `<br>👥 ${e.who.map(esc).join("・")}` : ""}
@@ -1466,7 +1504,7 @@ function openSend(id, ev) {
   // 「誰と？」に入れたLINEの人を最初から選んでおく
   // Notification recipients are chosen explicitly; names alone never select another person.
   const meta = [e.time ? `🕐 ${esc(e.time)}` : "", e.place ? `📍 ${esc(e.place)}` : ""].filter(Boolean).join("　");
-  $("sEv").innerHTML = `<b>${esc(fmtDate(e.date))}　${esc(e.title || e.place || e.cat)}</b>${meta ? `<br>${meta}` : ""}`;
+  $("sEv").innerHTML = `<b>${esc(fmtDate(e.date))}　${esc(e.title || e.place || catLabel(e.cat))}</b>${meta ? `<br>${meta}` : ""}`;
   const now = new Date(), t = todayStr(), prev = addDays(e.date, -1);
   const opts = [];
   if (prev >= t) { opts.push(["前の日の朝 9:00", prev, "09:00"]); opts.push(["前の日の夜 20:00", prev, "20:00"]); }

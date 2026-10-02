@@ -146,3 +146,26 @@ test('read failure offers retry, preserves previously loaded records and recover
  box.querySelector('[data-retry-records]').click();a.db.recordsCallback(snapshot);assert.match(box.textContent,/大切な予定/);assert.doesNotMatch(box.textContent,/読み込めません/);
  }finally{a.close();}
 });
+
+test('category rename preserves records, photos and selected filter in personal and legacy workspaces',async()=>{
+ for(const legacy of [false,true]){
+ const a=app({legacy});try{
+ a.w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};a.w.HTMLDialogElement.prototype.close=function(){this.open=false;};
+ await a.w.h.startOwner();
+ const path=legacy?'events/old':'personalEvents/old';
+ const event={id:'old',cat:'遊び',date:'2020-01-01',kind:'memory',title:'大切な写真',thumbs:['photo'],reminders:[{status:'pending'}]};
+ a.data.set(path,event);a.w.h.setEvents([event]);
+ a.d.getElementById('catEditBtn2').click();a.d.querySelector('[data-rename-cat="0"]').click();
+ a.d.getElementById('catRenameName').value='ぽむ🐶';
+ await a.d.getElementById('catRenameForm').onsubmit({preventDefault(){}});
+ assert.equal(a.d.getElementById('catRename').open,false);
+ assert.deepEqual(a.data.get(path),event);
+ assert.equal(a.calls.filter(c=>c[0]==='update'&&c[1]===path).length,0);
+ assert(a.d.querySelector('#catPills [data-cat="遊び"]').textContent.includes('ぽむ🐶'));
+ const filter=a.d.querySelector('[data-f="遊び"]');assert(filter.textContent.includes('ぽむ🐶'));filter.click();
+ a.d.querySelector('[data-view="mem"]').click();assert(a.d.getElementById('listBox').textContent.includes('大切な写真'));assert(a.d.getElementById('listBox').textContent.includes('ぽむ🐶'));
+ a.d.getElementById('catEditBtn2').click();a.d.querySelector('[data-rename-cat="0"]').click();assert.equal(a.d.getElementById('catRenameName').value,'ぽむ🐶');
+ a.d.getElementById('catRenameName').value='食事';await a.d.getElementById('catRenameForm').onsubmit({preventDefault(){}});assert(a.d.getElementById('catRenameError').textContent.includes('同じ名前'));assert(a.d.getElementById('catRename').open);
+ }finally{a.close();}
+ }
+});
