@@ -99,6 +99,12 @@ test('legacy owner records go to the legacy collection',async()=>{
   await handleEvent(db,{},msg({type:'location',address:'上田城跡公園',latitude:36.4,longitude:138.2}),NOW);
   const [e]=Object.values(db.data.events);assert.equal(e.place,'上田城跡公園');assert.equal(e.ownerUid,undefined);
 });
+test('LINE addresses drop the country and postal code for the place name',async()=>{
+  const db=memoryDb(linked());
+  await handleEvent(db,{},msg({type:'location',address:'日本、〒386-0013 長野県上田市中央東１１−１５',latitude:36.4,longitude:138.2}),NOW);
+  const [e]=Object.values(db.data.personalEvents);
+  assert.equal(e.place,'長野県上田市中央東１１−１５');assert.match(e.memo,/〒386-0013/);
+});
 test('strangers: plain text is ignored, contact gets an answer',async()=>{
   const db=memoryDb();
   assert.deepEqual(await handleEvent(db,{},msg({type:'text',text:'こんにちは'}),NOW),[]);

@@ -300,6 +300,15 @@
   .feat p { margin: 2px 0 0; font-size: 13.5px; color: #5b5456; }
 
   /* シート */
+  .insta-btn { margin-top: 18px; }
+  .insta-btn svg { color: var(--rose); }
+  .insta-formats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .insta-formats .pill { justify-content: center; flex-direction: column; gap: 2px; padding: 10px; }
+  .insta-formats small { font-size: 11px; opacity: .75; font-weight: 500; }
+  .insta-preview { margin: 14px auto 6px; display: flex; justify-content: center; }
+  .insta-preview img { max-width: 100%; max-height: 46vh; border-radius: 12px; box-shadow: 0 6px 18px rgba(31,45,74,.18); background: var(--card); }
+  .insta-preview img:not([src]) { width: 60%; aspect-ratio: 1; }
+  #instaSheet .btn + .btn, #instaSheet .btn + a.btn, #instaSheet a.btn + .btn { margin-top: 8px; }
   .sheet-bg { position: fixed; inset: 0; background: rgba(31,45,74,.45); z-index: 30; display: flex; align-items: flex-end; justify-content: center; }
   .sheet { background: var(--bg); width: 100%; max-width: 560px; max-height: 92vh; overflow-y: auto; border-radius: 18px 18px 0 0; padding: 22px 16px calc(22px + env(safe-area-inset-bottom)); }
   .sheet h2 { margin-top: 0; }
@@ -434,12 +443,14 @@
       <input type="text" id="fTitle" placeholder="例：ランチ、映画、髪を切る">
       <label class="lbl">メモ<small>なくてもOK・LINEにも載ります</small></label>
       <textarea id="fMemo" placeholder="例：駐車場は裏側／パスタがおいしかった"></textarea>
-      <label class="lbl">Instagramなどのリンク<small>なくてもOK</small></label>
-      <input type="url" id="fLink" placeholder="https://">
-
       <label class="lbl">写真<small id="phCount">0/4枚</small></label>
       <div class="photos" id="fPhotos"></div>
       <input type="file" id="fPhotoInput" accept="image/*" multiple class="hidden">
+
+      <button type="button" class="btn sub insta-btn" id="fInsta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r=".6" fill="currentColor"/></svg>インスタに投稿する</button>
+      <p class="note">写真・場所・日付を入れた画像を作って、iPhoneの共有からInstagram（フィード・ストーリーズ）に送れます。</p>
+      <label class="lbl">投稿したインスタのリンク<small>なくてもOK・あとからここで開けます</small></label>
+      <input type="url" id="fLink" placeholder="https://">
 
       <div class="heart-toggle" id="fFav"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.5-1.4 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.1 3 5.5l7 7Z"/></svg>また行きたい</div>
 
@@ -714,6 +725,18 @@
 <div id="detailSheet" class="sheet-bg hidden"><div class="sheet" id="detailBody"></div></div>
 
 <!-- 項目の編集 -->
+<div id="instaSheet" class="sheet-bg hidden"><div class="sheet" role="dialog" aria-labelledby="instaTitle">
+  <h2 id="instaTitle" style="margin-top:0">インスタに投稿</h2>
+  <div class="insta-formats" role="group" aria-label="画像の形">
+    <button type="button" class="pill on" aria-pressed="true" data-insta="feed">フィード<small>正方形</small></button>
+    <button type="button" class="pill" aria-pressed="false" data-insta="story">ストーリーズ<small>縦長</small></button>
+  </div>
+  <div class="insta-preview"><img id="instaImg" alt="投稿用の画像のプレビュー"></div>
+  <p class="note center" id="instaNote" role="status"></p>
+  <button type="button" class="btn" id="instaShare" disabled>共有して Instagram を選ぶ</button>
+  <a class="btn sub hidden" id="instaSave" download="hibiruka.jpg">画像を保存する</a>
+  <button type="button" class="btn ghost" id="instaClose">閉じる</button>
+</div></div>
 <div id="catSheet" class="sheet-bg hidden"><div class="sheet">
   <h2>項目を編集</h2>
   <div id="catList"></div>
@@ -1069,6 +1092,11 @@ function setupForm() {
   $("catEditBtn").onclick = openCatSheet;
   $("fFav").onclick = () => { form.fav = !form.fav; $("fFav").classList.toggle("on", form.fav); };
   $("fPhotoInput").onchange = addPhotos;
+  $("fInsta").onclick = () => {
+    if (form.photoPending) { toast("写真を準備しています。少し待ってからもう一度押してください。"); return; }
+    const p = form.photos[0];
+    openInsta({ date: $("fDate").value || todayStr(), title: $("fTitle").value.trim(), place: $("fPlace").value.trim(), cat: form.cat }, Promise.resolve(p ? (p.full || p.thumb) : ""));
+  };
   $("saveBtn").onclick = saveRecord;
   $("cancelEditBtn").onclick = () => { resetForm(); goTab("list"); };
   $("fDate").oninput = () => {
@@ -1488,12 +1516,15 @@ async function openDetail(id) {
         <a class="btn sub" href="${gcalUrl(e)}" target="_blank" rel="noopener" ${e.place ? "" : 'style="grid-column:1/-1"'}>${icon("caldot")}Googleカレンダーに追加</a>
       </div>
       ${plan ? `<button class="btn line" id="dSend">${icon("send")}LINEで予定を送る</button>` : ""}
+      <button class="btn sub insta-btn" id="dInsta" style="margin-top:8px">${INSTA_ICON}インスタに投稿する</button>
       <button class="btn sub" id="dEdit">${icon("pencil")}直す</button>
       <button class="btn danger" id="dDel">${icon("trash")}消す</button>
       <button class="btn ghost" id="dClose">閉じる</button>
     </div>`;
   if (plan) $("dSend").onclick = () => { closeSheets(); openSend(id); };
   $("dEdit").onclick = () => editRecord(id);
+  const fullPhotos = ownedQuery("photos").where("eventId", "==", id).get().then(ps => { const full = []; ps.forEach(d => { const x = d.data(); full[x.i] = x.data; }); return full.filter(Boolean); });
+  $("dInsta").onclick = () => openInsta(e, fullPhotos.then(f => f[0] || (e.thumbs || [])[0] || "", () => (e.thumbs || [])[0] || ""));
   $("dDel").onclick = () => deleteRecord(id);
   $("dClose").onclick = closeSheets;
   $("detailBody").querySelectorAll("[data-cancel]").forEach(b => b.onclick = () => { const [a, c2] = b.dataset.cancel.split("|"); cancelSend(a, c2).then(closeSheets); });
@@ -1501,12 +1532,118 @@ async function openDetail(id) {
   $("detailSheet").classList.remove("hidden");
   // 大きい写真に差し替え
   try {
-    const ps = await ownedQuery("photos").where("eventId", "==", id).get();
-    const full = []; ps.forEach(d => { const x = d.data(); full[x.i] = x.data; });
-    if (full.length && $("dPhotos")) $("dPhotos").innerHTML = full.filter(Boolean).map(s => `<img src="${s}" alt="">`).join("");
+    const full = await fullPhotos;
+    if (full.length && $("dPhotos")) $("dPhotos").innerHTML = full.map(s => `<img src="${s}" alt="">`).join("");
   } catch {}
 }
-function closeSheets() { ["detailSheet", "catSheet", "sendSheet"].forEach(x => $(x).classList.add("hidden")); }
+function closeSheets() { closeInsta(); ["detailSheet", "catSheet", "sendSheet"].forEach(x => $(x).classList.add("hidden")); }
+
+/* =========================================================
+   インスタに投稿：画像を作ってiPhoneの共有画面へ
+   ========================================================= */
+const INSTA_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r=".6" fill="currentColor"/></svg>';
+const INSTA_SIZE = { feed: [1080, 1080], story: [1080, 1920] };
+let insta = null;
+// LINEの位置情報は「日本、〒386-0013 長野県…」となるので、見せるときは短くする
+function shortPlace(s) { return String(s || "").replace(/^日本[、,]\s*/, "").replace(/^〒?\s*\d{3}-?\d{4}\s*/, "").trim(); }
+function openInsta(rec, photo) {
+  insta = { rec, photo, format: "feed", url: "" };
+  $("instaSheet").classList.remove("hidden");
+  $("instaSheet").onclick = ev => { if (ev.target.id === "instaSheet") closeInsta(); };
+  $("instaClose").onclick = closeInsta;
+  document.querySelectorAll("[data-insta]").forEach(b => b.onclick = () => { if (insta && insta.format !== b.dataset.insta) { insta.format = b.dataset.insta; renderInsta(); } });
+  // 共有は押したその場で呼ぶ（iPhoneは時間がたつと共有画面を出さないため、画像は先に作っておく）
+  $("instaShare").onclick = async () => {
+    const cur = insta; if (!cur || !cur.file) return;
+    try { await navigator.share({ files: [cur.file] }); }
+    catch (err) { if (err && err.name === "AbortError") return; $("instaSave").classList.remove("hidden"); $("instaNote").textContent = "共有できませんでした。「画像を保存する」で写真に保存して、Instagramから選んでください。"; }
+  };
+  renderInsta();
+}
+function closeInsta() {
+  if (insta && insta.url) URL.revokeObjectURL(insta.url);
+  insta = null;
+  if ($("instaSheet")) { $("instaSheet").classList.add("hidden"); $("instaImg").removeAttribute("src"); }
+}
+async function renderInsta() {
+  const cur = insta, format = cur.format;
+  document.querySelectorAll("[data-insta]").forEach(b => { const on = b.dataset.insta === format; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); });
+  $("instaShare").disabled = true; $("instaSave").classList.add("hidden");
+  $("instaNote").textContent = "画像を作っています…";
+  try {
+    const blob = await drawInsta(cur.rec, await cur.photo, format);
+    if (insta !== cur || cur.format !== format) return;
+    if (cur.url) URL.revokeObjectURL(cur.url);
+    cur.url = URL.createObjectURL(blob);
+    cur.file = new File([blob], `hibiruka-${cur.rec.date || todayStr()}-${format}.jpg`, { type: "image/jpeg" });
+    $("instaImg").src = cur.url; $("instaSave").href = cur.url; $("instaSave").download = cur.file.name;
+    const canShare = !!(navigator.canShare && navigator.share && navigator.canShare({ files: [cur.file] }));
+    $("instaShare").disabled = !canShare; $("instaShare").classList.toggle("hidden", !canShare);
+    $("instaSave").classList.toggle("hidden", canShare);
+    $("instaNote").textContent = canShare ? "下のボタンを押して、出てきた一覧から「Instagram」を選んでください。" : "この画面では共有が使えません。画像を保存して、Instagramから選んでください。";
+  } catch (err) {
+    console.warn(err);
+    if (insta === cur) $("instaNote").textContent = "画像を作れませんでした。もう一度お試しください。";
+  }
+}
+function loadImage(src) {
+  return new Promise((res, rej) => { const img = new Image(); img.onload = () => res(img); img.onerror = rej; img.src = src; });
+}
+function fitLines(ctx, text, maxW, maxLines) {
+  const lines = []; let line = "";
+  for (const ch of [...text]) {
+    if (ctx.measureText(line + ch).width > maxW && line) { lines.push(line); line = ""; if (lines.length === maxLines) break; }
+    line += ch;
+  }
+  if (lines.length < maxLines && line) lines.push(line);
+  else if (lines.length === maxLines && [...lines.join("")].length < [...text].length) {
+    let last = lines[maxLines - 1];
+    while (last && ctx.measureText(last + "…").width > maxW) last = last.slice(0, -1);
+    lines[maxLines - 1] = last + "…";
+  }
+  return lines;
+}
+async function drawInsta(rec, photoSrc, format) {
+  const [W, H] = INSTA_SIZE[format], story = format === "story";
+  const FONT = '"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif';
+  try { await Promise.all([document.fonts.load(`700 60px "Noto Sans JP"`), document.fonts.load(`500 36px "Noto Sans JP"`)]); } catch {}
+  const c = document.createElement("canvas"); c.width = W; c.height = H;
+  const ctx = c.getContext("2d");
+  // ストーリーズは上下にInstagramのボタンが重なるので、余白を広くとる
+  const side = 56, top = story ? 230 : 56, bottom = story ? 300 : 56, infoH = story ? 400 : 262;
+  const px = side, py = top, pw = W - side * 2, ph = H - top - bottom - infoH;
+  ctx.fillStyle = "#f8f5f1"; ctx.fillRect(0, 0, W, H);
+  ctx.save();
+  ctx.beginPath(); ctx.roundRect ? ctx.roundRect(px, py, pw, ph, 30) : ctx.rect(px, py, pw, ph); ctx.clip();
+  const img = photoSrc ? await loadImage(photoSrc).catch(() => null) : null;
+  const p = parts(rec.date || todayStr());
+  if (img) {
+    const r = Math.max(pw / img.width, ph / img.height), w = img.width * r, h = img.height * r;
+    ctx.drawImage(img, px + (pw - w) / 2, py + (ph - h) / 2, w, h);
+  } else {
+    ctx.fillStyle = "#1f2d4a"; ctx.fillRect(px, py, pw, ph);
+    ctx.fillStyle = "#f4eee2"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.font = `700 ${story ? 200 : 170}px ${FONT}`; ctx.fillText(`${p.m}.${p.d}`, W / 2, py + ph / 2 - 20);
+    ctx.font = `500 44px ${FONT}`; ctx.fillStyle = "#c9cfdc"; ctx.fillText(p.y + " " + p.w + "曜日", W / 2, py + ph / 2 + (story ? 130 : 110));
+  }
+  ctx.restore();
+  // 文字
+  const title = rec.title || shortPlace(rec.place) || catLabel(rec.cat) || "今日の思い出";
+  const place = shortPlace(rec.place);
+  let y = py + ph + (story ? 70 : 58);
+  ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = "#857d7f"; ctx.font = `500 ${story ? 38 : 32}px ${FONT}`;
+  ctx.fillText(`${p.y}.${p.m}.${p.d}（${p.w}）`, px, y);
+  ctx.fillStyle = "#1f2d4a"; ctx.font = `700 ${story ? 64 : 54}px ${FONT}`;
+  for (const line of fitLines(ctx, title, pw, story ? 2 : 1)) { y += story ? 84 : 72; ctx.fillText(line, px, y); }
+  if (place && place !== title) {
+    ctx.fillStyle = "#a9536a"; ctx.font = `500 ${story ? 38 : 32}px ${FONT}`;
+    y += story ? 66 : 54; ctx.fillText(fitLines(ctx, "📍 " + place, pw, 1)[0], px, y);
+  }
+  ctx.fillStyle = "#34425f"; ctx.font = `700 ${story ? 32 : 28}px ${FONT}`; ctx.textAlign = "right";
+  ctx.fillText("ヒビルカ", W - side, H - bottom - (story ? 10 : 6));
+  return await new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error("toBlob failed")), "image/jpeg", 0.9));
+}
 
 /* =========================================================
    LINEで予定を送る
