@@ -169,3 +169,14 @@ test('category rename preserves records, photos and selected filter in personal 
  }finally{a.close();}
  }
 });
+
+test('LINE record linking creates a short-lived own code and opens a prefilled LINE chat',async()=>{
+ const a=app();try{await a.w.h.startOwner();const d=a.d;assert(!d.getElementById('lineRecordBtn').classList.contains('hidden'));
+ await d.getElementById('lineRecordBtn').onclick();
+ const [path,code]=[...a.data].find(([k])=>k.startsWith('lineLinkCodes/'));
+ assert.match(path,/^lineLinkCodes\/[A-HJ-NP-Z2-9]{10}$/);assert.equal(code.ownerUid,'A');assert.equal(code.scope,'personal');
+ const left=code.expiresAt.getTime()-Date.now();assert(left>8*60000&&left<=9*60000);
+ const href=d.getElementById('lineRecordOpen').href;assert(href.startsWith('https://line.me/R/oaMessage/%40626hnkgo/?'));assert(decodeURIComponent(href).endsWith('ヒビルカ連携 '+path.split('/')[1]));
+ assert(!d.getElementById('lineRecordCodeBox').classList.contains('hidden'));}finally{a.close();}
+ const b=app({legacy:true});try{await b.w.h.startOwner();await b.d.getElementById('lineRecordBtn').onclick();assert.equal([...b.data].find(([k])=>k.startsWith('lineLinkCodes/'))[1].scope,'legacy');}finally{b.close();}
+});

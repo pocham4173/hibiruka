@@ -35,11 +35,16 @@ export function firestore(accessToken, fetcher=fetch, limit=4){
   }
   function ref(c,id){if(!/^[A-Za-z]+$/.test(c)||!id||id.includes('/'))throw Error('Invalid document path');return {id,parent:{id:c},path:c+'/'+id,get:async()=>snapshot(await call('/'+c+'/'+encodeURIComponent(id)),c,id)};}
   function snapshot(doc,c,id){return {id:id||doc.name.split('/').pop(),exists:!!doc,ref:ref(c,id||doc.name.split('/').pop()),updateTime:doc?.updateTime,data:()=>data(doc?.fields)};}
-  function collection(c,filter=null,n=limit){return {
-    doc:id=>ref(c,id),limit:size=>collection(c,filter,Math.min(size,limit)),
-    where:(field,op,value)=>{if(op!=='<=')throw Error('Unsupported query');return collection(c,{fieldFilter:{field:{fieldPath:field},op:'LESS_THAN_OR_EQUAL',value:encode(value)}},n);},
-    get:async()=>({docs:(await call(':runQuery',{structuredQuery:{from:[{collectionId:c}],limit:n,...(filter?{where:filter}:{})}})||[]).filter(x=>x.document).map(x=>snapshot(x.document,c))})
+  const ops={'<=':'LESS_THAN_OR_EQUAL','==':'EQUAL'};
+  function collection(c,filters=[],n=limit){return {
+    doc:id=>ref(c,id),limit:size=>collection(c,filters,Math.min(size,limit)),
+    where:(field,op,value)=>{if(!ops[op])throw Error('Unsupported query');return collection(c,[...filters,{fieldFilter:{field:{fieldPath:field},op:ops[op],value:encode(value)}}],n);},
+    get:async()=>{
+      const where=filters.length>1?{compositeFilter:{op:'AND',filters}}:filters[0];
+      return {docs:(await call(':runQuery',{structuredQuery:{from:[{collectionId:c}],limit:n,...(where?{where}:{})}})||[]).filter(x=>x.document).map(x=>snapshot(x.document,c))};
+    }
   };}
+  const write=list=>call(':commit',{writes:list});
   return {
     collection,
     getAll:async(...refs)=>{
@@ -58,6 +63,12 @@ export function firestore(accessToken, fetcher=fetch, limit=4){
         try{await call(':commit',{writes});return result;}catch(e){if((![409,412].includes(e.status)&&!['ABORTED','FAILED_PRECONDITION'].includes(e.code))||attempt===2)throw e;}
       }
     },
-    heartbeat:async value=>call(':commit',{writes:[{update:{name:root+'/schedulerStatus/cloudflare',fields:fields(value)}}]})
+    heartbeat:async value=>call(':commit',{writes:[{update:{name:root+'/schedulerStatus/cloudflare',fields:fields(value)}}]}),
+    // Webhook helpers. create() fails when the document already exists (LINE redelivery).
+    create:async(r,value)=>write([{update:{name:root+'/'+r.path,fields:fields(value)},currentDocument:{exists:false}}]),
+    set:async(r,value)=>write([{update:{name:root+'/'+r.path,fields:fields(value)}}]),
+    patch:async(r,value)=>write([{update:{name:root+'/'+r.path,fields:fields(value)},updateMask:{fieldPaths:Object.keys(value)},currentDocument:{exists:true}}]),
+    remove:async r=>write([{delete:root+'/'+r.path}]),
+    commit:async ops=>write(ops.map(o=>o.remove?{delete:root+'/'+o.ref.path}:{update:{name:root+'/'+o.ref.path,fields:fields(o.value)}}))
   };
 }

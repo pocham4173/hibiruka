@@ -1,1 +1,1 @@
-{"name":"hibiruka-line-scheduler","private":true,"type":"module","scripts":{"build":"wrangler deploy --dry-run --outdir /tmp/hibiruka-worker-build","test":"node --test ../tests/line.test.cjs ../tests/worker.test.mjs"},"devDependencies":{"wrangler":"4.143.0"}}
+{"name":"hibiruka-line-scheduler","private":true,"type":"module","scripts":{"build":"wrangler deploy --dry-run --outdir /tmp/hibiruka-worker-build","test":"node --test ../tests/line.test.cjs ../tests/worker.test.mjs ../tests/webhook.test.mjs"},"devDependencies":{"wrangler":"4.143.0"}}

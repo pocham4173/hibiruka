@@ -24,7 +24,7 @@ jobs:
         with:
           node-version: 22
       - run: npm ci --prefix line-worker --no-audit --no-fund
-      - run: node --test tests/line.test.cjs tests/worker.test.mjs
+      - run: node --test tests/line.test.cjs tests/worker.test.mjs tests/webhook.test.mjs
       - run: npm run build --prefix line-worker
       - if: github.event_name == 'workflow_dispatch' || github.event.head_commit.message == 'Verify Hibiruka Cloudflare connection'
         run: npm install --prefix scripts firebase-admin@12 --omit=dev --no-audit --no-fund
@@ -35,4 +35,5 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: c012ff5fddf59148a0f718fc6736d080
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET }}
           ENABLE_SENDING: ${{ inputs.enable_sending }}

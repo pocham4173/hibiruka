@@ -1,5 +1,6 @@
 import engine from '../scripts/line-engine.cjs';
 import {firestore} from './firestore.mjs';
+import {handleWebhook} from './webhook.mjs';
 let cached;
 const base64url=bytes=>Buffer.from(bytes).toString('base64url');
 export async function googleToken(secret,fetcher=fetch){
@@ -33,6 +34,15 @@ export async function tick(env,controller){
 }
 export default {
   scheduled(controller,env,ctx){ctx.waitUntil(tick(env,controller));},
-  // There is deliberately no public HTTP send endpoint.
-  fetch(){return new Response('Not found',{status:404});}
+  // There is deliberately no public HTTP send endpoint. Only LINE-signed webhooks are accepted.
+  async fetch(request,env){
+    const url=new URL(request.url);
+    if(request.method!=='POST'||url.pathname!=='/line/webhook')return new Response('Not found',{status:404});
+    try{
+      return await handleWebhook(request,env,{db:async()=>firestore(await googleToken(env.FIREBASE_SERVICE_ACCOUNT),fetch,20)});
+    }catch{
+      console.error('Hibiruka webhook failed; check credentials and service status.');
+      return new Response('Temporarily unavailable',{status:503});
+    }
+  }
 };
