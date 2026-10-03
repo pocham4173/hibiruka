@@ -22,8 +22,8 @@
 1. GitHubのSecretsに `LINE_CHANNEL_SECRET`（LINE Developers → Messaging APIチャネル → チャネル基本設定 → チャネルシークレット）を追加する。
 2. マージ後、`LINE連携番号のルール反映` がルールをエミュレーターで検査してから公開する。
 3. `ヒビルカ送信の修正反映` が Worker を配置する（`workers_dev: true` で公開URLができる）。定期送信は従来どおり確認モード→再開の手順で戻る。
-4. LINE Developers → Messaging API設定 → Webhook URL に `https://hibiruka-line.<サブドメイン>.workers.dev/line/webhook` を設定し、「Webhookの利用」をオン。「検証」で成功を確認する。
-5. LINE Official Account Manager → 応答設定で「応答メッセージ」をオフ（自動返信の二重防止）。
+4. 同じワークフローの最後で `line-worker/set-webhook.cjs` が Webhook URL（`https://hibiruka-line.<サブドメイン>.workers.dev/line/webhook`）をLINEに自動設定し、LINEの検証を実行してログに結果を出す（失敗しても送信には影響しない）。
+5. LINE Official Account Manager → 応答設定で「Webhook」をオン、「応答メッセージ」をオフ（自動返信の二重防止）。この2つはAPIで変えられないため手動。
 
 シークレットが無い状態で配置した場合、受け取り係は503を返すだけで、定期送信には影響しない。
 

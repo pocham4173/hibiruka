@@ -47,3 +47,7 @@ jobs:
         run: node scripts/verify-scheduler.cjs
         env:
           EXPECT_ENABLED: 'true'
+      - name: Point LINE Webhook URL at the Worker
+        if: always()
+        continue-on-error: true
+        run: node line-worker/set-webhook.cjs
