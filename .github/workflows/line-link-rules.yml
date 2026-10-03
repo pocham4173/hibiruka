@@ -1,0 +1,40 @@
+name: LINE連携番号のルール反映
+# Reuse one emulator database instance per verification context.
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/line-link-rules.yml]
+permissions:
+  contents: read
+concurrency:
+  group: hibiruka-rules-deploy
+  cancel-in-progress: false
+jobs:
+  rules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm install --prefix scripts firebase-admin@12 --omit=dev --no-audit --no-fund
+      - run: node scripts/personal-rules.cjs prepare
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - run: npm install --prefix security --no-audit --no-fund
+      - name: Test LINE link codes, atomic writes and existing access restrictions
+        run: ./node_modules/.bin/firebase emulators:exec --only firestore --project demo-hibiruka-isolation 'node --test personal.test.cjs'
+        working-directory: security
+      - name: Publish tested rules without changing legacy rules
+        run: node scripts/personal-rules.cjs deploy
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Verify production with temporary accounts and remove test data
+        run: NODE_PATH=security/node_modules node scripts/personal-smoke.cjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}

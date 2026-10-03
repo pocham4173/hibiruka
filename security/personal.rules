@@ -41,4 +41,22 @@
         && request.resource.data.diff(resource.data).affectedKeys()
           .hasOnly(['status','lineUserId','lineName','joinedAt','acceptedBy']);
     }
+    // LINE連携（2026-10）: アプリで作る使い捨て番号と、連携状態の確認・解除。
+    // lineAccounts（LINEの人→持ち主）はサーバー専用で、利用者は読み書きできない。
+    match /lineLinkCodes/{code} {
+      allow get, delete: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+      allow create: if request.auth != null && code.matches('^[A-HJ-NP-Z2-9]{10}$')
+        && request.resource.data.keys().hasOnly(['ownerUid','scope','expiresAt','createdAt'])
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.expiresAt is timestamp
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt < request.time + duration.value(11, 'm')
+        && ((request.resource.data.scope == 'personal'
+              && exists(/databases/$(database)/documents/personalConfig/$(request.auth.uid)))
+          || (request.resource.data.scope == 'legacy' && isOwner()));
+    }
+    match /lineLinks/{uid} {
+      allow get, delete: if request.auth != null && request.auth.uid == uid;
+    }
     // HIBIRUKA_PERSONAL_V1_END

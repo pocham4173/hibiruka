@@ -66,3 +66,30 @@ test('legacy owner can atomically create an event and its four photos with exist
  await assertSucceeds(b.commit());
  await assertFails(getDoc(doc(B,'photos/atomic-legacy_0')));
 });
+
+test('LINE link codes: own one-time code only; status readable and removable by the owner; server map hidden',async()=>{
+ const {Timestamp}=require('firebase/firestore');
+ const soon=()=>Timestamp.fromMillis(Date.now()+9*60000);
+ await assertSucceeds(setDoc(doc(A,'personalConfig/person-A'),{ownerName:'A'}));
+ await assertSucceeds(setDoc(doc(A,'lineLinkCodes/ABCDEFGH23'),{ownerUid:'person-A',scope:'personal',expiresAt:soon(),createdAt:serverTimestamp()}));
+ await assertSucceeds(getDoc(doc(A,'lineLinkCodes/ABCDEFGH23')));
+ await assertFails(getDoc(doc(B,'lineLinkCodes/ABCDEFGH23')));
+ await assertFails(setDoc(doc(B,'lineLinkCodes/BBCDEFGH23'),{ownerUid:'person-A',scope:'personal',expiresAt:soon(),createdAt:serverTimestamp()}));
+ await assertFails(setDoc(doc(A,'lineLinkCodes/CBCDEFGH23'),{ownerUid:'person-A',scope:'personal',expiresAt:Timestamp.fromMillis(Date.now()+3600000),createdAt:serverTimestamp()}));
+ await assertFails(setDoc(doc(A,'lineLinkCodes/short'),{ownerUid:'person-A',scope:'personal',expiresAt:soon(),createdAt:serverTimestamp()}));
+ await assertFails(setDoc(doc(A,'lineLinkCodes/DBCDEFGH23'),{ownerUid:'person-A',scope:'legacy',expiresAt:soon(),createdAt:serverTimestamp()}));
+ const C=env.authenticatedContext('person-no-profile').firestore();
+ await assertFails(setDoc(doc(C,'lineLinkCodes/EBCDEFGH23'),{ownerUid:'person-no-profile',scope:'personal',expiresAt:soon(),createdAt:serverTimestamp()}));
+ await assertFails(updateDoc(doc(A,'lineLinkCodes/ABCDEFGH23'),{ownerUid:'person-A'}));
+ await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();await setDoc(doc(d,'lineLinks/person-A'),{lineUserId:'U'+'a'.repeat(32)});await setDoc(doc(d,'lineAccounts/U'+'a'.repeat(32)),{ownerUid:'person-A',scope:'personal'});});
+ await assertSucceeds(getDoc(doc(A,'lineLinks/person-A')));await assertFails(getDoc(doc(B,'lineLinks/person-A')));
+ await assertFails(setDoc(doc(A,'lineLinks/person-A'),{lineUserId:'U'+'c'.repeat(32)}));
+ await assertFails(getDoc(doc(A,'lineAccounts/U'+'a'.repeat(32))));await assertFails(setDoc(doc(B,'lineAccounts/U'+'b'.repeat(32)),{ownerUid:'person-A',scope:'personal'}));
+ await assertFails(deleteDoc(doc(B,'lineLinks/person-A')));await assertSucceeds(deleteDoc(doc(A,'lineLinks/person-A')));
+});
+test('LINE link codes: legacy owner may create a legacy code',async()=>{
+ const {Timestamp}=require('firebase/firestore');
+ await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();await setDoc(doc(d,'config/secret'),{pinHash:'legacy-line'});await setDoc(doc(d,'members/legacy-line'),{pinHash:'legacy-line'});});
+ const L=env.authenticatedContext('legacy-line').firestore();
+ await assertSucceeds(setDoc(doc(L,'lineLinkCodes/LBCDEFGH23'),{ownerUid:'legacy-line',scope:'legacy',expiresAt:Timestamp.fromMillis(Date.now()+9*60000),createdAt:serverTimestamp()}));
+});

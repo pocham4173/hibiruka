@@ -517,6 +517,18 @@
       <a class="btn sub hidden" id="selfAddFriend" target="_blank" rel="noopener">ヒビルカを友だち追加</a>
       <p class="note hidden" id="selfLineHelp">開いたLINEで「登録する」を押したら、この画面へ戻ってください。</p>
     </div>
+    <div class="card" id="lineRecordCard">
+      <h2>LINEから記録する</h2>
+      <p class="note">つなぐと、ヒビルカのLINEに<b>位置情報を送るだけ</b>で、その場所が今日の思い出に記録されます。「今日」と送ると、今日の予定も返事で届きます。</p>
+      <p class="note" id="lineRecordStatus" role="status">まだつながっていません。</p>
+      <button class="btn line" type="button" id="lineRecordBtn">LINEとつなぐ</button>
+      <div id="lineRecordCodeBox" class="share-box hidden">
+        <p style="margin:0 0 10px;font-size:14px">下のボタンでLINEを開いて、そのまま<b>送信</b>してください（10分以内）。</p>
+        <a class="btn line" id="lineRecordOpen" target="_blank" rel="noopener">LINEを開いて送る</a>
+        <p class="note">開かないときは、ヒビルカのLINEにこの文字を送ってください：<br><b id="lineRecordCode" style="letter-spacing:.08em"></b></p>
+      </div>
+      <button class="btn ghost hidden" type="button" id="lineRecordOff">つなぐのをやめる</button>
+    </div>
     <div class="card">
       <div class="sec-ttl"><div class="ic" style="background:var(--navy)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></div><div><h2>ヒビルカを紹介する</h2><small>通知の登録はしない、紹介だけ</small></div></div>
       <p style="font-size:14px;margin:10px 0 12px">ヒビルカの特徴と、紹介ページのリンクを送ります。<b>これを送っても、予定通知の相手にはなりません。</b></p>
@@ -978,6 +990,7 @@ function enterApp() {
   }, denied));
   watchRecords();
   unsub.push(() => { recordsEpoch++; if (recordsStop) recordsStop(); recordsStop = null; });
+  unsub.push(db.collection("lineLinks").doc(myUid).onSnapshot(s => { lineLinked = s.exists && !!s.data().lineUserId; renderLineRecord(); }, () => { lineLinked = false; renderLineRecord(); }));
   unsub.push(appRef().onSnapshot(s => {
     const d = s.exists ? s.data() : {};
     cats = (d.cats && d.cats.length) ? d.cats : DEFAULT_CATS.slice();
@@ -1109,6 +1122,7 @@ function renderWho() {
   };
 }
 const mapUrl = (q) => "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q);
+const placeUrl = (e) => Number.isFinite(e.lat) && Number.isFinite(e.lng) ? "https://www.google.com/maps/search/?api=1&query=" + e.lat + "," + e.lng : mapUrl(e.place);
 function updateMapLink() { const q = $("fPlace").value.trim(); $("fMapLink").classList.toggle("hidden", !q); if (q) $("fMapLink").href = mapUrl(q); }
 function gcalUrl(e) {
   const d = e.date.replace(/-/g, "");
@@ -1379,13 +1393,13 @@ function card(e) {
   const cls = e.date === t ? "today" : (isPlan(e) ? "" : "past");
   const c = catOf(e.cat);
   const ttl = e.title || e.place || catLabel(e.cat) || "記録";
-  const meta = [e.time ? `🕐 ${esc(e.time)}` : "", e.place ? `<a href="${mapUrl(e.place)}" target="_blank" rel="noopener" data-stop>📍 ${esc(e.place)}</a>` : ""].filter(Boolean).join("　");
+  const meta = [e.time ? `🕐 ${esc(e.time)}` : "", e.place ? `<a href="${placeUrl(e)}" target="_blank" rel="noopener" data-stop>📍 ${esc(e.place)}</a>` : ""].filter(Boolean).join("　");
   return `<div class="card"><div class="ev ${cls}" data-open="${e.id}">
     <div class="date"><div class="m">${e.date === t ? "今日" : p.m + "月"}</div><div class="d">${p.d}</div><div class="w">${p.w}</div></div>
     <div class="body">
       <div class="ttl">${icon(c.icon)}<span>${esc(ttl)}</span>${e.fav ? `<span class="fav-mark">♥</span>` : ""}</div>
       ${meta ? `<div class="meta">${meta}</div>` : ""}
-      <div class="tags"><span class="tag cat">${esc(catLabel(e.cat))}</span>${(e.who || []).map(n => `<span class="tag">${esc(n)}</span>`).join("")}</div>
+      <div class="tags"><span class="tag cat">${esc(catLabel(e.cat))}</span>${e.source === "line" ? `<span class="tag">LINEから</span>` : ""}${(e.who || []).map(n => `<span class="tag">${esc(n)}</span>`).join("")}</div>
       ${(e.thumbs || []).length ? `<div class="thumbs">${e.thumbs.slice(0, 4).map(s => `<img src="${s}" alt="">`).join("")}</div>` : ""}
       ${sendRows(e)}
     </div></div></div>`;
@@ -1464,13 +1478,13 @@ async function openDetail(id) {
     <div class="form-head"><div class="ic ${catColor(catIndex(e.cat))}">${icon(c.icon)}</div><div><div class="eyebrow" style="margin:0">${plan ? "予定" : "思い出"}・${esc(catLabel(e.cat))}</div><h2 style="margin:0">${esc(e.title || e.place || catLabel(e.cat))}${e.fav ? ' <span class="fav-mark">♥</span>' : ""}</h2></div></div>
     <div class="detail-photos" id="dPhotos">${(e.thumbs || []).map(s => `<img src="${s}" alt="">`).join("")}</div>
     <div class="ev-mini" style="margin-top:8px">📅 ${fmtDate(e.date)}${e.time ? " " + esc(e.time) : ""}
-      ${e.place ? `<br>📍 <a href="${mapUrl(e.place)}" target="_blank" rel="noopener">${esc(e.place)}</a>` : ""}${(e.who || []).length ? `<br>👥 ${e.who.map(esc).join("・")}` : ""}
+      ${e.place ? `<br>📍 <a href="${placeUrl(e)}" target="_blank" rel="noopener">${esc(e.place)}</a>` : ""}${(e.who || []).length ? `<br>👥 ${e.who.map(esc).join("・")}` : ""}
       ${e.memo ? `<br>📝 ${esc(e.memo).replace(/\n/g, "<br>")}` : ""}
       ${e.link ? `<br>🔗 <a href="${esc(e.link)}" target="_blank" rel="noopener">${esc(e.link)}</a>` : ""}</div>
     ${sendRows(e)}
     <div style="margin-top:16px">
       <div class="btnrow">
-        ${e.place ? `<a class="btn sub" href="${mapUrl(e.place)}" target="_blank" rel="noopener">${icon("map")}Googleマップ</a>` : ""}
+        ${e.place ? `<a class="btn sub" href="${placeUrl(e)}" target="_blank" rel="noopener">${icon("map")}Googleマップ</a>` : ""}
         <a class="btn sub" href="${gcalUrl(e)}" target="_blank" rel="noopener" ${e.place ? "" : 'style="grid-column:1/-1"'}>${icon("caldot")}Googleカレンダーに追加</a>
       </div>
       ${plan ? `<button class="btn line" id="dSend">${icon("send")}LINEで予定を送る</button>` : ""}
@@ -1621,6 +1635,9 @@ function setupSettings() {
   };
   $("inviteBtn").onclick = createInvite;
   $("selfLineBtn").onclick = prepareSelfLine;
+  $("lineRecordBtn").onclick = startLineRecord;
+  $("lineRecordOff").onclick = stopLineRecord;
+  renderLineRecord();
   $("selfAddFriend").href = OA_URL;
   renderSelfLine();
   $("shareLineBtn").addEventListener("click", markSent);
@@ -1657,6 +1674,39 @@ function renderSelfLine() {
   $("selfLineHelp").classList.toggle("hidden", !self || joined);
   $("selfAddFriend").classList.toggle("hidden", !joined);
   if (self) $("selfLineLink").href = inviteUrl(self.id) + "&self=1";
+}
+/* ---------- LINEから記録する（位置情報で記録） ---------- */
+let lineLinked = false, lineLinking = false;
+function renderLineRecord() {
+  if (!$("lineRecordStatus")) return;
+  $("lineRecordStatus").textContent = lineLinked ? "✓ LINEとつながっています。ヒビルカのLINEに位置情報を送ってみてください。" : "まだつながっていません。";
+  $("lineRecordBtn").classList.toggle("hidden", lineLinked);
+  $("lineRecordOff").classList.toggle("hidden", !lineLinked);
+  if (lineLinked) $("lineRecordCodeBox").classList.add("hidden");
+}
+function lineCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789", a = new Uint8Array(10);
+  crypto.getRandomValues(a);
+  return [...a].map(n => chars[n % chars.length]).join("");
+}
+async function startLineRecord() {
+  if (lineLinking) return;
+  lineLinking = true; $("lineRecordBtn").disabled = true;
+  try {
+    const code = lineCode();
+    // 10分だけ使える番号。LINEから送られてきたときに、サーバーが本人をつなぐ。
+    await db.collection("lineLinkCodes").doc(code).set({ ownerUid: myUid, scope: personalMode ? "personal" : "legacy", expiresAt: new Date(Date.now() + 9 * 60000), createdAt: TS() });
+    const textToSend = "ヒビルカ連携 " + code;
+    $("lineRecordCode").textContent = textToSend;
+    $("lineRecordOpen").href = "https://line.me/R/oaMessage/" + encodeURIComponent(CONFIG.lineOaId) + "/?" + encodeURIComponent(textToSend);
+    $("lineRecordCodeBox").classList.remove("hidden");
+  } catch (e) { console.error(e); toast("準備できませんでした。少し待ってもう一度お試しください。"); }
+  finally { lineLinking = false; $("lineRecordBtn").disabled = false; }
+}
+async function stopLineRecord() {
+  if (!confirm("LINEから記録するのをやめますか？（これまでの記録は消えません）")) return;
+  try { await db.collection("lineLinks").doc(myUid).delete(); toast("LINEとのつながりを外しました"); }
+  catch { toast("外せませんでした。もう一度お試しください。"); }
 }
 async function prepareSelfLine() {
   if (selfConnecting) return;
