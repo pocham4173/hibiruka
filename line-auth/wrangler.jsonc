@@ -1,0 +1,10 @@
+{
+  "name": "hibiruka-auth",
+  "main": "index.mjs",
+  "compatibility_date": "2026-09-29",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": {"enabled": false},
+  "vars": {"LINE_LOGIN_CHANNEL_ID": "", "FIREBASE_API_KEY": ""}
+}

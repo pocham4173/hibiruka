@@ -25,6 +25,7 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
  const firestore=()=>db;firestore.FieldValue={serverTimestamp:()=>1,arrayUnion:x=>[x],arrayRemove:()=>[],increment:x=>x};
  w.firebase={initializeApp:()=>{},auth:authFn,firestore};w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.console.error=(...args)=>errors.push(args);w.liff={init:async()=>{},isLoggedIn:()=>true,getProfile:async()=>({userId:'U'+'a'.repeat(32),displayName:'A'}),isInClient:()=>false};
  const script=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean).pop();
+ w.registerVerifiedLine=async ({invitationId,scope})=>{calls.push(['verified-registration',invitationId,scope]);const path=(scope==='personal'?'personalFriends/':'friends/')+invitationId;data.set(path,{...data.get(path),status:'joined',acceptedBy:'A',lineUserId:'U'+'a'.repeat(32)});};
  w.testNavigate=url=>calls.push(['navigate',url]);
  w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
  return{w,d,data,calls,queries,db,errors,close:()=>{w.close();assert.equal(errors.length,0,errors.map(String).join(' '));}};
@@ -43,7 +44,7 @@ test('returning email user stays signed in; linking anonymous account preserves 
  const b=app();try{await b.w.h.startOwner();b.d.getElementById('accountEmail').value='a@example.test';b.d.getElementById('accountPassword').value='long-password';await b.d.getElementById('accountForm').onsubmit({preventDefault(){}});assert(b.calls.some(c=>c[0]==='link'&&c[1]==='A'));assert(b.data.has('personalConfig/A'));}finally{b.close();}
 });
 test('personal invite acceptance preserves current account and records acceptance identity',async()=>{
- const a=app({url:'?invite=token&scope=personal',invite:true,linked:true});try{await a.w.h.startInvite();await a.d.getElementById('invAcceptBtn').onclick();const f=a.data.get('personalFriends/token');assert.equal(f.status,'joined');assert.equal(f.acceptedBy,'A');assert.equal(f.ownerUid,'sender');assert(!a.calls.some(c=>c[0]==='anonymous'));}finally{a.close();}
+ const a=app({url:'?invite=token&scope=personal',invite:true,linked:true});try{await a.w.h.startInvite();await a.d.getElementById('invAcceptBtn').onclick();const f=a.data.get('personalFriends/token');assert.equal(f.status,'joined');assert.equal(f.acceptedBy,'A');assert.equal(f.ownerUid,'sender');assert(a.calls.some(c=>c[0]==='verified-registration'));assert(!a.calls.some(c=>c[0]==='anonymous'));}finally{a.close();}
 });
 
 test('first record guidance opens the chosen form and can be dismissed without losing data',async()=>{

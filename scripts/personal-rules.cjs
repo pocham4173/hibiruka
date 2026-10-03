@@ -12,12 +12,13 @@ const {parseServiceAccount} = require('./service-account.cjs');
     if(current.source.length!==1)throw Error('Multiple rule files; stop');
     const base=current.source[0].content;
     if(!base.includes('function isOwner()') || /match\s+\/\{\w+=\*\*\}/.test(base))throw Error('Unexpected legacy rules; stop');
-    const clean=base.replace(/\s*\/\/ HIBIRUKA_PERSONAL_V1_BEGIN[\s\S]*?\/\/ HIBIRUKA_PERSONAL_V1_END\s*/, '\n');
+    let clean=base.replace(/\s*\/\/ HIBIRUKA_PERSONAL_V1_BEGIN[\s\S]*?\/\/ HIBIRUKA_PERSONAL_V1_END\s*/, '\n');
+    clean=require('./registration-rules.cjs').replaceFriendRules(clean,fs.readFileSync('security/legacy-friends.rules','utf8'));
     if(!/\}\s*\}\s*$/.test(clean))throw Error('Unexpected rule structure');
     const source=clean.replace(/\}\s*\}\s*$/,()=>fs.readFileSync('security/personal.rules','utf8')+'\n  }\n}\n');
     fs.writeFileSync('/tmp/hibiruka-combined.rules',source);
     fs.writeFileSync('/tmp/hibiruka-rules-base.json',JSON.stringify({name:current.name,sha:crypto.createHash('sha256').update(base).digest('hex')}));
-    console.log('Prepared isolated personal collections; legacy rules preserved.');
+    console.log('Prepared server-verified registration rules; record rules preserved.');
   } else if(process.argv[2]==='deploy') {
     const previous=JSON.parse(fs.readFileSync('/tmp/hibiruka-rules-base.json'));
     const current=await api.getFirestoreRuleset();
