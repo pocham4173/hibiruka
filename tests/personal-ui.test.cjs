@@ -180,3 +180,24 @@ test('LINE record linking creates a short-lived own code and opens a prefilled L
  assert(!d.getElementById('lineRecordCodeBox').classList.contains('hidden'));}finally{a.close();}
  const b=app({legacy:true});try{await b.w.h.startOwner();await b.d.getElementById('lineRecordBtn').onclick();assert.equal([...b.data].find(([k])=>k.startsWith('lineLinkCodes/'))[1].scope,'legacy');}finally{b.close();}
 });
+test('Instagram button builds feed and story images and opens the share sheet with the file',async()=>{
+ const a=app();try{await a.w.h.startOwner();const {w,d}=a;
+  const ctx=new Proxy({},{get:(t,k)=>k==='measureText'?(s=>({width:[...s].length*40})):(k in t?t[k]:()=>{}),set:(t,k,v)=>{t[k]=v;return true;}});
+  w.HTMLCanvasElement.prototype.getContext=()=>ctx;
+  const sizes=[];w.HTMLCanvasElement.prototype.toBlob=function(cb){sizes.push(`${this.width}x${this.height}`);cb(new w.Blob(['x'],{type:'image/jpeg'}));};
+  w.URL.createObjectURL=()=>'blob:test';w.URL.revokeObjectURL=()=>{};
+  const shared=[];Object.defineProperty(w.navigator,'canShare',{value:()=>true,configurable:true});Object.defineProperty(w.navigator,'share',{value:async x=>{shared.push(x);},configurable:true});
+  d.getElementById('fPlace').value='日本、〒386-0013 長野県上田市中央東1-1';
+  d.getElementById('fInsta').click();
+  const settle=()=>new Promise(r=>setTimeout(r,20));await settle();
+  assert(!d.getElementById('instaSheet').classList.contains('hidden'));
+  assert(!d.getElementById('instaShare').disabled);
+  await d.getElementById('instaShare').onclick();
+  assert.equal(shared.length,1);assert.equal(shared[0].files[0].type,'image/jpeg');assert.match(shared[0].files[0].name,/feed\.jpg$/);assert.equal(shared[0].text,undefined,'only the image is shared so Instagram appears');
+  assert.equal(sizes.at(-1),'1080x1080');
+  d.querySelector('[data-insta="story"]').click();await settle();
+  await d.getElementById('instaShare').onclick();
+  assert.match(shared[1].files[0].name,/story\.jpg$/);assert.equal(sizes.at(-1),'1080x1920');
+  d.getElementById('instaClose').click();assert(d.getElementById('instaSheet').classList.contains('hidden'));
+ }finally{a.close();}
+});

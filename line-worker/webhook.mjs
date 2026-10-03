@@ -114,11 +114,11 @@ async function addLocation(db, owner, ev, now) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return [text('位置情報を読み取れませんでした。')];
   const cats = await categories(db, owner);
   const {date, time} = jstNow(now);
-  const place = clip(loc.title || loc.address || '送った場所', 100);
+  const place = clip(loc.title || shortAddress(loc.address) || '送った場所', 100);
   const id = 'line_' + (docId(ev.webhookEventId) || randomId());
   const data = {
     cat:cats[0]?.name || '遊び', kind:'memory', date, time, who:[], place, title:'',
-    memo:loc.title && loc.address ? clip(loc.address, 300) : '', link:'', fav:false, thumbs:[],
+    memo:loc.address && loc.address !== place ? clip(loc.address, 300) : '', link:'', fav:false, thumbs:[],
     sends:[], nextSendAt:null, lat, lng, source:'line', createdAt:new Date(now), updatedAt:new Date(now)
   };
   if (owner.scope === 'personal') data.ownerUid = owner.uid;
@@ -157,6 +157,9 @@ async function listFavorites(db, owner) {
   if (!docs.length) return [text('「また行きたい」はまだありません。アプリで記録に♥をつけると、ここに出ます。')];
   return [text('♥ また行きたい\n\n' + docs.map(e => '・' + (e.place || e.title || e.cat || '記録')).join('\n') + '\n\nほかはアプリで見られます。')];
 }
+
+// LINE gives "日本、〒386-0013 長野県…"; the country and postal code only add noise.
+export const shortAddress = s => String(s || '').replace(/^日本[、,]\s*/, '').replace(/^〒?\s*\d{3}-?\d{4}\s*/, '').trim();
 
 export async function handleEvent(db, env, ev, now = Date.now()) {
   const userId = ev.source?.type === 'user' ? ev.source.userId : null;
