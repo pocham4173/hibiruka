@@ -198,6 +198,13 @@ test('Instagram button builds feed and story images and opens the share sheet wi
   d.querySelector('[data-insta="story"]').click();await settle();
   await d.getElementById('instaShare').onclick();
   assert.match(shared[1].files[0].name,/story\.jpg$/);assert.equal(sizes.at(-1),'1080x1920');
+  assert(d.getElementById('instaTextBox').classList.contains('hidden'));
+  d.querySelector('[data-insta="x"]').click();await settle();
+  assert(!d.getElementById('instaTextBox').classList.contains('hidden'));assert.match(d.getElementById('instaShare').textContent,/X/);
+  assert.equal(d.getElementById('instaText').value,'📍長野県上田市中央東1-1\n'+(()=>{const t=new Date();return `${t.getMonth()+1}/${t.getDate()}`})()+d.getElementById('instaText').value.split('\n')[1].replace(/^\d+\/\d+/,'')+'\n#ヒビルカ');
+  d.getElementById('instaText').value='今日のヨガ #ヒビルカ';
+  await d.getElementById('instaShare').onclick();
+  assert.equal(shared[2].text,'今日のヨガ #ヒビルカ');assert.match(shared[2].files[0].name,/x\.jpg$/);
   d.getElementById('instaClose').click();assert(d.getElementById('instaSheet').classList.contains('hidden'));
  }finally{a.close();}
 });

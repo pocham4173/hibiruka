@@ -302,8 +302,10 @@
   /* シート */
   .insta-btn { margin-top: 18px; }
   .insta-btn svg { color: var(--rose); }
-  .insta-formats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .insta-formats .pill { justify-content: center; flex-direction: column; gap: 2px; padding: 10px; }
+  .insta-formats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  #instaText { width: 100%; }
+  #instaCount.over { color: var(--danger); }
+  .insta-formats .pill { justify-content: center; flex-direction: column; gap: 2px; padding: 10px 4px; text-align: center; }
   .insta-formats small { font-size: 11px; opacity: .75; font-weight: 500; }
   .insta-preview { margin: 14px auto 6px; display: flex; justify-content: center; }
   .insta-preview img { max-width: 100%; max-height: 46vh; border-radius: 12px; box-shadow: 0 6px 18px rgba(31,45,74,.18); background: var(--card); }
@@ -447,8 +449,8 @@
       <div class="photos" id="fPhotos"></div>
       <input type="file" id="fPhotoInput" accept="image/*" multiple class="hidden">
 
-      <button type="button" class="btn sub insta-btn" id="fInsta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r=".6" fill="currentColor"/></svg>インスタに投稿する</button>
-      <p class="note">写真・場所・日付を入れた画像を作って、iPhoneの共有からInstagram（フィード・ストーリーズ）に送れます。</p>
+      <button type="button" class="btn sub insta-btn" id="fInsta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r=".6" fill="currentColor"/></svg>SNSに投稿する</button>
+      <p class="note">写真・場所・日付を入れた画像を作って、iPhoneの共有からInstagram（フィード・ストーリーズ）やXに送れます。</p>
       <label class="lbl">投稿したインスタのリンク<small>なくてもOK・あとからここで開けます</small></label>
       <input type="url" id="fLink" placeholder="https://">
 
@@ -726,12 +728,14 @@
 
 <!-- 項目の編集 -->
 <div id="instaSheet" class="sheet-bg hidden"><div class="sheet" role="dialog" aria-labelledby="instaTitle">
-  <h2 id="instaTitle" style="margin-top:0">インスタに投稿</h2>
-  <div class="insta-formats" role="group" aria-label="画像の形">
-    <button type="button" class="pill on" aria-pressed="true" data-insta="feed">フィード<small>正方形</small></button>
-    <button type="button" class="pill" aria-pressed="false" data-insta="story">ストーリーズ<small>縦長</small></button>
+  <h2 id="instaTitle" style="margin-top:0">SNSに投稿</h2>
+  <div class="insta-formats" role="group" aria-label="どこに投稿する？">
+    <button type="button" class="pill on" aria-pressed="true" data-insta="feed">インスタ<small>フィード・正方形</small></button>
+    <button type="button" class="pill" aria-pressed="false" data-insta="story">インスタ<small>ストーリーズ・縦長</small></button>
+    <button type="button" class="pill" aria-pressed="false" data-insta="x">X<small>文章つき</small></button>
   </div>
   <div class="insta-preview"><img id="instaImg" alt="投稿用の画像のプレビュー"></div>
+  <div id="instaTextBox" class="hidden"><label class="lbl" for="instaText">投稿する文章<small>直してから送れます</small></label><textarea id="instaText" rows="4"></textarea><p class="note" id="instaCount"></p></div>
   <p class="note center" id="instaNote" role="status"></p>
   <button type="button" class="btn" id="instaShare" disabled>共有して Instagram を選ぶ</button>
   <a class="btn sub hidden" id="instaSave" download="hibiruka.jpg">画像を保存する</a>
@@ -1516,7 +1520,7 @@ async function openDetail(id) {
         <a class="btn sub" href="${gcalUrl(e)}" target="_blank" rel="noopener" ${e.place ? "" : 'style="grid-column:1/-1"'}>${icon("caldot")}Googleカレンダーに追加</a>
       </div>
       ${plan ? `<button class="btn line" id="dSend">${icon("send")}LINEで予定を送る</button>` : ""}
-      <button class="btn sub insta-btn" id="dInsta" style="margin-top:8px">${INSTA_ICON}インスタに投稿する</button>
+      <button class="btn sub insta-btn" id="dInsta" style="margin-top:8px">${INSTA_ICON}SNSに投稿する</button>
       <button class="btn sub" id="dEdit">${icon("pencil")}直す</button>
       <button class="btn danger" id="dDel">${icon("trash")}消す</button>
       <button class="btn ghost" id="dClose">閉じる</button>
@@ -1542,12 +1546,13 @@ function closeSheets() { closeInsta(); ["detailSheet", "catSheet", "sendSheet"].
    インスタに投稿：画像を作ってiPhoneの共有画面へ
    ========================================================= */
 const INSTA_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r=".6" fill="currentColor"/></svg>';
-const INSTA_SIZE = { feed: [1080, 1080], story: [1080, 1920] };
+const INSTA_SIZE = { feed: [1080, 1080], story: [1080, 1920], x: [1080, 1080] };
 let insta = null;
 // LINEの位置情報は「日本、〒386-0013 長野県…」となるので、見せるときは短くする
 function shortPlace(s) { return String(s || "").replace(/^日本[、,]\s*/, "").replace(/^〒?\s*\d{3}-?\d{4}\s*/, "").trim(); }
 function openInsta(rec, photo) {
   insta = { rec, photo, format: "feed", url: "" };
+  $("instaText").value = xText(rec); $("instaText").oninput = countX; countX();
   $("instaSheet").classList.remove("hidden");
   $("instaSheet").onclick = ev => { if (ev.target.id === "instaSheet") closeInsta(); };
   $("instaClose").onclick = closeInsta;
@@ -1555,10 +1560,25 @@ function openInsta(rec, photo) {
   // 共有は押したその場で呼ぶ（iPhoneは時間がたつと共有画面を出さないため、画像は先に作っておく）
   $("instaShare").onclick = async () => {
     const cur = insta; if (!cur || !cur.file) return;
-    try { await navigator.share({ files: [cur.file] }); }
+    // インスタは文章を受け取れず、文章があると一覧に出ないことがあるので画像だけにする
+    const data = cur.format === "x" ? { files: [cur.file], text: $("instaText").value.trim() } : { files: [cur.file] };
+    try { await navigator.share(data); }
     catch (err) { if (err && err.name === "AbortError") return; $("instaSave").classList.remove("hidden"); $("instaNote").textContent = "共有できませんでした。「画像を保存する」で写真に保存して、Instagramから選んでください。"; }
   };
   renderInsta();
+}
+// Xの投稿文：題名・場所・日付・ハッシュタグ
+function xText(rec) {
+  const p = parts(rec.date || todayStr()), place = shortPlace(rec.place);
+  const title = rec.title || "";
+  return [title, place && place !== title ? "📍" + place : "", `${p.m}/${p.d}（${p.w}）`, "#ヒビルカ"].filter(Boolean).join("\n");
+}
+// Xは全角を2文字として数え、上限は280（全角140文字）
+function xLength(t) { return [...t].reduce((n, ch) => n + (/[\u0000-\u10FF\u2000-\u200D\u2010-\u201F\u2032-\u2037]/.test(ch) ? 1 : 2), 0); }
+function countX() {
+  const n = xLength($("instaText").value), over = n > 280;
+  $("instaCount").textContent = over ? `長すぎます（あと${Math.ceil((n - 280) / 2)}文字ほど減らしてください）` : `あと全角${Math.floor((280 - n) / 2)}文字ほど書けます`;
+  $("instaCount").classList.toggle("over", over);
 }
 function closeInsta() {
   if (insta && insta.url) URL.revokeObjectURL(insta.url);
@@ -1569,6 +1589,9 @@ async function renderInsta() {
   const cur = insta, format = cur.format;
   document.querySelectorAll("[data-insta]").forEach(b => { const on = b.dataset.insta === format; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); });
   $("instaShare").disabled = true; $("instaSave").classList.add("hidden");
+  const toX = format === "x";
+  $("instaTextBox").classList.toggle("hidden", !toX);
+  $("instaShare").textContent = toX ? "共有して X を選ぶ" : "共有して Instagram を選ぶ";
   $("instaNote").textContent = "画像を作っています…";
   try {
     const blob = await drawInsta(cur.rec, await cur.photo, format);
@@ -1580,7 +1603,8 @@ async function renderInsta() {
     const canShare = !!(navigator.canShare && navigator.share && navigator.canShare({ files: [cur.file] }));
     $("instaShare").disabled = !canShare; $("instaShare").classList.toggle("hidden", !canShare);
     $("instaSave").classList.toggle("hidden", canShare);
-    $("instaNote").textContent = canShare ? "下のボタンを押して、出てきた一覧から「Instagram」を選んでください。" : "この画面では共有が使えません。画像を保存して、Instagramから選んでください。";
+    const app = toX ? "X" : "Instagram";
+    $("instaNote").textContent = canShare ? `下のボタンを押して、出てきた一覧から「${app}」を選んでください。` : `この画面では共有が使えません。画像を保存して、${app}から選んでください。`;
   } catch (err) {
     console.warn(err);
     if (insta === cur) $("instaNote").textContent = "画像を作れませんでした。もう一度お試しください。";
