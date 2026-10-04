@@ -124,3 +124,14 @@ test('REST adapter: equality queries are combined and create refuses existing do
   await db.create(db.collection('personalEvents').doc('x'),{a:1});
   assert.deepEqual(bodies[1].writes[0].currentDocument,{exists:false});
 });
+
+test('guide link: linked users get it in help, guests can ask for it and menu words never go silent', async () => {
+  const db = memoryDb(linked());
+  assert.match((await handleEvent(db, {}, msg({type:'text', text:'説明書'}), NOW))[0].text, /hibiruka\/guide\//);
+  const guest = memoryDb();
+  const ask = t => handleEvent(guest, {}, {...msg({type:'text', text:t}), source:{type:'user', userId:OTHER}}, NOW);
+  assert.match((await ask('使い方'))[0].text, /guide\/[\s\S]*index\/index\//);
+  assert.match((await ask('今日'))[0].text, /つなぐと使えます/);
+  assert.match((await ask('また行きたい'))[0].text, /設定」→「LINEから記録する/);
+  assert.deepEqual(await ask('こんにちは'), []);
+});
