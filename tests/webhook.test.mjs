@@ -187,3 +187,16 @@ test('ふりかえり: summarises only this owner\'s memories of the month', asy
   assert.match(last.text, /2026年9月のふりかえり（1件）/);
   assert.match((await handleEvent(memoryDb(linked()), env, msg({type:'text', text:'今月のふりかえり'}), NOW))[0].text, /まだありません/);
 });
+
+test('LINE gets OK at once; the reply is sent afterwards, with the typing dots shown first for AI', async () => {
+  const db = memoryDb(linked()); const calls = []; const later = [];
+  const fetcher = async (url, opt) => { calls.push([url, JSON.parse(opt.body)]); return new Response('{}'); };
+  const env = {LINE_CHANNEL_SECRET:SECRET, LINE_CHANNEL_ACCESS_TOKEN:'t', AI:{run:async () => ({choices:[{message:{content:'ヨガの月。'}}]})}};
+  db.data.personalEvents = {a:{ownerUid:'alice', kind:'memory', date:'2026-10-01', title:'ヨガ'}};
+  const body = JSON.stringify({events:[msg({type:'text', text:'ふりかえり'})]});
+  const res = await handleWebhook(new Request('https://w/line/webhook', {method:'POST', body, headers:{'x-line-signature':sign(body)}}), env, {db:async () => db, fetcher, now:() => NOW, waitUntil:p => later.push(p)});
+  assert.equal(res.status, 200); assert.equal(later.length, 1);
+  await later[0];
+  assert.equal(calls[0][0], 'https://api.line.me/v2/bot/chat/loading/start'); assert.equal(calls[0][1].chatId, U);
+  assert.equal(calls[1][0], 'https://api.line.me/v2/bot/message/reply'); assert.match(calls[1][1].messages[0].text, /ふりかえり（1件）/);
+});
