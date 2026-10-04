@@ -1248,14 +1248,26 @@ function parseTiff(v, t) {
   }
   return out;
 }
-// 座標から場所の名前（OpenStreetMap）。お店や施設の名前があればそれを、なければ町名まで
+// 座標から場所の名前（OpenStreetMap）。お店や施設の名前があればそれを、なければ「さいたま市大宮区桜木町」のように
 async function placeName(lat, lng) {
   const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&accept-language=ja`, { headers: { Accept: "application/json" } });
   if (!r.ok) throw new Error("reverse " + r.status);
-  const j = await r.json(), a = j.address || {};
-  const area = [a.city || a.town || a.village || a.county || "", a.suburb || a.quarter || a.neighbourhood || a.city_district || ""].filter(Boolean).join("");
-  const poi = j.name && !/^\d/.test(j.name) && j.name !== a.road ? j.name : "";
-  return poi || area || a.state || "";
+  return placeFromReverse(await r.json());
+}
+function placeFromReverse(j) {
+  const skip = ["highway", "boundary", "place", "landuse", "building", "railway", "waterway", "natural"];
+  if (j.name && !skip.includes(j.category) && !/^[\d\-−ー]+$/.test(j.name)) return j.name;
+  // display_name は「小さい場所, …, 市, 県, 郵便番号, 日本」の順。国と郵便番号を外して大きい方から組み立てる
+  const parts = String(j.display_name || "").split(/\s*,\s*/).filter(p => p && p !== "日本" && p !== "Japan" && !/^\d{3}-?\d{4}$/.test(p));
+  const pi = parts.findIndex(p => /[都道府県]$/.test(p));
+  const pref = pi >= 0 ? parts[pi] : "";
+  const smaller = (pi >= 0 ? parts.slice(0, pi) : parts).reverse(); // 大きい順
+  const muni = smaller.filter(p => /[市町村区]$/.test(p) && !/郡$/.test(p)).slice(0, 2);
+  let area = muni.join("");
+  const lastMuni = muni.length ? smaller.indexOf(muni[muni.length - 1]) : -1;
+  const town = smaller.slice(lastMuni + 1).find(p => !/\d/.test(p) && !/(通り|線|道|号|街道)$/.test(p) && !/郡$/.test(p));
+  if (area && town) area += town;
+  return area || pref;
 }
 async function fillFromPhoto(file, targetForm) {
   let ex = null;
