@@ -22,7 +22,7 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
  const user={uid:'A',isAnonymous:!linked,...(linked?{email:'a@example.test'}:{}),linkWithCredential:async c=>{user.email=c.email;user.isAnonymous=false;calls.push(['link',user.uid]);}};
  const auth={currentUser:user,signInWithEmailAndPassword:async()=>{calls.push(['signin']);},setPersistence:async()=>{},signInAnonymously:async()=>{calls.push(['anonymous']);return{user};}};
  const authFn=()=>auth;authFn.Auth={Persistence:{LOCAL:'local'}};authFn.EmailAuthProvider={credential:(email,password)=>({email,password})};
- const firestore=()=>db;firestore.FieldValue={serverTimestamp:()=>1,arrayUnion:x=>[x],arrayRemove:()=>[],increment:x=>x};
+ const firestore=()=>db;firestore.FieldValue={delete:()=>'__delete__',serverTimestamp:()=>1,arrayUnion:x=>[x],arrayRemove:()=>[],increment:x=>x};
  w.firebase={initializeApp:()=>{},auth:authFn,firestore};w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.console.error=(...args)=>errors.push(args);w.liff={init:async()=>{},isLoggedIn:()=>true,getProfile:async()=>({userId:'U'+'a'.repeat(32),displayName:'A'}),isInClient:()=>false};
  const script=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean).pop();
  w.testNavigate=url=>calls.push(['navigate',url]);
@@ -207,4 +207,45 @@ test('Instagram button builds feed and story images and opens the share sheet wi
   assert.equal(shared[2].text,'今日のヨガ #ヒビルカ');assert.match(shared[2].files[0].name,/x\.jpg$/);
   d.getElementById('instaClose').click();assert(d.getElementById('instaSheet').classList.contains('hidden'));
  }finally{a.close();}
+});
+
+// Minimal JPEG with EXIF date and GPS (little-endian TIFF) for the photo-place test.
+function exifJpeg({date='2026:09:20 12:34:56',lat=[36,24,5.4],lng=[138,15,0]}={}){
+ const b=[];const u16=v=>b.push(v&255,v>>8&255),u32=v=>{u16(v&65535);u16(v>>>16);};
+ const tiff=[];const T={u16:v=>tiff.push(v&255,v>>8&255),u32:v=>{T.u16(v&65535);T.u16(v>>>16);}};
+ // header
+ tiff.push(0x49,0x49);T.u16(42);T.u32(8);
+ // IFD0 @8: 2 entries -> 2+24+4=30 bytes -> next at 38
+ T.u16(2);T.u16(0x8769);T.u16(4);T.u32(1);T.u32(38);T.u16(0x8825);T.u16(4);T.u32(1);T.u32(56);T.u32(0);
+ // Exif IFD @38: 1 entry -> 18 bytes -> data at 56? need ascii at 56+? put ascii after GPS
+ T.u16(1);T.u16(0x9003);T.u16(2);T.u32(20);T.u32(200);T.u32(0);
+ // GPS IFD @56: 4 entries -> 2+48+4=54 -> rationals at 110
+ T.u16(4);T.u16(1);T.u16(2);T.u32(2);tiff.push(78,0,0,0);T.u16(2);T.u16(5);T.u32(3);T.u32(110);T.u16(3);T.u16(2);T.u32(2);tiff.push(69,0,0,0);T.u16(4);T.u16(5);T.u32(3);T.u32(134);T.u32(0);
+ const rat=a=>a.forEach(x=>{T.u32(Math.round(x*100));T.u32(100);});rat(lat);rat(lng);
+ while(tiff.length<200)tiff.push(0);for(const ch of date)tiff.push(ch.charCodeAt(0));tiff.push(0);
+ const app1=[0x45,0x78,0x69,0x66,0,0,...tiff];
+ return new Uint8Array([0xFF,0xD8,0xFF,0xE1,(app1.length+2)>>8,(app1.length+2)&255,...app1,0xFF,0xD9]);
+}
+test('a photo with location fills the date and place, and the coordinates are saved',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  const urls=[];w.fetch=async url=>{urls.push(url);return{ok:true,json:async()=>({name:'ソラノカフェ',address:{city:'上田市',suburb:'中央'}})};};
+  w.h.setShrink(async()=>'img');
+  d.querySelector('#catPills [data-cat]').click();
+  const bytes=exifJpeg();const file=new w.Blob([bytes],{type:'image/jpeg'});
+  await w.h.addPhotos({target:{files:[file],value:'x'}});
+  for(let i=0;i<5;i++)await new Promise(r=>setTimeout(r,5));
+  assert.equal(d.getElementById('fDate').value,'2026-09-20');assert.equal(d.getElementById('fTime').value,'12:34');assert.equal(d.getElementById('fKind').value,'memory');
+  assert.equal(d.getElementById('fPlace').value,'ソラノカフェ');assert.match(urls[0],/lat=36\.401500&?|lat=36\.4015&/);
+  assert.match(d.getElementById('fMapLink').href,/query=36\.4015,138\.25/);
+  await w.h.saveRecord();
+  const [,e]=[...a.data].find(([k])=>k.startsWith('personalEvents/'));assert.equal(e.lat,36.4015);assert.equal(e.lng,138.25);
+ }finally{a.close();}
+ // Editing the place by hand drops the photo coordinates; a typed date is never overwritten.
+ const b=app();try{const {w,d}=b;await w.h.startOwner();w.fetch=async()=>({ok:true,json:async()=>({name:'X',address:{}})});w.h.setShrink(async()=>'img');
+  d.querySelector('#catPills [data-cat]').click();d.getElementById('fDate').value='2026-01-02';d.getElementById('fDate').oninput();
+  await w.h.addPhotos({target:{files:[new w.Blob([exifJpeg()])],value:'x'}});for(let i=0;i<5;i++)await new Promise(r=>setTimeout(r,5));
+  assert.equal(d.getElementById('fDate').value,'2026-01-02');assert.equal(d.getElementById('fPlace').value,'X');
+  d.getElementById('fPlace').value='自分で書いた場所';d.getElementById('fPlace').oninput();
+  await w.h.saveRecord();const [,e]=[...b.data].find(([k])=>k.startsWith('personalEvents/'));assert.equal(e.lat,undefined);assert.equal(e.place,'自分で書いた場所');
+ }finally{b.close();}
 });
