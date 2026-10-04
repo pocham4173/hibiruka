@@ -1,0 +1,342 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ヒビルカの使い方</title>
+<meta name="description" content="予定と思い出をひとつに。ヒビルカの使い方を、画面の写真つきでまとめました。">
+<meta property="og:title" content="ヒビルカの使い方（写真つき）">
+<meta property="og:description" content="予定と思い出をひとつに。LINEで予定を届けたり、AIで思い出の文章を作ったり。">
+<meta property="og:image" content="https://pocham4173.github.io/hibiruka/index/index/ogp.jpg">
+<link rel="icon" href="img/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy: #1f2d4a; --rose: #a9536a; --text: #2d2a2c; --muted: #857d7f;
+    --bg: #f8f5f1; --card: #ffffff; --line: #e7e1dc; --green: #06c755;
+    --sand: #f4eee2; --sage: #eaf1ec; --lav: #eeedf5; --lav-t: #4f4880; --blush: #f6edef;
+    color-scheme: light;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 64px; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif; line-height: 1.8; letter-spacing: .03em; -webkit-text-size-adjust: 100%; }
+  a { color: var(--rose); }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 0 16px; }
+
+  /* 上の帯 */
+  .bar { position: sticky; top: 0; z-index: 5; background: rgba(248,245,241,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  .bar .wrap { display: flex; align-items: center; gap: 10px; height: 56px; }
+  .bar img { width: 32px; height: 32px; border-radius: 9px; border: 1.5px solid var(--navy); }
+  .bar b { color: var(--navy); letter-spacing: .2em; font-size: 16px; }
+  .bar a.open { margin-left: auto; text-decoration: none; background: var(--navy); color: #fff; font-size: 13px; font-weight: 700; padding: 8px 14px; border-radius: 999px; }
+
+  /* はじめ */
+  .hero { padding: 36px 0 12px; }
+  .eyebrow { color: var(--rose); font-weight: 700; font-size: 13px; letter-spacing: .2em; }
+  h1 { font-size: clamp(26px, 7vw, 36px); line-height: 1.4; color: var(--navy); margin: 6px 0 12px; letter-spacing: .08em; }
+  .lead { font-size: 16px; margin: 0 0 18px; }
+  .points { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 0 0 18px; padding: 0; list-style: none; }
+  .points li { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 8px; text-align: center; font-size: 13px; font-weight: 700; color: var(--navy); line-height: 1.5; }
+  .points li span { display: block; font-size: 24px; margin-bottom: 2px; }
+
+  /* もくじ */
+  .toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 8px; padding: 0; list-style: none; }
+  .toc a { display: inline-block; text-decoration: none; background: var(--card); border: 1px solid var(--line); color: var(--navy); font-size: 13.5px; font-weight: 700; padding: 7px 12px; border-radius: 999px; }
+
+  /* 章 */
+  section.chapter { padding: 30px 0 6px; }
+  .chap-head { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+  .chap-no { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--navy); color: #fff; font-weight: 700; font-size: 17px; }
+  h2 { font-size: 22px; color: var(--navy); margin: 0; line-height: 1.4; letter-spacing: .06em; }
+  .chap-lead { margin: 6px 0 14px; color: var(--text); }
+
+  .step { display: grid; grid-template-columns: 1fr; gap: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 18px 16px; margin: 0 0 14px; }
+  .step h3 { margin: 0 0 6px; font-size: 17px; color: var(--navy); line-height: 1.5; }
+  .step h3 .n { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--rose); color: #fff; font-size: 12.5px; margin-right: 8px; vertical-align: 2px; }
+  .step p { margin: 0 0 8px; }
+  .step ol, .step ul { margin: 4px 0 8px; padding-left: 1.3em; }
+  .step li { margin: 2px 0; }
+  .tip { background: var(--sand); border-radius: 12px; padding: 10px 12px; font-size: 14px; margin-top: 8px; }
+  .tip b { color: #74602f; }
+  .ai { background: var(--lav); }
+  .ai b { color: var(--lav-t); }
+  .btnlike { display: inline-block; font-weight: 700; color: var(--navy); background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 0 7px; font-size: .92em; white-space: nowrap; }
+  .btnlike.green { background: var(--green); color: #fff; border-color: var(--green); }
+  .btnlike.navy { background: var(--navy); color: #fff; border-color: var(--navy); }
+
+  /* スマホの画面 */
+  .phones { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  figure.phone { margin: 0; width: min(100%, 250px); }
+  figure.phone .frame { border: 6px solid #1c1c1e; border-radius: 30px; overflow: hidden; background: #fff; box-shadow: 0 10px 24px rgba(31,45,74,.18); aspect-ratio: 390 / 844; }
+  figure.phone img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top; }
+  figure.phone figcaption { text-align: center; font-size: 12.5px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+  .phones.two figure.phone { width: min(47%, 230px); }
+
+  /* LINEのトーク画面（説明用の絵） */
+  .chat { width: min(100%, 300px); margin: 0 auto; background: #8cabd9; border-radius: 22px; padding: 14px 12px 16px; box-shadow: 0 10px 24px rgba(31,45,74,.18); font-size: 13px; line-height: 1.6; }
+  .chat .top { color: #fff; font-weight: 700; text-align: center; margin-bottom: 10px; font-size: 14px; }
+  .msg { display: flex; margin: 8px 0; }
+  .msg.me { justify-content: flex-end; }
+  .bubble { max-width: 82%; background: #fff; border-radius: 16px; padding: 8px 11px; color: #222; }
+  .me .bubble { background: #a8e27a; }
+  .map { width: 190px; border-radius: 14px; overflow: hidden; background: #fff; }
+  .map .pic { height: 86px; background: linear-gradient(135deg,#dfe9d8 0 30%,#cfe0f2 30% 34%,#dfe9d8 34% 64%,#f3e1b8 64% 67%,#dfe9d8 67%); position: relative; }
+  .map .pic::after { content: "📍"; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-60%); font-size: 26px; }
+  .map .addr { padding: 6px 10px; font-size: 12px; background: #fdf6c9; }
+  .qr { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .qr span { background: #fff; border: 1px solid #c9d6ea; color: #2a64c5; border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 700; }
+
+  /* よくある質問 */
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin: 0 0 10px; }
+  summary { cursor: pointer; font-weight: 700; color: var(--navy); list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: "Q. "; color: var(--rose); }
+  details p { margin: 8px 0 0; }
+
+  .cta { text-align: center; padding: 26px 0 10px; }
+  .cta a { display: inline-block; text-decoration: none; background: var(--navy); color: #fff; font-weight: 700; padding: 14px 28px; border-radius: 14px; font-size: 16px; box-shadow: 0 6px 16px rgba(31,45,74,.25); }
+  footer { text-align: center; color: var(--muted); font-size: 12.5px; padding: 26px 0 40px; }
+
+  @media (min-width: 700px) {
+    .step.with-shot { grid-template-columns: 1fr 230px; align-items: start; }
+    .step.with-shot.left { grid-template-columns: 230px 1fr; }
+    .step.with-shot.left .phones { order: -1; }
+    .step.with-shot figure.phone { width: 230px; }
+  }
+  @media (max-width: 380px) { .points { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header class="bar"><div class="wrap"><img src="img/icon.png" alt=""><b>ヒビルカ</b><a class="open" href="../index/index/">アプリを開く</a></div></header>
+
+<main class="wrap">
+  <div class="hero">
+    <div class="eyebrow">使い方ガイド</div>
+    <h1>予定と思い出を、<br>ひとつのアプリに。</h1>
+    <p class="lead">ヒビルカは、これからの予定と、行ってきた思い出を一緒に残せるアプリです。大切な人には、LINEで予定を届けられます。</p>
+    <ul class="points">
+      <li><span>🗓️</span>予定を入れて<br>LINEで届ける</li>
+      <li><span>📷</span>写真を入れると<br>日付と場所も</li>
+      <li><span>✨</span>AIが思い出の<br>文章を作る</li>
+    </ul>
+    <ul class="toc" aria-label="もくじ">
+      <li><a href="#start">はじめかた</a></li>
+      <li><a href="#plan">予定を入れる</a></li>
+      <li><a href="#line-send">LINEで届ける</a></li>
+      <li><a href="#memory">思い出を残す</a></li>
+      <li><a href="#ai">AIで文章</a></li>
+      <li><a href="#line-record">LINEから記録</a></li>
+      <li><a href="#look">見返す</a></li>
+      <li><a href="#sns">SNSに投稿</a></li>
+      <li><a href="#faq">よくある質問</a></li>
+    </ul>
+  </div>
+
+  <!-- 1 -->
+  <section class="chapter" id="start">
+    <div class="chap-head"><div class="chap-no">1</div><h2>はじめかた</h2></div>
+    <p class="chap-lead">アプリをダウンロードする必要はありません。ホームページを開くだけで使えます。</p>
+    <div class="step with-shot">
+      <div>
+        <h3><span class="n">1</span>アプリを開く</h3>
+        <p>このページの上の <span class="btnlike navy">アプリを開く</span> を押します。はじめての人には「あなた専用のヒビルカ」ができます。</p>
+        <h3><span class="n">2</span>ホーム画面に追加する</h3>
+        <p>次からすぐ開けるように、スマホのホーム画面にアイコンを置いておきます。</p>
+        <ul>
+          <li><b>iPhone</b>：Safariの下の共有ボタン（□に↑）→「ホーム画面に追加」</li>
+          <li><b>Android</b>：右上の︙ →「ホーム画面に追加」</li>
+        </ul>
+        <div class="tip"><b>ポイント</b>　アプリの右上にある <span class="btnlike">ホームに追加</span> からも案内が出ます。</div>
+      </div>
+      <div class="phones"><figure class="phone"><div class="frame"><img src="img/01-home.jpg" alt="ヒビルカの最初の画面" loading="lazy"></div><figcaption>最初の画面</figcaption></figure></div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section class="chapter" id="plan">
+    <div class="chap-head"><div class="chap-no">2</div><h2>予定を入れる</h2></div>
+    <p class="chap-lead">カレンダーで、これからの予定がひと目で分かります。</p>
+    <div class="step with-shot">
+      <div>
+        <h3><span class="n">1</span>「＋ 記録する」を押す</h3>
+        <p>「予定・記録」のページにある <span class="btnlike navy">＋ 記録する</span> を押します。</p>
+        <h3><span class="n">2</span>上から順に入れる</h3>
+        <ol>
+          <li>「予定」か「思い出」を選ぶ</li>
+          <li>遊び・食事・カフェなど、種類を1つ選ぶ</li>
+          <li>日付と時間（時間はなくてもOK）</li>
+          <li>誰と？　どこで？　なにをする？</li>
+        </ol>
+        <p>最後に <span class="btnlike navy">予定を保存する</span> を押せば完成です。</p>
+        <div class="tip"><b>ポイント</b>　「どこで？」を入れると、Googleマップやカレンダーにすぐ飛べるボタンが付きます。</div>
+      </div>
+      <div class="phones"><figure class="phone"><div class="frame"><img src="img/02-plans.jpg" alt="これからの予定の一覧" loading="lazy"></div><figcaption>これからの予定</figcaption></figure></div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="chapter" id="line-send">
+    <div class="chap-head"><div class="chap-no">3</div><h2>LINEで予定を届ける</h2></div>
+    <p class="chap-lead">家族や友だちに「この日、忘れないでね」をLINEで自動で届けられます。</p>
+    <div class="step">
+      <div>
+        <h3><span class="n">1</span>届けたい人を登録する（はじめの1回だけ）</h3>
+        <p>「設定」→「<b>LINEの送信先を追加</b>」で名前を入れて、できた招待リンクを相手に送ります。相手がリンクを開いてヒビルカのLINEを友だち追加し、<b>承認</b>すると登録完了。名前の横に緑の点が付きます。</p>
+        <div class="tip"><b>安心</b>　承認してくれた人にしか届きません。勝手に知らない人へ送られることはありません。</div>
+      </div>
+    </div>
+    <div class="step with-shot left">
+      <div>
+        <h3><span class="n">2</span>いつ届けるか選ぶ</h3>
+        <p>予定を開いて <span class="btnlike green">LINEで予定を送る</span> を押します。</p>
+        <ul>
+          <li><b>誰に？</b>　届けたい人を選ぶ（何人でも）</li>
+          <li><b>いつ送る？</b>「前の日の朝 9:00」「当日の朝 7:00」「予定の1時間前」など。日付と時間を自由に決めることもできます</li>
+        </ul>
+        <p><span class="btnlike">この日時に送る</span> で予約完了。その時間になると、ヒビルカのLINEから相手に届きます。</p>
+      </div>
+      <div class="phones two">
+        <figure class="phone"><div class="frame"><img src="img/12-plan-detail.jpg" alt="予定の詳細画面" loading="lazy"></div><figcaption>予定を開いたところ</figcaption></figure>
+        <figure class="phone"><div class="frame"><img src="img/13-send.jpg" alt="LINEで送る日時を選ぶ画面" loading="lazy"></div><figcaption>誰に・いつ送るか選ぶ</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section class="chapter" id="memory">
+    <div class="chap-head"><div class="chap-no">4</div><h2>思い出を残す</h2></div>
+    <p class="chap-lead">行ってきた場所や、あったことを写真と一緒に残します。</p>
+    <div class="step with-shot">
+      <div>
+        <h3><span class="n">1</span>写真を追加するだけで、日付と場所が入る</h3>
+        <p>記録の画面で <span class="btnlike">📷 写真を追加</span> を押して写真を選ぶと、<b>撮った日にち</b>と<b>撮った場所</b>（お店の名前や町名）が自動で入ります。写真は4枚まで。</p>
+        <div class="tip"><b>ポイント</b>　違っていたら、そのまま書き直せます。自分で入れた日付や場所は上書きされません。</div>
+        <h3 style="margin-top:14px"><span class="n">2</span>「また行きたい」に ♥</h3>
+        <p>気に入った場所は <span class="btnlike">♡ また行きたい</span> を押しておくと、あとで一覧で見られます。</p>
+      </div>
+      <div class="phones"><figure class="phone"><div class="frame"><img src="img/06-photos.jpg" alt="写真とまた行きたいボタン" loading="lazy"></div><figcaption>写真・SNS・また行きたい</figcaption></figure></div>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section class="chapter" id="ai">
+    <div class="chap-head"><div class="chap-no">5</div><h2>AIで文章を作る ✨</h2></div>
+    <p class="chap-lead">書くのが苦手でも大丈夫。AIが、記録から思い出の文章を考えてくれます。</p>
+    <div class="step with-shot left">
+      <div>
+        <h3><span class="n">1</span>題名をAIに考えてもらう</h3>
+        <p>「どこで？」やメモを入れてから <span class="btnlike">✨ 題名の案をAIに聞く</span> を押すと、案が3つ出ます。押すと題名に入ります。</p>
+      </div>
+      <div class="phones"><figure class="phone"><div class="frame"><img src="img/04-title-ideas.jpg" alt="題名の案が3つ出た画面" loading="lazy"></div><figcaption>題名の案が3つ</figcaption></figure></div>
+    </div>
+    <div class="step with-shot">
+      <div>
+        <h3><span class="n">2</span>思い出の文章を作る</h3>
+        <p>メモの下の <span class="btnlike">✨ AIで文章を作成</span> を押します。3つの書き方から選べます。</p>
+        <ul>
+          <li><b>日記</b>：80〜120文字の、日記のような文章</li>
+          <li><b>ひとこと</b>：アルバムに添える短い一言</li>
+          <li><b>SNS用</b>：絵文字とハッシュタグ付きの投稿文</li>
+        </ul>
+        <p>気に入ったら <span class="btnlike navy">メモに入れる</span>。入れたあとでも「元に戻す」で戻せます。</p>
+        <div class="tip ai"><b>AIについて</b>　記録にないことは作らないようにしています。無料で、1人1日20回まで使えます。</div>
+      </div>
+      <div class="phones"><figure class="phone"><div class="frame"><img src="img/05-ai-diary.jpg" alt="AIが作った日記の文章" loading="lazy"></div><figcaption>AIが作った文章</figcaption></figure></div>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section class="chapter" id="line-record">
+    <div class="chap-head"><div class="chap-no">6</div><h2>LINEから記録する</h2></div>
+    <p class="chap-lead">出かけた先で、ヒビルカのLINEに位置情報を送るだけ。アプリを開かなくても記録できます。</p>
+    <div class="step with-shot">
+      <div>
+        <h3><span class="n">1</span>はじめに1回だけ、つなぐ</h3>
+        <p>「設定」→「LINEから記録する」の <span class="btnlike green">LINEとつなぐ</span> を押します。LINEが開いて番号入りの文が入っているので、そのまま送信。「つながりました」と返事が来たら完了です。</p>
+        <div class="tip"><b>ポイント</b>　番号は10分で使えなくなります。押したらすぐ送ってください。</div>
+      </div>
+      <div class="phones"><figure class="phone"><div class="frame"><img src="img/15-line-record.jpg" alt="設定のLINEから記録するの欄" loading="lazy"></div><figcaption>設定の「LINEから記録する」</figcaption></figure></div>
+    </div>
+    <div class="step with-shot left">
+      <div>
+        <h3><span class="n">2</span>位置情報を送る</h3>
+        <p>トーク画面の「＋」→「位置情報」で今いる場所を送ると、今日の思い出に記録されます。返事のボタンで種類も選べます。</p>
+        <h3><span class="n">3</span>ことばを送ると返事が来る</h3>
+        <ul>
+          <li>「<b>今日</b>」→ 今日の予定と記録</li>
+          <li>「<b>また行きたい</b>」→ ♥を付けた場所</li>
+          <li>「<b>使い方</b>」→ 説明</li>
+        </ul>
+      </div>
+      <div class="phones">
+        <div class="chat" role="img" aria-label="LINEのトーク画面の例：位置情報を送ると、記録しましたと返事が来る">
+          <div class="top">ヒビルカ</div>
+          <div class="msg me"><div class="map"><div class="pic"></div><div class="addr">長野県上田市二の丸</div></div></div>
+          <div class="msg"><div class="bubble">📍「上田城跡公園」を、今日の思い出に記録しました。<br>何の記録ですか？下から選べます。
+            <div class="qr"><span>遊び</span><span>食事</span><span>カフェ</span><span>旅行</span></div></div></div>
+          <div class="msg me"><div class="bubble">遊び</div></div>
+          <div class="msg"><div class="bubble">「遊び」で記録しました。</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section class="chapter" id="look">
+    <div class="chap-head"><div class="chap-no">7</div><h2>思い出を見返す</h2></div>
+    <p class="chap-lead">「思い出」のページは、写真が並ぶアルバムになっています。</p>
+    <div class="step with-shot left">
+      <div>
+        <h3><span class="n">1</span>アルバムで見る</h3>
+        <p>写真をタップすると、くわしい記録が開きます。<span class="btnlike">📍 地図で見る</span> で場所もすぐ確認できます。「また行きたい」のタブには、♥を付けた場所だけが集まります。</p>
+      </div>
+      <div class="phones"><figure class="phone"><div class="frame"><img src="img/08-album.jpg" alt="思い出のアルバム" loading="lazy"></div><figcaption>思い出のアルバム</figcaption></figure></div>
+    </div>
+    <div class="step with-shot">
+      <div>
+        <h3><span class="n">2</span>AIでひと月をふりかえる</h3>
+        <p>思い出のページのいちばん上にある <span class="btnlike navy">今月</span> <span class="btnlike">先月</span> を押すと、その月の思い出をAIがまとめてくれます。<span class="btnlike">コピー</span> で日記やSNSにも使えます。</p>
+      </div>
+      <div class="phones"><figure class="phone"><div class="frame"><img src="img/07-month.jpg" alt="AIのふりかえり" loading="lazy"></div><figcaption>ひと月のふりかえり</figcaption></figure></div>
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section class="chapter" id="sns">
+    <div class="chap-head"><div class="chap-no">8</div><h2>インスタ・Xに投稿する</h2></div>
+    <p class="chap-lead">写真・日付・場所を入れたかわいい画像を、ボタンひとつで作れます。</p>
+    <div class="step">
+      <div>
+        <h3><span class="n">1</span>「SNSに投稿する」を押す</h3>
+        <p>思い出を開いて <span class="btnlike">SNSに投稿する</span> を押し、形を選びます。</p>
+        <ul>
+          <li><b>インスタ（フィード）</b>：正方形の画像</li>
+          <li><b>インスタ（ストーリーズ）</b>：縦長の画像</li>
+          <li><b>X</b>：画像＋文章。<span class="btnlike">✨ AIに投稿文を考えてもらう</span> で文章も作れます</li>
+        </ul>
+        <h3><span class="n">2</span>共有画面でアプリを選ぶ</h3>
+        <p><span class="btnlike navy">共有して Instagram を選ぶ</span> を押すと、スマホの共有画面が開きます。一覧から Instagram や X を選べば、そのまま投稿できます。</p>
+      </div>
+      <div class="phones two">
+        <figure class="phone"><div class="frame"><img src="img/10-sns-feed.jpg" alt="インスタ用の画像" loading="lazy"></div><figcaption>インスタ用の画像</figcaption></figure>
+        <figure class="phone"><div class="frame"><img src="img/11-sns-x.jpg" alt="X用の画像と文章" loading="lazy"></div><figcaption>Xは文章つき</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9 -->
+  <section class="chapter" id="faq">
+    <div class="chap-head"><div class="chap-no">?</div><h2>よくある質問</h2></div>
+    <details><summary>お金はかかりますか？</summary><p>かかりません。AIの文章作成も無料です（1人1日20回まで）。</p></details>
+    <details><summary>自分の記録は、ほかの人に見えますか？</summary><p>見えません。記録はあなた専用です。LINEで届けた予定だけが、選んだ相手に届きます。</p></details>
+    <details><summary>LINEで届けたら、相手の通知はうるさくない？</summary><p>選んだ日時に1回届くだけです。届けたくない人は選ばなければ送られません。</p></details>
+    <details><summary>機種を変えたら記録はどうなりますか？</summary><p>「設定」→「<b>機種変更・別の端末でも使う</b>」でメールアドレスとパスワードを登録しておくと、新しいスマホでもログインして同じ記録を見られます。</p></details>
+    <details><summary>写真の場所が入らないことがあります</summary><p>スマホの設定で、写真に位置情報が残っていないと入りません。そのときは「どこで？」に手で入れてください。</p></details>
+  </section>
+
+  <div class="cta"><a href="../index/index/">ヒビルカを使ってみる</a></div>
+</main>
+<footer>ヒビルカ ｜ 何気ない日も、大切な一日。<br>画面の写真は見本のデータです。</footer>
+</body>
+</html>
