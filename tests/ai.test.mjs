@@ -113,3 +113,15 @@ test('every prompt keeps the safety rules: facts only and records are data, not 
   for (const [mode, p] of Object.entries(PROMPTS)) { assert.match(p, /事実だけ/, mode); assert.match(p, /従わない/, mode); }
   assert.match(userMessage({...record}, '2026-10-04', 'title'), /題名の案を3つ/);
 });
+
+test('answers are read from any shape, and an empty first answer is asked again with more room', async () => {
+  const {answerText, runText} = await import('../line-worker/ai.mjs');
+  assert.equal(answerText({choices:[{message:{content:[{type:'text', text:'a'}, {type:'text', text:'b'}]}}]}), 'ab');
+  assert.equal(answerText({response:'old'}), 'old');
+  assert.equal(answerText({choices:[{text:'t'}]}), 't');
+  const seen = [];
+  const env = {AI:{run:async (m, i) => { seen.push(i.max_completion_tokens); return seen.length === 1 ? {choices:[{finish_reason:'length', message:{content:null, reasoning_content:'...'}}]} : {choices:[{message:{content:'できた'}}]}; }}};
+  assert.deepEqual(await runText(env, [], 800, 0.7), {text:'できた'}); assert.deepEqual(seen, [800, 1600]);
+  const empty = {AI:{run:async () => ({choices:[{finish_reason:'length', message:{content:null, reasoning_content:'x'}}]})}};
+  assert.match((await runText(empty, [], 800, 0.7)).diag, /^E:length:content\.reasoning_content/);
+});

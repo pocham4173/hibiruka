@@ -192,7 +192,8 @@ async function fromText(db, env, owner, ev, message, now) {
   const {date: today, time: nowTime} = jstNow(now);
   let r;
   try { r = await parseRecord(env, message, today, cats.map(c => c.name)); }
-  catch { return [text('うまく読み取れませんでした。少し待ってもう一度送ってください。')]; }
+  catch (e) { r = {type:'error', diag:'X:' + String(e?.message || '').replace(/[^\x20-\x7e]/g, '').slice(0, 30)}; }
+  if (r.type === 'error') { console.error('Hibiruka LINE AI failed: ' + r.diag); return [text(`うまく読み取れませんでした。少し待ってもう一度送ってください。\n（${r.diag}）`)]; }
   if (r.type === 'none') return [text('予定や思い出として記録するときは、こんなふうに送ってください。\n\n「10/12 14時 歯医者」\n「明日 ゆかちゃんとランチ」\n「昨日 上田城でお花見した」\n\n「使い方」と送ると、できることを確認できます。')];
   if (!r.date) return [text('いつの予定か分かりませんでした。\n「10/12 14時 歯医者」「来週の土曜 ランチ」のように、日にちも入れて送ってください。')];
   if (!r.title && !r.place) return [text('何の予定か分かりませんでした。「10/12 14時 歯医者」のように送ってください。')];
@@ -238,10 +239,10 @@ async function lookBack(db, env, owner, monthsAgo, now) {
   if (!rows.length) return [text(`${label}の思い出はまだありません。位置情報を送ったり、「昨日 ランチ行った」と送ったりすると記録できます。`)];
   const quota = await takeQuota(db, owner.uid, now);
   if (!quota.ok) return [text(AI_LIMIT)];
-  let body;
-  try { body = await monthText(env, label, rows); } catch { body = ''; }
-  if (!body) return [text('うまくまとめられませんでした。少し待ってもう一度送ってください。')];
-  return [text(`✨ ${label}のふりかえり（${rows.length}件）\n\n${body}`)];
+  let r;
+  try { r = await monthText(env, label, rows); } catch (e) { r = {text:'', diag:'X:' + String(e?.message || '').replace(/[^\x20-\x7e]/g, '').slice(0, 30)}; }
+  if (!r.text) { console.error('Hibiruka LINE look-back failed: ' + r.diag); return [text(`うまくまとめられませんでした。少し待ってもう一度送ってください。\n（${r.diag}）`)]; }
+  return [text(`✨ ${label}のふりかえり（${rows.length}件）\n\n${r.text}`)];
 }
 
 // LINE gives "日本、〒386-0013 長野県…"; the country and postal code only add noise.
