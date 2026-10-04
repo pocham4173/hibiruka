@@ -19,7 +19,7 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
   onSnapshot:(options,success,error)=>{const cb=typeof options==="function"?options:success;queries.push({name,filters});if(name.endsWith("Events")||name==="events"){db.recordsCallback=cb;db.recordsError=error;if(delayed)return()=>{};}cb({docs:[],metadata:{fromCache:false}});return()=>{};}
  });
  const db={collection:name=>query(name),batch:()=>{const writes=[];return{set:(r,x)=>writes.push(()=>r.set(x)),update:(r,x)=>writes.push(()=>r.update(x)),delete:r=>writes.push(()=>r.delete()),commit:async()=>{if(db.failCommit){db.failCommit=false;throw new Error("test offline");}for(const write of writes)await write();if(db.failAcknowledgement){db.failAcknowledgement=false;throw new Error("test response lost");}}}},runTransaction:async fn=>fn({get:r=>r.get(),set:(r,x,opt)=>r.set(x,opt),update:(r,x)=>r.update(x)})};
- const user={uid:'A',isAnonymous:!linked,...(linked?{email:'a@example.test'}:{}),linkWithCredential:async c=>{user.email=c.email;user.isAnonymous=false;calls.push(['link',user.uid]);}};
+ const user={uid:'A',getIdToken:async()=>'id-token-A',isAnonymous:!linked,...(linked?{email:'a@example.test'}:{}),linkWithCredential:async c=>{user.email=c.email;user.isAnonymous=false;calls.push(['link',user.uid]);}};
  const auth={currentUser:user,signInWithEmailAndPassword:async()=>{calls.push(['signin']);},setPersistence:async()=>{},signInAnonymously:async()=>{calls.push(['anonymous']);return{user};}};
  const authFn=()=>auth;authFn.Auth={Persistence:{LOCAL:'local'}};authFn.EmailAuthProvider={credential:(email,password)=>({email,password})};
  const firestore=()=>db;firestore.FieldValue={delete:()=>'__delete__',serverTimestamp:()=>1,arrayUnion:x=>[x],arrayRemove:()=>[],increment:x=>x};
@@ -257,5 +257,24 @@ test('place names fall back from a shop name to city and town, never just the pr
   assert.equal(P({name:'国道18号',category:'highway',display_name:'国道18号, 中央東, 上田市, 長野県, 386-0013, 日本'}),'上田市中央東');
   assert.equal(P({category:'place',display_name:'小川町, 比企郡, 埼玉県, 日本'}),'小川町');
   assert.equal(P({category:'boundary',display_name:'埼玉県, 日本'}),'埼玉県');
+ }finally{a.close();}
+});
+
+test('AI writer sends the record with the sign-in token and lets the user insert or undo the text',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  const sent=[];let reply={status:200,body:{text:'久しぶりのヨガで、肩が軽くなった一日。',left:9}};
+  w.fetch=async(url,opt)=>{sent.push([url,opt]);return{ok:reply.status===200,status:reply.status,json:async()=>reply.body};};
+  d.getElementById('aiWrite').click();await new Promise(r=>setTimeout(r,5));
+  assert.equal(sent.length,0,'nothing to write about yet');
+  d.querySelector('#catPills [data-cat]').click();d.getElementById('fTitle').value='ベーシックヨガ';d.getElementById('fMemo').value='体がかたかった';
+  d.getElementById('aiWrite').click();assert.equal(d.getElementById('aiWrite').disabled,true);await new Promise(r=>setTimeout(r,5));
+  assert.equal(sent[0][0],'https://hibiruka-line.okm-co.workers.dev/ai/memory-text');assert.equal(sent[0][1].headers.Authorization,'Bearer id-token-A');
+  const body=JSON.parse(sent[0][1].body);assert.equal(body.title,'ベーシックヨガ');assert.equal(body.memo,'体がかたかった');assert.match(body.date,/^\d{4}-\d{2}-\d{2}$/);
+  assert(!d.getElementById('aiBox').classList.contains('hidden'));assert.match(d.getElementById('aiNote').textContent,/あと9回/);
+  assert.equal(d.getElementById('aiWrite').disabled,false);
+  d.getElementById('aiUse').click();assert.equal(d.getElementById('fMemo').value,'久しぶりのヨガで、肩が軽くなった一日。');
+  d.getElementById('aiUndo').click();assert.equal(d.getElementById('fMemo').value,'体がかたかった');assert(d.getElementById('aiBox').classList.contains('hidden'));
+  reply={status:429,body:{error:'limit',left:0}};d.getElementById('aiWrite').click();await new Promise(r=>setTimeout(r,5));
+  assert(d.getElementById('aiBox').classList.contains('hidden'));assert.match(d.getElementById('toast').textContent,/1日10回/);
  }finally{a.close();}
 });
