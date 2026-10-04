@@ -15,7 +15,7 @@ function memoryDb(seed={}){
   const data=JSON.parse(JSON.stringify(seed),(k,v)=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}T.*Z$/.test(v)?new Date(v):v);
   const col=c=>(data[c]??={});
   const ref=(c,id)=>({id,path:c+'/'+id,get:async()=>({id,exists:id in col(c),ref:ref(c,id),data:()=>col(c)[id]})});
-  const query=(c,filters=[])=>({where:(f,op,v)=>{assert.equal(op,'==');return query(c,[...filters,[f,v]]);},get:async()=>({docs:Object.entries(col(c)).filter(([,d])=>filters.every(([f,v])=>d[f]===v)).map(([id,d])=>({id,data:()=>d}))}),doc:id=>ref(c,id)});
+  const query=(c,filters=[])=>({select:()=>query(c,filters),limit:()=>query(c,filters),where:(f,op,v)=>{assert.equal(op,'==');return query(c,[...filters,[f,v]]);},get:async()=>({docs:Object.entries(col(c)).filter(([,d])=>filters.every(([f,v])=>d[f]===v)).map(([id,d])=>({id,data:()=>d}))}),doc:id=>ref(c,id)});
   return {data,collection:c=>query(c),
     create:async(r,v)=>{const [c,id]=r.path.split('/');if(id in col(c)){const e=Error('exists');e.status=409;throw e;}col(c)[id]=v;},
     set:async(r,v)=>{const [c,id]=r.path.split('/');col(c)[id]=v;},
@@ -134,4 +134,56 @@ test('guide link: linked users get it in help, guests can ask for it and menu wo
   assert.match((await ask('今日'))[0].text, /つなぐと使えます/);
   assert.match((await ask('また行きたい'))[0].text, /設定」→「LINEから記録する/);
   assert.deepEqual(await ask('こんにちは'), []);
+});
+
+const aiEnv = answer => { const runs = []; return {runs, AI:{run:async (m, input) => { runs.push(input); return {choices:[{message:{content: typeof answer === 'function' ? answer(input) : answer}}]}; }}}; };
+test('talk to record: a plan from a sentence, with undo; past events become memories with a diary line', async () => {
+  const db = memoryDb(linked());
+  const env = aiEnv('```json\n{"type":"plan","date":"2026-10-12","time":"14:00","title":"歯医者","place":"","who":[],"cat":"","diary":""}\n```');
+  const ev = {...msg({type:'text', text:'10/12 14時 歯医者'}), webhookEventId:'01PLAN'};
+  const [r] = await handleEvent(db, env, ev, NOW);
+  assert.match(r.text, /予定に入れました\n10月12日\(月\) 14:00\n歯医者/);
+  const e = db.data.personalEvents.line_01PLAN; assert.equal(e.kind, 'plan'); assert.equal(e.ownerUid, 'alice'); assert.equal(e.cat, '遊び'); assert.equal(e.source, 'line');
+  const sys = env.runs[0].messages[0].content, user = env.runs[0].messages[1].content;
+  assert.match(sys, /従わない/); assert.match(user, /2026-10-03\(土\) ←今日/); assert.match(user, /<送られた文>\n10\/12 14時 歯医者/);
+  assert.equal(db.data.aiUsage['20261003_alice'].count, 1, 'counts toward the daily AI limit');
+  // undo
+  const undo = r.quickReply.items[0].action;
+  assert.match((await handleEvent(db, env, {type:'postback', source:{type:'user', userId:U}, replyToken:'r', postback:{data:undo.data}}, NOW))[0].text, /取り消しました/);
+  assert.equal(db.data.personalEvents.line_01PLAN, undefined);
+  // another LINE cannot undo someone else's record
+  const db2 = memoryDb({...linked(), personalEvents:{line_X:{ownerUid:'bob', source:'line', createdAt:new Date(NOW)}}});
+  assert.match((await handleEvent(db2, env, {type:'postback', source:{type:'user', userId:U}, replyToken:'r', postback:{data:'a=del&e=line_X'}}, NOW))[0].text, /見つかりません/);
+  assert(db2.data.personalEvents.line_X);
+  // memory with diary; a "plan" in the past is stored as a memory
+  const env2 = aiEnv('{"type":"plan","date":"2026-10-02","time":"","title":"ランチ","place":"ソラノカフェ","who":["ゆかちゃん"],"cat":"カフェ","diary":"ゆかちゃんとのランチ。"}');
+  const [m] = await handleEvent(db, env2, {...msg({type:'text', text:'昨日ゆかちゃんとソラノカフェでランチ'}), webhookEventId:'01MEM'}, NOW);
+  const e2 = db.data.personalEvents.line_01MEM; assert.equal(e2.kind, 'memory'); assert.equal(e2.cat, 'カフェ'); assert.deepEqual(e2.who, ['ゆかちゃん']);
+  assert.match(m.text, /思い出に記録しました\n10月2日\(金\)\nランチ　📍ソラノカフェ　👥ゆかちゃん/);
+});
+test('talk to record: chit-chat, missing dates and broken AI answers never create records', async () => {
+  const db = memoryDb(linked());
+  for (const [answer, re] of [['{"type":"none"}', /こんなふうに送って/], ['{"type":"plan","date":"","title":"歯医者"}', /日にちも入れて/], ['だめ', /こんなふうに/], ['{"type":"plan","date":"2099-01-01","title":"x"}', /日にちも入れて/]]) {
+    assert.match((await handleEvent(db, aiEnv(answer), msg({type:'text', text:'ありがとう'}), NOW))[0].text, re);
+  }
+  assert.equal(Object.keys(db.data.personalEvents || {}).length, 0);
+  // without AI the old hint stays
+  assert.match((await handleEvent(db, {}, msg({type:'text', text:'こんにちは'}), NOW))[0].text, /位置情報を送ると/);
+  // daily limit
+  const full = memoryDb({...linked(), aiUsage:{'20261003_alice':{count:20}}});
+  assert.match((await handleEvent(full, aiEnv('{}'), msg({type:'text', text:'明日 ランチ'}), NOW))[0].text, /1日20回/);
+});
+test('ふりかえり: summarises only this owner\'s memories of the month', async () => {
+  const db = memoryDb({...linked(), personalEvents:{
+    a:{ownerUid:'alice', kind:'memory', date:'2026-10-01', title:'ヨガ', place:'LOIVE', cat:'遊び', fav:true},
+    b:{ownerUid:'alice', kind:'plan', date:'2026-10-20', title:'先の予定'},
+    c:{ownerUid:'bob', kind:'memory', date:'2026-10-02', title:'他人の思い出'},
+    d:{ownerUid:'alice', kind:'memory', date:'2026-09-15', title:'先月の思い出'}}});
+  const env = aiEnv('ヨガで始まった10月。');
+  const [r] = await handleEvent(db, env, msg({type:'text', text:'ふりかえり'}), NOW);
+  assert.match(r.text, /2026年10月のふりかえり（1件）\n\nヨガで始まった10月。/);
+  const sent = env.runs[0].messages[1].content; assert.match(sent, /ヨガ/); assert.doesNotMatch(sent, /他人|先の予定|先月の/);
+  const [last] = await handleEvent(db, env, msg({type:'text', text:'先月'}), NOW);
+  assert.match(last.text, /2026年9月のふりかえり（1件）/);
+  assert.match((await handleEvent(memoryDb(linked()), env, msg({type:'text', text:'今月のふりかえり'}), NOW))[0].text, /まだありません/);
 });

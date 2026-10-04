@@ -36,12 +36,15 @@ export function firestore(accessToken, fetcher=fetch, limit=4){
   function ref(c,id){if(!/^[A-Za-z]+$/.test(c)||!id||id.includes('/'))throw Error('Invalid document path');return {id,parent:{id:c},path:c+'/'+id,get:async()=>snapshot(await call('/'+c+'/'+encodeURIComponent(id)),c,id)};}
   function snapshot(doc,c,id){return {id:id||doc.name.split('/').pop(),exists:!!doc,ref:ref(c,id||doc.name.split('/').pop()),updateTime:doc?.updateTime,data:()=>data(doc?.fields)};}
   const ops={'<=':'LESS_THAN_OR_EQUAL','==':'EQUAL'};
-  function collection(c,filters=[],n=limit){return {
-    doc:id=>ref(c,id),limit:size=>collection(c,filters,Math.min(size,limit)),
-    where:(field,op,value)=>{if(!ops[op])throw Error('Unsupported query');return collection(c,[...filters,{fieldFilter:{field:{fieldPath:field},op:ops[op],value:encode(value)}}],n);},
+  // select(): only these fields come back (keeps big photo strings out of the Worker's CPU budget)
+  function collection(c,filters=[],n=limit,only=null){return {
+    doc:id=>ref(c,id),limit:size=>collection(c,filters,Math.min(size,limit),only),
+    select:(...names)=>collection(c,filters,n,names),
+    where:(field,op,value)=>{if(!ops[op])throw Error('Unsupported query');return collection(c,[...filters,{fieldFilter:{field:{fieldPath:field},op:ops[op],value:encode(value)}}],n,only);},
     get:async()=>{
       const where=filters.length>1?{compositeFilter:{op:'AND',filters}}:filters[0];
-      return {docs:(await call(':runQuery',{structuredQuery:{from:[{collectionId:c}],limit:n,...(where?{where}:{})}})||[]).filter(x=>x.document).map(x=>snapshot(x.document,c))};
+      const select=only?{select:{fields:only.map(f=>({fieldPath:f}))}}:{};
+      return {docs:(await call(':runQuery',{structuredQuery:{from:[{collectionId:c}],limit:n,...select,...(where?{where}:{})}})||[]).filter(x=>x.document).map(x=>snapshot(x.document,c))};
     }
   };}
   const write=list=>call(':commit',{writes:list});
