@@ -301,6 +301,15 @@
 
   /* シート */
   .ai-btn { margin-top: 8px; font-size: 15px; padding: 11px; }
+  .ai-link { background: none; border: none; padding: 6px 0 0; color: var(--lav-t); font-weight: 600; font-size: 13.5px; cursor: pointer; font-family: inherit; }
+  .ai-link:disabled { opacity: .6; }
+  #aiTitles { margin-top: 6px; }
+  .ai-styles { display: flex; gap: 6px; margin-bottom: 10px; }
+  .ai-styles .chip[aria-pressed="true"] { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .ai-month { margin-bottom: 14px; background: var(--lav); border-color: var(--lav-b); }
+  .ai-month-head { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; }
+  .ai-month .btnrow { margin-bottom: 0; }
+  #monthOut { margin-top: 12px; }
   .ai-btn[aria-busy="true"] { opacity: .7; }
   .ai-box { margin-top: 10px; padding: 14px; border-radius: 12px; background: var(--lav); border: 1px solid var(--lav-b); }
   .ai-text { margin: 0 0 10px; line-height: 1.8; color: var(--text); white-space: pre-wrap; }
@@ -449,10 +458,17 @@
 
       <div class="step"><span class="n">4</span>なにをする？・なにをした？</div>
       <input type="text" id="fTitle" placeholder="例：ランチ、映画、髪を切る">
+      <button type="button" class="ai-link" id="aiTitle">✨ 題名の案をAIに聞く</button>
+      <div class="chips hidden" id="aiTitles" aria-live="polite"></div>
       <label class="lbl">メモ<small>なくてもOK・LINEにも載ります</small></label>
       <textarea id="fMemo" placeholder="例：駐車場は裏側／パスタがおいしかった"></textarea>
       <button type="button" class="btn sub ai-btn" id="aiWrite">✨ AIで文章を作成</button>
       <div class="ai-box hidden" id="aiBox" aria-live="polite">
+        <div class="ai-styles" role="group" aria-label="文章の種類">
+          <button type="button" class="chip" data-ai-mode="diary" aria-pressed="true">日記</button>
+          <button type="button" class="chip" data-ai-mode="short" aria-pressed="false">ひとこと</button>
+          <button type="button" class="chip" data-ai-mode="sns" aria-pressed="false">SNS用</button>
+        </div>
         <p class="ai-text" id="aiText"></p>
         <div class="ai-actions" id="aiActions">
           <button type="button" class="btn small" id="aiUse">メモに入れる</button>
@@ -521,6 +537,11 @@
 
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:22px">
       <h2 id="listTitle" style="margin:0 0 12px">これからの予定</h2><span id="listCount" style="color:var(--muted);font-weight:700"></span>
+    </div>
+    <div id="monthAi" class="card ai-month hidden">
+      <div class="ai-month-head"><b>✨ AIでふりかえり</b><span class="note" style="margin:0">思い出から、ひと月のまとめを作ります</span></div>
+      <div class="btnrow"><button type="button" class="btn small" id="monthThis">今月</button><button type="button" class="btn small sub" id="monthLast">先月</button></div>
+      <div id="monthOut" class="hidden"><p class="ai-text" id="monthText"></p><div class="ai-actions"><button type="button" class="btn small sub" id="monthCopy">コピー</button><button type="button" class="btn small ghost" id="monthClose">閉じる</button></div><p class="note" id="monthNote"></p></div>
     </div>
     <div id="listBox"></div>
   </section>
@@ -751,7 +772,7 @@
     <button type="button" class="pill" aria-pressed="false" data-insta="x">X<small>文章つき</small></button>
   </div>
   <div class="insta-preview"><img id="instaImg" alt="投稿用の画像のプレビュー"></div>
-  <div id="instaTextBox" class="hidden"><label class="lbl" for="instaText">投稿する文章<small>直してから送れます</small></label><textarea id="instaText" rows="4"></textarea><p class="note" id="instaCount"></p></div>
+  <div id="instaTextBox" class="hidden"><label class="lbl" for="instaText">投稿する文章<small>直してから送れます</small></label><textarea id="instaText" rows="4"></textarea><button type="button" class="ai-link" id="instaAi">✨ AIに投稿文を考えてもらう</button><p class="note" id="instaCount"></p></div>
   <p class="note center" id="instaNote" role="status"></p>
   <button type="button" class="btn" id="instaShare" disabled>共有して Instagram を選ぶ</button>
   <a class="btn sub hidden" id="instaSave" download="hibiruka.jpg">画像を保存する</a>
@@ -1113,11 +1134,17 @@ function setupForm() {
   $("catEditBtn").onclick = openCatSheet;
   $("fFav").onclick = () => { form.fav = !form.fav; $("fFav").classList.toggle("on", form.fav); };
   $("fPhotoInput").onchange = addPhotos;
-  $("aiWrite").onclick = writeWithAi; bindAiActions();
+  $("aiWrite").onclick = () => writeWithAi("diary"); bindAiActions();
+  document.querySelectorAll("[data-ai-mode]").forEach(c => c.onclick = () => writeWithAi(c.dataset.aiMode));
+  $("aiTitle").onclick = suggestTitles;
+  $("instaAi").onclick = snsWithAi;
+  $("monthThis").onclick = () => monthWithAi(0); $("monthLast").onclick = () => monthWithAi(1);
+  $("monthCopy").onclick = () => copyText($("monthText").textContent);
+  $("monthClose").onclick = () => $("monthOut").classList.add("hidden");
   $("fInsta").onclick = () => {
     if (form.photoPending) { toast("写真を準備しています。少し待ってからもう一度押してください。"); return; }
     const p = form.photos[0];
-    openInsta({ date: $("fDate").value || todayStr(), title: $("fTitle").value.trim(), place: $("fPlace").value.trim(), cat: form.cat }, Promise.resolve(p ? (p.full || p.thumb) : ""));
+    openInsta({ date: $("fDate").value || todayStr(), title: $("fTitle").value.trim(), place: $("fPlace").value.trim(), memo: $("fMemo").value.trim(), cat: form.cat }, Promise.resolve(p ? (p.full || p.thumb) : ""));
   };
   $("saveBtn").onclick = saveRecord;
   $("cancelEditBtn").onclick = () => { resetForm(); goTab("list"); };
@@ -1138,7 +1165,7 @@ function resetForm() {
   $("fKind").value = "plan"; $("fDate").value = todayStr(); $("fTime").value = "";
   $("fPlace").value = ""; $("fTitle").value = ""; $("fMemo").value = ""; $("fLink").value = "";
   $("fFav").classList.remove("on");
-  closeAi();
+  closeAi(); if ($("aiTitles")) $("aiTitles").classList.add("hidden");
   $("saveBtn").textContent = "この内容で記録する";
   $("cancelEditBtn").classList.add("hidden");
   $("recEyebrow").textContent = "記録の種類を選ぶ";
@@ -1231,44 +1258,114 @@ async function addPhotos(ev) {
 }
 /* ✨ AIで文章を作成：題名・日付・場所・メモから、思い出の文章（80〜120文字）を作る */
 let aiBusy = false;
-const AI_ACTIONS = '<button type="button" class="btn small" id="aiUse">メモに入れる</button><button type="button" class="btn small sub" id="aiAgain">もう一度作る</button><button type="button" class="btn small ghost" id="aiClose">やめる</button>';
+const AI_ACTIONS = '<button type="button" class="btn small" id="aiUse">メモに入れる</button><button type="button" class="btn small sub" id="aiAgain">もう一度作る</button><button type="button" class="btn small sub" id="aiCopy">コピー</button><button type="button" class="btn small ghost" id="aiClose">やめる</button>';
 function bindAiActions() {
   $("aiActions").innerHTML = AI_ACTIONS;
-  $("aiUse").onclick = useAiText; $("aiAgain").onclick = writeWithAi; $("aiClose").onclick = closeAi;
+  $("aiUse").onclick = useAiText; $("aiAgain").onclick = () => writeWithAi(); $("aiClose").onclick = closeAi;
+  $("aiCopy").onclick = () => copyText($("aiText").textContent);
 }
 function closeAi() {
   if (!$("aiBox")) return;
   $("aiBox").classList.add("hidden"); $("aiText").textContent = ""; $("aiNote").textContent = "";
   bindAiActions();
 }
-async function writeWithAi() {
+// AIの呼び出し（共通）。失敗したときは利用者向けの文を投げる
+async function askAi(payload) {
+  const token = await auth.currentUser.getIdToken();
+  let r, out;
+  try {
+    r = await fetch(CONFIG.aiUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify(payload) });
+    out = await r.json().catch(() => ({}));
+  } catch { throw new Error("通信できませんでした。電波のよい所でもう一度お試しください。"); }
+  if (r.ok && (out.text || out.titles)) return out;
+  throw new Error(out.error === "limit" ? "AIは1日20回までです。また明日使ってください。"
+    : out.error === "busy" ? "今日はAIがとても混んでいます。また明日お試しください。"
+    : out.error === "not_configured" ? "AIの文章作成は、いま準備中です。"
+    : out.error === "auth" ? "もう一度アプリを開き直してから試してください。"
+    : "うまく作れませんでした。少し待ってもう一度お試しください。");
+}
+const leftNote = out => `（今日はあと${out.left ?? 0}回）`;
+function recordFromForm() { return { title: $("fTitle").value.trim(), place: $("fPlace").value.trim(), memo: $("fMemo").value.trim(), date: $("fDate").value || todayStr(), cat: form.cat ? catLabel(form.cat) : "" }; }
+let aiMode = "diary";
+async function writeWithAi(mode) {
   if (aiBusy) return;
-  const input = { title: $("fTitle").value.trim(), place: $("fPlace").value.trim(), memo: $("fMemo").value.trim(), date: $("fDate").value || todayStr(), cat: form.cat ? catLabel(form.cat) : "" };
+  if (typeof mode === "string") aiMode = mode;
+  const input = recordFromForm();
   if (!input.title && !input.place && !input.memo) { toast("「どこで？」か「なにをする？」を入れてから押してください"); $("fTitle").focus(); return; }
   const btn = $("aiWrite"), started = form;
   aiBusy = true; btn.disabled = true; btn.setAttribute("aria-busy", "true"); btn.textContent = "✨ 文章を作っています…";
+  document.querySelectorAll("[data-ai-mode]").forEach(c => { c.disabled = true; c.setAttribute("aria-pressed", String(c.dataset.aiMode === aiMode)); });
   try {
-    const token = await auth.currentUser.getIdToken();
-    const r = await fetch(CONFIG.aiUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify(input) });
-    const out = await r.json().catch(() => ({}));
+    const out = await askAi({ ...input, mode: aiMode });
     if (form !== started) return;
-    if (!r.ok || !out.text) {
-      const msg = out.error === "limit" ? "AIの文章は1日10回までです。また明日使ってください。"
-        : out.error === "busy" ? "今日はAIがとても混んでいます。また明日お試しください。"
-        : out.error === "not_configured" ? "AIの文章作成は、いま準備中です。"
-        : out.error === "auth" ? "もう一度アプリを開き直してから試してください。"
-        : "うまく作れませんでした。少し待ってもう一度お試しください。";
-      toast(msg, 5000); return;
-    }
     bindAiActions();
     $("aiText").textContent = out.text;
-    $("aiNote").textContent = `AIが作った文章です。違うところは直してください。（今日はあと${out.left ?? 0}回）`;
+    $("aiNote").textContent = `AIが作った文章です。違うところは直してください。${leftNote(out)}`;
     $("aiBox").classList.remove("hidden");
-  } catch {
-    toast("通信できませんでした。電波のよい所でもう一度お試しください。", 5000);
+  } catch (e) {
+    toast(e.message, 5000);
   } finally {
     aiBusy = false; btn.disabled = false; btn.removeAttribute("aria-busy"); btn.textContent = "✨ AIで文章を作成";
+    document.querySelectorAll("[data-ai-mode]").forEach(c => { c.disabled = false; });
   }
+}
+async function suggestTitles() {
+  if (aiBusy) return;
+  const input = recordFromForm();
+  if (!input.place && !input.memo && !input.title) { toast("「どこで？」かメモを入れてから押してください"); $("fPlace").focus(); return; }
+  const btn = $("aiTitle"), started = form;
+  aiBusy = true; btn.disabled = true; btn.textContent = "✨ 考えています…";
+  try {
+    const out = await askAi({ ...input, mode: "title" });
+    if (form !== started) return;
+    const box = $("aiTitles");
+    box.innerHTML = out.titles.map(t => `<button type="button" class="chip" data-title="${esc(t)}">${esc(t)}</button>`).join("") + `<span class="note" style="margin:4px 0 0;width:100%">押すと題名に入ります${leftNote(out)}</span>`;
+    box.classList.remove("hidden");
+    box.querySelectorAll("[data-title]").forEach(b => b.onclick = () => { $("fTitle").value = b.dataset.title; box.classList.add("hidden"); });
+  } catch (e) {
+    toast(e.message, 5000);
+  } finally {
+    aiBusy = false; btn.disabled = false; btn.textContent = "✨ 題名の案をAIに聞く";
+  }
+}
+async function snsWithAi() {
+  const cur = insta; if (!cur || aiBusy) return;
+  const r = cur.rec, input = { title: r.title || "", place: shortPlace(r.place), memo: r.memo || "", date: r.date || todayStr(), cat: r.cat ? catLabel(r.cat) : "" };
+  const btn = $("instaAi");
+  aiBusy = true; btn.disabled = true; btn.textContent = "✨ 考えています…";
+  try {
+    const out = await askAi({ ...input, mode: "sns" });
+    if (insta !== cur) return;
+    $("instaText").value = out.text; countX();
+    toast("AIの投稿文を入れました。直してから送れます" + leftNote(out), 4000);
+  } catch (e) {
+    toast(e.message, 5000);
+  } finally {
+    aiBusy = false; btn.disabled = false; btn.textContent = "✨ AIに投稿文を考えてもらう";
+  }
+}
+async function monthWithAi(offset) {
+  if (aiBusy) return;
+  const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - offset);
+  const ym = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`, label = `${d.getFullYear()}年${d.getMonth() + 1}月`;
+  const list = events.filter(e => (e.date || "").startsWith(ym) && !isPlan(e)).sort((a, b) => a.date < b.date ? -1 : 1).slice(0, 40)
+    .map(e => ({ date: e.date, title: e.title || "", place: shortPlace(e.place), cat: catLabel(e.cat), memo: (e.memo || "").slice(0, 60), fav: !!e.fav }));
+  if (!list.length) { toast(`${label}の思い出はまだありません`); return; }
+  const btns = [$("monthThis"), $("monthLast")];
+  aiBusy = true; btns.forEach(b => b.disabled = true); $("monthNote").textContent = ""; $("monthText").textContent = `${label}をふりかえっています…`; $("monthOut").classList.remove("hidden");
+  try {
+    const out = await askAi({ mode: "month", month: label, records: list });
+    $("monthText").textContent = out.text;
+    $("monthNote").textContent = `${label}・${list.length}件の思い出から作りました${leftNote(out)}`;
+  } catch (e) {
+    $("monthOut").classList.add("hidden"); toast(e.message, 5000);
+  } finally {
+    aiBusy = false; btns.forEach(b => b.disabled = false);
+  }
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); toast("コピーしました"); }
+  catch { toast("コピーできませんでした。文章を長押ししてコピーしてください"); }
 }
 function useAiText() {
   const before = $("fMemo").value;
@@ -1636,6 +1733,7 @@ function renderList() {
     $("calAdd").textContent = calSel < t ? "＋ この日の思い出を残す" : "＋ この日に予定を追加";
     html = items.length ? items.map(card).join("") : `<p class="note center">この日の記録はありません</p>`;
   }
+  $("monthAi").classList.toggle("hidden", view !== "mem");
   $("listTitle").textContent = title;
   $("listCount").textContent = `${items.length}件`;
   $("listBox").innerHTML = notice + (waiting && !items.length ? "" : html);

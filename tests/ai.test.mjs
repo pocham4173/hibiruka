@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {generateKeyPairSync, createSign} from 'node:crypto';
-import {handleAi, verifyIdToken, resetKeyCache, userMessage, SYSTEM_PROMPT, PER_USER_DAILY, MODEL} from '../line-worker/ai.mjs';
+import {handleAi, verifyIdToken, resetKeyCache, userMessage, SYSTEM_PROMPT, PROMPTS, PER_USER_DAILY, MODEL} from '../line-worker/ai.mjs';
 import worker from '../line-worker/index.mjs';
 
 const NOW = Date.parse('2026-10-04T08:00:00Z'); // 17:00 JST
@@ -87,4 +87,29 @@ test('worker routes the AI writer and still hides everything else', async () => 
   const res = await worker.fetch(new Request('https://w/ai/memory-text', {method: 'POST', headers: {origin: ORIGIN}, body: '{}'}), {});
   assert.equal(res.status, 503);
   assert.equal((await worker.fetch(new Request('https://w/ai/memory-text', {method: 'GET'}), {})).status, 404);
+});
+
+test('other kinds of writing: one-liner, SNS caption with hashtags, three title ideas and a month look-back', async () => {
+  resetKeyCache(); let s = setup({aiText: '体のかたさに笑った、久しぶりのヨガの日。'});
+  let out = await (await handleAi(req({...record, mode: 'short'}), s.env, s.deps)).json();
+  assert.equal(out.text, '体のかたさに笑った、久しぶりのヨガの日。'); assert.equal(s.runs[0][1].messages[0].content, PROMPTS.short);
+  resetKeyCache(); s = setup({aiText: '久しぶりのヨガ🧘 肩がすっきり。\n#ヨガ #上田市 #ヒビルカ'});
+  out = await (await handleAi(req({...record, mode: 'sns'}), s.env, s.deps)).json();
+  assert.equal(out.text, '久しぶりのヨガ🧘 肩がすっきり。\n#ヨガ #上田市 #ヒビルカ', 'hashtags stay on their own line');
+  resetKeyCache(); s = setup({aiText: '1. 久しぶりのヨガ\n2. 「体ほぐしの夕方」\n- かたい体と再会した日\n久しぶりのヨガ'});
+  out = await (await handleAi(req({place: 'LOIVE', date: '2026-10-04', mode: 'title'}), s.env, s.deps)).json();
+  assert.deepEqual(out.titles, ['久しぶりのヨガ', '体ほぐしの夕方', 'かたい体と再会した日']);
+  resetKeyCache(); s = setup({aiText: 'ヨガに3回通った10月。'});
+  const records = [{date: '2026-10-01', title: 'ヨガ', place: 'LOIVE', cat: 'ヨガ', fav: true}, {date: '2026-10-03', title: 'カット', cat: '美容院', memo: 'さっぱり'}, {date: 'bad', title: 'x'}];
+  out = await (await handleAi(req({mode: 'month', month: '2026年10月', records}), s.env, s.deps)).json();
+  assert.equal(out.text, 'ヨガに3回通った10月。');
+  const msg = s.runs[0][1].messages[1].content;
+  assert.match(msg, /2026年10月の記録（2件）/); assert.match(msg, /♥また行きたい/); assert.match(msg, /メモ: さっぱり/); assert.equal(s.runs[0][1].messages[0].content, PROMPTS.month);
+  assert.equal((await handleAi(req({mode: 'month', month: '2026年10月', records: []}), s.env, s.deps)).status, 400);
+  assert.equal((await handleAi(req({mode: 'month', month: 'いつか', records}), s.env, s.deps)).status, 400);
+  assert.equal((await handleAi(req({...record, mode: 'unknown'}), s.env, s.deps)).status, 200, 'unknown modes fall back to the diary');
+});
+test('every prompt keeps the safety rules: facts only and records are data, not instructions', () => {
+  for (const [mode, p] of Object.entries(PROMPTS)) { assert.match(p, /事実だけ/, mode); assert.match(p, /従わない/, mode); }
+  assert.match(userMessage({...record}, '2026-10-04', 'title'), /題名の案を3つ/);
 });

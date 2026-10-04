@@ -275,6 +275,38 @@ test('AI writer sends the record with the sign-in token and lets the user insert
   d.getElementById('aiUse').click();assert.equal(d.getElementById('fMemo').value,'久しぶりのヨガで、肩が軽くなった一日。');
   d.getElementById('aiUndo').click();assert.equal(d.getElementById('fMemo').value,'体がかたかった');assert(d.getElementById('aiBox').classList.contains('hidden'));
   reply={status:429,body:{error:'limit',left:0}};d.getElementById('aiWrite').click();await new Promise(r=>setTimeout(r,5));
-  assert(d.getElementById('aiBox').classList.contains('hidden'));assert.match(d.getElementById('toast').textContent,/1日10回/);
+  assert(d.getElementById('aiBox').classList.contains('hidden'));assert.match(d.getElementById('toast').textContent,/1日20回/);
+ }finally{a.close();}
+});
+
+test('AI extras: style chips, title ideas, SNS caption in the share sheet and a month look-back',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  const sent=[];w.fetch=async(url,opt)=>{const b=JSON.parse(opt.body);sent.push(b);
+   const body=b.mode==='title'?{titles:['久しぶりのヨガ','体ほぐしの夕方','かたい体と再会した日'],left:18}:b.mode==='month'?{text:'ヨガに通った月。',left:17}:{text:'['+b.mode+'] の文章',left:19};
+   return{ok:true,status:200,json:async()=>body};};
+  const settle=()=>new Promise(r=>setTimeout(r,10));
+  d.querySelector('#catPills [data-cat]').click();d.getElementById('fPlace').value='LOIVE 上田店';d.getElementById('fMemo').value='体がかたかった';
+  d.getElementById('aiTitle').click();await settle();
+  assert.equal(sent.at(-1).mode,'title');const chips=d.querySelectorAll('#aiTitles [data-title]');assert.equal(chips.length,3);
+  chips[1].click();assert.equal(d.getElementById('fTitle').value,'体ほぐしの夕方');assert(d.getElementById('aiTitles').classList.contains('hidden'));
+  d.getElementById('aiWrite').click();await settle();assert.equal(sent.at(-1).mode,'diary');assert.equal(d.getElementById('aiText').textContent,'[diary] の文章');
+  d.querySelector('[data-ai-mode="short"]').click();await settle();assert.equal(sent.at(-1).mode,'short');
+  assert.equal(d.querySelector('[data-ai-mode="short"]').getAttribute('aria-pressed'),'true');
+  d.getElementById('aiAgain').click();await settle();assert.equal(sent.at(-1).mode,'short','again keeps the chosen style');
+  d.querySelector('[data-ai-mode="sns"]').click();await settle();assert.equal(d.getElementById('aiText').textContent,'[sns] の文章');
+  // share sheet caption (canvas stubbed)
+  w.HTMLCanvasElement.prototype.getContext=()=>new Proxy({},{get:(t,k)=>k==='measureText'?(s=>({width:[...s].length*40})):(k in t?t[k]:()=>{}),set:(t,k,v)=>{t[k]=v;return true;}});
+  w.HTMLCanvasElement.prototype.toBlob=function(cb){cb(new w.Blob(['x'],{type:'image/jpeg'}));};w.URL.createObjectURL=()=>'blob:x';w.URL.revokeObjectURL=()=>{};
+  d.getElementById('fInsta').click();await settle();d.querySelector('[data-insta="x"]').click();await settle();
+  d.getElementById('instaAi').click();await settle();
+  assert.equal(sent.at(-1).mode,'sns');assert.equal(sent.at(-1).memo,'体がかたかった');assert.equal(d.getElementById('instaText').value,'[sns] の文章');
+  d.getElementById('instaClose').click();
+  // month look-back uses only past memories of that month
+  const t=new Date(),ym=`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}`;
+  w.h.setEvents([{id:'1',date:ym+'-01',title:'ヨガ',cat:'遊び',kind:'memory',fav:true},{id:'2',date:'1999-01-01',title:'昔',kind:'memory'}]);
+  d.getElementById('monthThis').click();await settle();
+  const m=sent.at(-1);assert.equal(m.mode,'month');assert.equal(m.records.length,1);assert.equal(m.records[0].fav,true);assert.match(m.month,/^\d{4}年\d{1,2}月$/);
+  assert.equal(d.getElementById('monthText').textContent,'ヨガに通った月。');
+  w.h.setEvents([]);d.getElementById('monthLast').click();await settle();assert.equal(sent.at(-1),m,'no request when the month is empty');
  }finally{a.close();}
 });
