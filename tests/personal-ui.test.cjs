@@ -228,7 +228,7 @@ function exifJpeg({date='2026:09:20 12:34:56',lat=[36,24,5.4],lng=[138,15,0]}={}
 }
 test('a photo with location fills the date and place, and the coordinates are saved',async()=>{
  const a=app();try{const {w,d}=a;await w.h.startOwner();
-  const urls=[];w.fetch=async url=>{urls.push(url);return{ok:true,json:async()=>({name:'ソラノカフェ',address:{city:'上田市',suburb:'中央'}})};};
+  const urls=[];w.fetch=async url=>{urls.push(url);return{ok:true,json:async()=>({name:'ソラノカフェ',category:'amenity',display_name:'ソラノカフェ, 中央, 上田市, 長野県, 386-0012, 日本'})};};
   w.h.setShrink(async()=>'img');
   d.querySelector('#catPills [data-cat]').click();
   const bytes=exifJpeg();const file=new w.Blob([bytes],{type:'image/jpeg'});
@@ -241,11 +241,21 @@ test('a photo with location fills the date and place, and the coordinates are sa
   const [,e]=[...a.data].find(([k])=>k.startsWith('personalEvents/'));assert.equal(e.lat,36.4015);assert.equal(e.lng,138.25);
  }finally{a.close();}
  // Editing the place by hand drops the photo coordinates; a typed date is never overwritten.
- const b=app();try{const {w,d}=b;await w.h.startOwner();w.fetch=async()=>({ok:true,json:async()=>({name:'X',address:{}})});w.h.setShrink(async()=>'img');
+ const b=app();try{const {w,d}=b;await w.h.startOwner();w.fetch=async()=>({ok:true,json:async()=>({name:'X',category:'shop',display_name:'X, 日本'})});w.h.setShrink(async()=>'img');
   d.querySelector('#catPills [data-cat]').click();d.getElementById('fDate').value='2026-01-02';d.getElementById('fDate').oninput();
   await w.h.addPhotos({target:{files:[new w.Blob([exifJpeg()])],value:'x'}});for(let i=0;i<5;i++)await new Promise(r=>setTimeout(r,5));
   assert.equal(d.getElementById('fDate').value,'2026-01-02');assert.equal(d.getElementById('fPlace').value,'X');
   d.getElementById('fPlace').value='自分で書いた場所';d.getElementById('fPlace').oninput();
   await w.h.saveRecord();const [,e]=[...b.data].find(([k])=>k.startsWith('personalEvents/'));assert.equal(e.lat,undefined);assert.equal(e.place,'自分で書いた場所');
  }finally{b.close();}
+});
+
+test('place names fall back from a shop name to city and town, never just the prefecture',async()=>{
+ const a=app();try{const P=a.w.eval('placeFromReverse');
+  assert.equal(P({name:'ルシメリ',category:'amenity',display_name:'ルシメリ, 1, 桜木町, 大宮区, さいたま市, 埼玉県, 330-0854, 日本'}),'ルシメリ');
+  assert.equal(P({name:'',category:'building',display_name:'1-2, 桜木町, 大宮区, さいたま市, 埼玉県, 330-0854, 日本'}),'さいたま市大宮区桜木町');
+  assert.equal(P({name:'国道18号',category:'highway',display_name:'国道18号, 中央東, 上田市, 長野県, 386-0013, 日本'}),'上田市中央東');
+  assert.equal(P({category:'place',display_name:'小川町, 比企郡, 埼玉県, 日本'}),'小川町');
+  assert.equal(P({category:'boundary',display_name:'埼玉県, 日本'}),'埼玉県');
+ }finally{a.close();}
 });
