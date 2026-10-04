@@ -310,3 +310,42 @@ test('AI extras: style chips, title ideas, SNS caption in the share sheet and a 
   w.h.setEvents([]);d.getElementById('monthLast').click();await settle();assert.equal(sent.at(-1),m,'no request when the month is empty');
  }finally{a.close();}
 });
+
+test('find spots: nearby category search, save to the wish list, plan it, and wishes stay out of the calendar and album',async()=>{
+ const a=app();try{const {w,d,data}=a;await w.h.startOwner();
+  Object.defineProperty(w.navigator,'geolocation',{value:{getCurrentPosition:(ok)=>ok({coords:{latitude:36.40,longitude:138.25}})},configurable:true});
+  const urls=[];w.fetch=async(url,opt)=>{urls.push([url,opt?.body||'']);
+   if(url.includes('overpass'))return{ok:true,json:async()=>({elements:[
+     {type:'node',id:1,lat:36.401,lon:138.251,tags:{name:'ソラノカフェ',amenity:'cafe','addr:city':'上田市',opening_hours:'Mo-Su 10:00-18:00'}},
+     {type:'way',id:2,center:{lat:36.43,lon:138.27},tags:{name:'遠いカフェ',amenity:'cafe'}},
+     {type:'node',id:3,lat:36.4,lon:138.25,tags:{amenity:'cafe'}},
+     ...Array.from({length:5},(_,i)=>({type:'node',id:10+i,lat:36.41+i/100,lon:138.25,tags:{name:'カフェ'+i,amenity:'cafe'}}))]})};
+   if(url.includes('nominatim'))return{ok:true,json:async()=>[{osm_type:'node',osm_id:9,lat:'36.39',lon:'138.24',name:'上田城跡公園',type:'park',category:'leisure',address:{city:'上田市',suburb:'二の丸'}}]};
+   return{ok:false,status:404,json:async()=>({})};};
+  const settle=()=>new Promise(r=>setTimeout(r,15));
+  d.querySelector('.maintabs [data-tab="find"]').click();assert(!d.getElementById('tab-find').classList.contains('hidden'));
+  d.querySelector('[data-find="cafe"]').click();await settle();await settle();
+  const ov=urls.find(([u])=>u.includes('overpass'));assert.match(decodeURIComponent(ov[1]),/nwr\["amenity"="cafe"\]\(around:1500,36\.4,138\.25\)/);
+  const cards=d.querySelectorAll('#findResults .spot');assert.equal(cards.length,7,'unnamed places are skipped');
+  assert.match(cards[0].textContent,/ソラノカフェ/);assert.match(cards[0].textContent,/カフェ/);assert.match(cards[0].textContent,/上田市/);
+  // save a wish
+  cards[0].querySelector('[data-wish]').click();await settle();
+  const [wid,wish]=[...data].find(([k,v])=>k.startsWith('personalEvents/')&&v.kind==='wish');
+  assert.equal(wish.ownerUid,'A');assert.equal(wish.status,'wished');assert.equal(wish.placeId,'osm:node/1');assert.equal(wish.place,'ソラノカフェ');assert.equal(wish.cat,'カフェ');assert.equal(wish.lat,36.401);
+  // wishes are listed separately and never appear among records
+  db_snapshot:{const docs=[...data].filter(([k])=>k.startsWith('personalEvents/')).map(([k,v])=>({id:k.split('/')[1],data:()=>v}));a.db.recordsCallback({docs,metadata:{fromCache:false}});}
+  assert.match(d.getElementById('wishList').textContent,/行きたい.*ソラノカフェ/s);assert.equal(d.getElementById('wishCount').textContent,'1件');
+  w.eval('selectView("mem");renderList()');assert.doesNotMatch(d.getElementById('listBox').textContent,/ソラノカフェ/);
+  // plan from the wish list
+  d.querySelector('#wishList [data-wplan]').click();
+  assert(!d.getElementById('tab-rec').classList.contains('hidden'));assert.equal(d.getElementById('fPlace').value,'ソラノカフェ');assert.equal(d.getElementById('fKind').value,'plan');
+  const t=new Date();t.setDate(t.getDate()+3);d.getElementById('fDate').value=`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  await w.h.saveRecord();await settle();
+  const plan=[...data].find(([k,v])=>k.startsWith('personalEvents/')&&v.kind==='plan');assert(plan);assert.equal(plan[1].lat,36.401);
+  const after=data.get(wid);assert.equal(after.status,'scheduled');assert.equal(after.planId,plan[0].split('/')[1]);
+  // free words with a place name search around that place
+  d.querySelector('.maintabs [data-tab="find"]').click();d.getElementById('findQ').value='上田城 ラーメン';d.getElementById('findForm').dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();await settle();
+  assert(urls.some(([u])=>u.includes('nominatim')&&decodeURIComponent(u).includes('q=上田城')),'place part is looked up');
+  assert.match(decodeURIComponent(urls.filter(([u])=>u.includes('overpass')).at(-1)[1]),/cuisine"~"ramen\|noodle/);
+ }finally{a.close();}
+});

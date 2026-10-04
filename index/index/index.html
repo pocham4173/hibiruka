@@ -66,6 +66,22 @@
   .maintabs button { flex: 1; min-width: 0; white-space: nowrap; border: none; background: none; padding: 12px 2px 11px; font-size: 14.5px; font-weight: 600; color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; border-bottom: 2.5px solid transparent; margin-bottom: -1px; }
   .maintabs button.on { color: var(--navy); border-bottom-color: var(--navy); }
   .maintabs svg { width: 17px; height: 17px; flex: 0 0 auto; }
+  @media (max-width: 380px) { .maintabs button { font-size: 13px; gap: 4px; } .maintabs svg { width: 15px; height: 15px; } }
+  .find-bar { display: flex; gap: 8px; margin: 6px 0 10px; }
+  .find-bar input { flex: 1; min-width: 0; }
+  .find-bar .btn { flex: 0 0 auto; padding: 0 18px; }
+  .find-quick { margin-bottom: 4px; }
+  .spot { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 10px; }
+  .spot h3 { margin: 0 0 2px; font-size: 16.5px; color: var(--navy); line-height: 1.45; }
+  .spot .meta { font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .spot .meta b { color: var(--rose); font-weight: 600; }
+  .spot .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .spot .acts .btn { width: auto; }
+  .spot .acts a.btn { text-decoration: none; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 999px; margin-right: 6px; vertical-align: 1px; }
+  .badge.wished { background: var(--blush); color: var(--blush-t); }
+  .badge.scheduled { background: var(--sage); color: var(--sage-t); }
+  .badge.visited { background: var(--sand); color: var(--sand-t); }
 
   h2 { font-size: 19px; margin: 18px 0 12px; color: var(--navy); font-weight: 700; letter-spacing: .06em; }
   h3 { font-size: 14px; margin: 20px 0 8px; color: var(--muted); font-weight: 600; }
@@ -421,6 +437,7 @@
   <nav class="maintabs"><div class="inner">
     <button data-tab="list" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>予定・記録</button>
     <button data-tab="mem"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z"/><path d="M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"/></svg>思い出</button>
+    <button data-tab="find"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>探す</button>
     <button data-tab="set"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>設定</button>
   </div></nav>
 
@@ -547,6 +564,33 @@
   </section>
 
   <!-- ===== 設定 ===== -->
+  <!-- ===== 探す（ここ行きたい！） ===== -->
+  <section id="tab-find" class="wrap hidden">
+    <div class="eyebrow">ここ行きたい！</div>
+    <h2 style="margin-top:4px">スポットを探す</h2>
+    <form id="findForm" class="find-bar" role="search">
+      <input type="search" id="findQ" placeholder="例：カフェ、ラーメン、上田駅 ランチ" enterkeyhint="search" autocomplete="off" aria-label="探したい場所やジャンル">
+      <button class="btn small" type="submit">探す</button>
+    </form>
+    <div class="chips find-quick" id="findQuick">
+      <button type="button" class="chip" data-find="cafe">☕ 近くのカフェ</button>
+      <button type="button" class="chip" data-find="lunch">🍽 近くのランチ</button>
+      <button type="button" class="chip" data-find="ramen">🍜 ラーメン・そば</button>
+      <button type="button" class="chip" data-find="sweets">🍰 スイーツ・パン</button>
+      <button type="button" class="chip" data-find="park">🌳 公園・お出かけ</button>
+      <button type="button" class="chip" data-find="onsen">♨️ 温泉</button>
+      <button type="button" class="chip" data-find="dog">🐶 わんこOK</button>
+    </div>
+    <p class="note" id="findNote" aria-live="polite">現在地の近くを探します。最初に位置情報の確認が出たら「許可」を押してください。</p>
+    <div id="findResults"></div>
+
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:26px">
+      <h2 style="margin:0 0 10px">📌 行きたいリスト</h2><span id="wishCount" style="color:var(--muted);font-weight:700"></span>
+    </div>
+    <div id="wishList"></div>
+    <p class="note center" style="margin-top:18px">地図データ © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> の協力者</p>
+  </section>
+
   <section id="tab-set" class="wrap hidden">
     <div class="card">
       <img class="panel" src="data:image/jpeg;base64,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" alt="">
@@ -938,7 +982,7 @@ async function startInvite() {
    自分側：ログインなし（この端末をリエさん専用にする）
    ========================================================= */
 let myUid = null;
-let friends = [], events = [], cats = DEFAULT_CATS.slice(), people = [], ownerName = CONFIG.defaultOwnerName;
+let friends = [], events = [], wishes = [], cats = DEFAULT_CATS.slice(), people = [], ownerName = CONFIG.defaultOwnerName;
 let unsub = [];
 let selfFriendId = "", selfConnecting = false;
 
@@ -1077,9 +1121,13 @@ function watchRecords() {
     if (epoch !== recordsEpoch) return;
     const cached = s.metadata && s.metadata.fromCache;
     // An empty local cache is not proof that the user's records are empty.
-    if (!cached || s.docs.length) events = s.docs.map(d => ({id:d.id,...d.data()}));
+    if (!cached || s.docs.length) {
+      const all = s.docs.map(d => ({id:d.id,...d.data()}));
+      // 「行きたい」スポットは記録と同じ場所に保存するが、カレンダーや思い出には出さない
+      events = all.filter(e => e.kind !== "wish"); wishes = all.filter(e => e.kind === "wish");
+    }
     recordsState = cached ? "cached" : "ready";
-    renderList(); renderFirstRecordGuide();
+    renderList(); renderFirstRecordGuide(); renderWishes();
   }, () => {
     if (epoch !== recordsEpoch) return;
     recordsState = "error";
@@ -1105,6 +1153,7 @@ function setupFirstRecordGuide() {
 function setupTabs() {
   document.querySelectorAll(".maintabs button").forEach(b => b.onclick = () => {
     if (b.dataset.tab === "set") return goTab("set");
+    if (b.dataset.tab === "find") { renderWishes(); return goTab("find"); }
     selectView(b.dataset.tab === "mem" ? "mem" : "cal"); goTab("list");
   });
   $("backToPlans").onclick = () => { selectView("cal"); goTab("list"); };
@@ -1113,14 +1162,14 @@ function setupTabs() {
 function goTab(t) {
   const active = t === "rec" ? "list" : t === "list" && ["mem", "fav"].includes(view) ? "mem" : t;
   document.querySelectorAll(".maintabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === active));
-  ["rec", "list", "set"].forEach(x => $("tab-" + x).classList.toggle("hidden", x !== t));
+  ["rec", "list", "find", "set"].forEach(x => $("tab-" + x).classList.toggle("hidden", x !== t));
   window.scrollTo(0, 0);
 }
 
 /* =========================================================
    記録する
    ========================================================= */
-let form = { cat: "", who: new Set(), fav: false, photos: [], geo: null, dateTouched: false }; // photos: [{thumb, full}] 新規 or {id, thumb} 既存
+let form = { cat: "", who: new Set(), fav: false, photos: [], geo: null, dateTouched: false, fromWish: null }; // photos: [{thumb, full}] 新規 or {id, thumb} 既存
 let editingId = null;
 let draftRecordId = null;
 
@@ -1135,6 +1184,7 @@ function setupForm() {
   $("fFav").onclick = () => { form.fav = !form.fav; $("fFav").classList.toggle("on", form.fav); };
   $("fPhotoInput").onchange = addPhotos;
   $("aiWrite").onclick = () => writeWithAi("diary"); bindAiActions();
+  setupFind();
   document.querySelectorAll("[data-ai-mode]").forEach(c => c.onclick = () => writeWithAi(c.dataset.aiMode));
   $("aiTitle").onclick = suggestTitles;
   $("instaAi").onclick = snsWithAi;
@@ -1161,7 +1211,7 @@ function setupForm() {
 function resetForm() {
   editingId = null;
   draftRecordId = null;
-  form = { cat: "", who: new Set(), fav: false, photos: [], geo: null, dateTouched: false };
+  form = { cat: "", who: new Set(), fav: false, photos: [], geo: null, dateTouched: false, fromWish: null };
   $("fKind").value = "plan"; $("fDate").value = todayStr(); $("fTime").value = "";
   $("fPlace").value = ""; $("fTitle").value = ""; $("fMemo").value = ""; $("fLink").value = "";
   $("fFav").classList.remove("on");
@@ -1256,6 +1306,210 @@ async function addPhotos(ev) {
     if (form === targetForm) renderPhotos();
   }
 }
+/* =========================================================
+   探す：「ここ行きたい！」スポット検索とストック（無料のOpenStreetMap）
+   ========================================================= */
+const FIND_CATS = {
+  cafe:   { label: "カフェ", sel: ['["amenity"="cafe"]'], cat: ["カフェ", "食事"] },
+  lunch:  { label: "ランチ", sel: ['["amenity"="restaurant"]'], cat: ["食事"] },
+  ramen:  { label: "ラーメン・そば", sel: ['["amenity"~"restaurant|fast_food"]["cuisine"~"ramen|noodle|soba|udon"]'], cat: ["食事"] },
+  sweets: { label: "スイーツ・パン", sel: ['["shop"~"confectionery|pastry|bakery"]', '["amenity"="ice_cream"]', '["amenity"="cafe"]["cuisine"~"cake|dessert|crepe|ice_cream"]'], cat: ["カフェ", "食事"] },
+  park:   { label: "公園・お出かけ", sel: ['["leisure"="park"]["name"]', '["tourism"~"attraction|museum|viewpoint|zoo|aquarium|theme_park|gallery"]'], cat: ["遊び", "旅行"] },
+  onsen:  { label: "温泉", sel: ['["amenity"="public_bath"]', '["leisure"~"spa|sauna"]', '["natural"="hot_spring"]["name"]'], cat: ["遊び", "旅行"] },
+  dog:    { label: "わんこOK", sel: ['["leisure"="dog_park"]', '["dog"~"yes|leashed"]["name"]'], cat: ["遊び"] },
+  yakiniku: { label: "焼肉", sel: ['["amenity"="restaurant"]["cuisine"~"yakiniku|barbecue|bbq"]'], cat: ["食事"] },
+  sushi:  { label: "寿司", sel: ['["amenity"="restaurant"]["cuisine"~"sushi"]'], cat: ["食事"] },
+  izakaya: { label: "居酒屋", sel: ['["amenity"~"pub|bar|restaurant"]["cuisine"~"izakaya|japanese"]', '["amenity"="pub"]'], cat: ["食事"] },
+};
+const FIND_WORDS = [[/カフェ|喫茶|珈琲|コーヒー/, "cafe"], [/ランチ|レストラン|ごはん|ご飯|食事|ディナー|定食/, "lunch"], [/ラーメン|らーめん|そば|蕎麦|うどん/, "ramen"],
+  [/スイーツ|ケーキ|パン|ベーカリー|和菓子|アイス|クレープ/, "sweets"], [/公園|観光|お出かけ|おでかけ|美術館|博物館|遊び/, "park"], [/温泉|銭湯|サウナ|日帰り/, "onsen"],
+  [/犬|わんこ|ドッグ|ペット/, "dog"], [/焼肉|焼き肉|BBQ/i, "yakiniku"], [/寿司|すし|鮨/, "sushi"], [/居酒屋|飲み/, "izakaya"]];
+const FIND_HOME = { lat: 36.4019, lng: 138.2491, label: "上田駅" }; // 現在地が使えないときの基準
+let findHere = null, findBusy = false, findShown = [];
+
+function hereNow() {
+  return new Promise(res => {
+    if (!navigator.geolocation) return res(null);
+    navigator.geolocation.getCurrentPosition(p => res({ lat: p.coords.latitude, lng: p.coords.longitude }), () => res(null), { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 });
+  });
+}
+function distanceM(a, b) {
+  const R = 6371000, r = x => x * Math.PI / 180, dLat = r(b.lat - a.lat), dLng = r(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+const fmtDist = m => m < 1000 ? `${Math.round(m / 10) * 10}m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0)}km`;
+const GENRE = { cafe: "カフェ", restaurant: "レストラン", fast_food: "ファストフード", ice_cream: "アイス", public_bath: "温泉・銭湯", pub: "居酒屋", bar: "バー",
+  park: "公園", dog_park: "ドッグラン", attraction: "観光スポット", museum: "博物館・美術館", viewpoint: "景色のいい場所", zoo: "動物園", aquarium: "水族館", theme_park: "テーマパーク", gallery: "ギャラリー",
+  bakery: "パン屋", confectionery: "お菓子屋", pastry: "ケーキ屋", spa: "スパ", sauna: "サウナ", hot_spring: "温泉",
+  ramen: "ラーメン", noodle: "麺類", soba: "そば", udon: "うどん", sushi: "寿司", yakiniku: "焼肉", japanese: "和食", italian: "イタリアン", chinese: "中華", french: "フレンチ", curry: "カレー", cake: "ケーキ", coffee_shop: "コーヒー" };
+function genreOf(t) {
+  const cu = String(t.cuisine || "").split(";").map(x => GENRE[x.trim()]).filter(Boolean);
+  return cu[0] || GENRE[t.amenity] || GENRE[t.shop] || GENRE[t.tourism] || GENRE[t.leisure] || GENRE[t.natural] || "";
+}
+function addrOf(t) {
+  return [t["addr:province"], t["addr:city"], t["addr:quarter"] || t["addr:suburb"], t["addr:neighbourhood"], t["addr:block_number"] || t["addr:street"], t["addr:housenumber"]].filter(Boolean).join("") || t["addr:full"] || "";
+}
+async function overpass(sel, c, radius) {
+  const q = `[out:json][timeout:20];(${sel.map(x => `nwr${x}(around:${radius},${c.lat},${c.lng});`).join("")});out center 60;`;
+  let last;
+  for (const url of ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]) {
+    try {
+      const r = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+      if (r.ok) return (await r.json()).elements || [];
+      last = new Error("overpass " + r.status);
+    } catch (e) { last = e; }
+  }
+  throw last;
+}
+async function nominatim(q, c, limit = 15) {
+  const v = c ? `&viewbox=${c.lng - 0.4},${c.lat + 0.3},${c.lng + 0.4},${c.lat - 0.3}` : "";
+  const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&countrycodes=jp&accept-language=ja&addressdetails=1&namedetails=1&limit=${limit}${v}`, { headers: { Accept: "application/json" } });
+  if (!r.ok) throw new Error("nominatim " + r.status);
+  return r.json();
+}
+function spotFromOsm(e) {
+  const t = e.tags || {}, lat = e.lat ?? e.center?.lat, lng = e.lon ?? e.center?.lon;
+  const name = t["name:ja"] || t.name;
+  if (!name || !Number.isFinite(lat)) return null;
+  return { id: `osm:${e.type}/${e.id}`, name, genre: genreOf(t), address: addrOf(t), lat, lng, hours: t.opening_hours || "", website: t.website || t["contact:website"] || "" };
+}
+function spotFromNominatim(n) {
+  const a = n.address || {}, lat = Number(n.lat), lng = Number(n.lon);
+  const name = n.namedetails?.["name:ja"] || n.name || (n.display_name || "").split(",")[0];
+  if (!name || !Number.isFinite(lat)) return null;
+  const area = [a.province || a.state, a.city || a.town || a.village, a.suburb || a.quarter || a.neighbourhood].filter(Boolean).join("");
+  return { id: `osm:${n.osm_type}/${n.osm_id}`, name, genre: GENRE[n.type] || GENRE[n.category] || "", address: area, lat, lng, hours: "", website: "" };
+}
+const spotMapLink = s => "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(`${s.name} ${s.lat},${s.lng}`);
+function catForSpot(keys) {
+  for (const k of keys || []) { const c = cats.find(x => x.name === k); if (c) return c.name; }
+  return cats[0]?.name || "";
+}
+
+async function findSpots({ key = "", words = "" } = {}) {
+  if (findBusy) return;
+  findBusy = true;
+  const note = $("findNote"), box = $("findResults");
+  box.innerHTML = ""; note.textContent = "さがしています…";
+  try {
+    // 何を探すか（ジャンル）と、どこで探すか（地名）を分ける
+    let area = words.trim();
+    if (!key) for (const [re, k] of FIND_WORDS) if (re.test(area)) { key = k; area = area.replace(re, "").replace(/(の|で|近く|周辺|あたり)/g, " ").trim(); break; }
+    let center = null, centerLabel = "";
+    if (area) {
+      const g = (await nominatim(area, findHere || FIND_HOME, 1))[0];
+      if (g && key) { center = { lat: Number(g.lat), lng: Number(g.lon) }; centerLabel = area; }
+    }
+    if (!center) {
+      findHere = findHere || await hereNow();
+      center = findHere || FIND_HOME; centerLabel = findHere ? "現在地" : FIND_HOME.label;
+    }
+    let spots = [];
+    if (key) {
+      const sel = FIND_CATS[key].sel;
+      for (const radius of [1500, 4000, 10000]) {
+        spots = (await overpass(sel, center, radius)).map(spotFromOsm).filter(Boolean);
+        if (spots.length >= 6) break;
+      }
+    } else {
+      spots = (await nominatim(words, center)).map(spotFromNominatim).filter(Boolean);
+    }
+    const from = findHere || center;
+    const seen = new Set();
+    spots = spots.filter(s => !seen.has(s.id) && seen.add(s.id)).map(s => ({ ...s, dist: distanceM(from, s), catKeys: key ? FIND_CATS[key].cat : [] }))
+      .sort((a, b) => a.dist - b.dist).slice(0, 30);
+    findShown = spots;
+    if (!spots.length) { note.textContent = "見つかりませんでした。ことばを変えるか、地名を足してみてください（例：「上田駅 カフェ」）。"; return; }
+    note.textContent = `${centerLabel}のまわりで${spots.length}件見つかりました${!findHere && centerLabel === FIND_HOME.label ? "（現在地が使えないため、上田駅を基準にしています）" : ""}。`;
+    box.innerHTML = spots.map((s, i) => spotCard(s, i)).join("");
+    box.querySelectorAll("[data-wish]").forEach(b => b.onclick = () => addWish(findShown[+b.dataset.wish], b));
+    box.querySelectorAll("[data-plan]").forEach(b => b.onclick = () => planFromSpot(findShown[+b.dataset.plan]));
+  } catch (e) {
+    console.warn(e);
+    note.textContent = "うまく探せませんでした。電波のよい所で、少し待ってからもう一度お試しください。";
+  } finally { findBusy = false; }
+}
+function spotCard(s, i) {
+  const have = wishes.some(w => w.placeId === s.id);
+  return `<div class="spot"><h3>${esc(s.name)}</h3>
+    <div class="meta">${s.genre ? `<b>${esc(s.genre)}</b>　` : ""}${Number.isFinite(s.dist) ? "📍" + fmtDist(s.dist) : ""}${s.address ? "　" + esc(s.address) : ""}${s.hours ? `<br>🕐 ${esc(s.hours.slice(0, 60))}` : ""}</div>
+    <div class="acts">
+      <button type="button" class="btn small ${have ? "sub" : "rose"}" data-wish="${i}" ${have ? "disabled" : ""}>${have ? "✓ 行きたいリストにあります" : "📌 ここ行きたい！"}</button>
+      <button type="button" class="btn small sub" data-plan="${i}">📅 予定に追加</button>
+      <a class="btn small ghost" href="${spotMapLink(s)}" target="_blank" rel="noopener">🗺 地図</a>
+      ${s.website && /^https?:\/\//.test(s.website) ? `<a class="btn small ghost" href="${esc(s.website)}" target="_blank" rel="noopener">🔗 お店のページ</a>` : ""}
+    </div></div>`;
+}
+async function addWish(s, btn) {
+  if (!s) return;
+  if (wishes.some(w => w.placeId === s.id)) { toast("もう行きたいリストにあります"); return; }
+  if (btn) { btn.disabled = true; btn.textContent = "保存しています…"; }
+  try {
+    const ref = recordCollection("events").doc();
+    await ref.set(ownedData({
+      kind: "wish", status: "wished", placeId: s.id, title: "", place: s.name, genre: s.genre || "", memo: s.address || "", imageUrl: "",
+      cat: catForSpot(s.catKeys), lat: s.lat, lng: s.lng, link: /^https?:\/\//.test(s.website || "") ? s.website : "",
+      date: "", time: "", who: [], fav: false, thumbs: [], sends: [], nextSendAt: null, createdAt: TS(), updatedAt: TS()
+    }));
+    if (btn) { btn.textContent = "✓ 行きたいリストにあります"; btn.classList.replace("rose", "sub"); }
+    toast(`📌「${s.name}」を行きたいリストに入れました`);
+  } catch (e) {
+    console.error(e); toast("保存できませんでした。もう一度お試しください。");
+    if (btn) { btn.disabled = false; btn.textContent = "📌 ここ行きたい！"; }
+  }
+}
+function planFromSpot(s, wishId) {
+  if (!s) return;
+  resetForm();
+  form.fromWish = wishId || null;
+  $("fKind").value = "plan";
+  form.cat = catForSpot(s.catKeys || (wishId ? [wishes.find(w => w.id === wishId)?.cat] : []));
+  $("fPlace").value = s.name; form.geo = { lat: s.lat, lng: s.lng, place: s.name };
+  if (s.address) $("fMemo").value = s.address;
+  renderCats(); updateSaveNote(); updateMapLink();
+  goTab("rec");
+  toast("日付と時間を選んで「予定を保存する」を押してください", 4500);
+  setTimeout(() => $("fDate").focus(), 300);
+}
+function renderWishes() {
+  const box = $("wishList"); if (!box) return;
+  const today = todayStr();
+  // 予定の日が過ぎたら「行った」にする
+  wishes.forEach(w => {
+    if (w.status !== "scheduled" || !w.planId) return;
+    const plan = events.find(e => e.id === w.planId);
+    if (plan && plan.date < today) { w.status = "visited"; recordCollection("events").doc(w.id).update({ status: "visited", updatedAt: TS() }).catch(() => {}); }
+  });
+  const order = { wished: 0, scheduled: 1, visited: 2 };
+  const list = wishes.slice().sort((a, b) => (order[a.status] ?? 0) - (order[b.status] ?? 0));
+  $("wishCount").textContent = list.length ? `${list.length}件` : "";
+  if (!list.length) { box.innerHTML = emptyBox("pin", "行きたい場所はまだありません。", "上で探して「📌 ここ行きたい！」を押すと、ここにたまります"); return; }
+  box.innerHTML = list.map(w => {
+    const plan = w.planId && events.find(e => e.id === w.planId);
+    const badge = w.status === "visited" ? '<span class="badge visited">行った</span>' : w.status === "scheduled" ? `<span class="badge scheduled">予定あり${plan ? " " + esc(fmtDate(plan.date)) : ""}</span>` : '<span class="badge wished">行きたい</span>';
+    const main = w.status === "visited" && plan ? `<button type="button" class="btn small rose" data-memory="${w.id}">📝 思い出を残す</button>`
+      : w.status === "scheduled" && plan ? `<button type="button" class="btn small sub" data-open-plan="${w.id}">📅 予定を見る</button>`
+      : `<button type="button" class="btn small rose" data-wplan="${w.id}">📅 予定に入れる</button>`;
+    return `<div class="spot"><h3>${badge}${esc(w.place || w.title)}</h3>
+      <div class="meta">${w.genre ? `<b>${esc(w.genre)}</b>　` : ""}${w.memo ? esc(w.memo) : ""}</div>
+      <div class="acts">${main}
+        <a class="btn small ghost" href="${spotMapLink({ name: w.place, lat: w.lat, lng: w.lng })}" target="_blank" rel="noopener">🗺 地図</a>
+        <button type="button" class="btn small ghost" data-wdel="${w.id}">消す</button></div></div>`;
+  }).join("");
+  box.querySelectorAll("[data-wplan]").forEach(b => b.onclick = () => { const w = wishes.find(x => x.id === b.dataset.wplan); if (w) planFromSpot({ name: w.place, lat: w.lat, lng: w.lng, address: w.memo, catKeys: [w.cat] }, w.id); });
+  box.querySelectorAll("[data-open-plan]").forEach(b => b.onclick = () => { const w = wishes.find(x => x.id === b.dataset.openPlan); if (w) openDetail(w.planId); });
+  box.querySelectorAll("[data-memory]").forEach(b => b.onclick = () => { const w = wishes.find(x => x.id === b.dataset.memory); if (w) editRecord(w.planId); });
+  box.querySelectorAll("[data-wdel]").forEach(b => b.onclick = async () => {
+    const w = wishes.find(x => x.id === b.dataset.wdel); if (!w || !confirm(`「${w.place}」を行きたいリストから消しますか？`)) return;
+    try { await recordCollection("events").doc(w.id).delete(); toast("消しました"); } catch { toast("消せませんでした。もう一度お試しください。"); }
+  });
+}
+function setupFind() {
+  $("findForm").onsubmit = e => { e.preventDefault(); const q = $("findQ").value.trim(); if (!q) { $("findQ").focus(); return; } $("findQ").blur(); findSpots({ words: q }); };
+  document.querySelectorAll("[data-find]").forEach(b => b.onclick = () => findSpots({ key: b.dataset.find }));
+}
+
 /* ✨ AIで文章を作成：題名・日付・場所・メモから、思い出の文章（80〜120文字）を作る */
 let aiBusy = false;
 const AI_ACTIONS = '<button type="button" class="btn small" id="aiUse">メモに入れる</button><button type="button" class="btn small sub" id="aiAgain">もう一度作る</button><button type="button" class="btn small sub" id="aiCopy">コピー</button><button type="button" class="btn small ghost" id="aiClose">やめる</button>';
@@ -1510,6 +1764,7 @@ async function saveRecord() {
     old.forEach(d => { if (!photoIds.has(d.id)) batch.delete(d.ref); });
     photos.forEach((p, i) => batch.set(recordCollection("photos").doc(`${id}_${i}`), ownedData({ eventId: id, i, data: p.full })));
     await batch.commit();
+    if (savingForm.fromWish && isPlan(data)) recordCollection("events").doc(savingForm.fromWish).update({ status: "scheduled", planId: id, updatedAt: TS() }).catch(e => console.warn(e));
     if (form !== savingForm) { toast("記録を保存しました"); return; }
     const saved = { ...data, id, sends: events.find(x => x.id === id)?.sends || [] };
     if (firstRecord) { finishGuide(); $("savedNextSteps").classList.remove("hidden"); }
