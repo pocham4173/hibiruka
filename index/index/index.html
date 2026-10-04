@@ -300,6 +300,12 @@
   .feat p { margin: 2px 0 0; font-size: 13.5px; color: #5b5456; }
 
   /* シート */
+  .ai-btn { margin-top: 8px; font-size: 15px; padding: 11px; }
+  .ai-btn[aria-busy="true"] { opacity: .7; }
+  .ai-box { margin-top: 10px; padding: 14px; border-radius: 12px; background: var(--lav); border: 1px solid var(--lav-b); }
+  .ai-text { margin: 0 0 10px; line-height: 1.8; color: var(--text); white-space: pre-wrap; }
+  .ai-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ai-box .note { margin: 8px 0 0; }
   .insta-btn { margin-top: 18px; }
   .insta-btn svg { color: var(--rose); }
   .insta-formats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
@@ -445,6 +451,16 @@
       <input type="text" id="fTitle" placeholder="例：ランチ、映画、髪を切る">
       <label class="lbl">メモ<small>なくてもOK・LINEにも載ります</small></label>
       <textarea id="fMemo" placeholder="例：駐車場は裏側／パスタがおいしかった"></textarea>
+      <button type="button" class="btn sub ai-btn" id="aiWrite">✨ AIで文章を作成</button>
+      <div class="ai-box hidden" id="aiBox" aria-live="polite">
+        <p class="ai-text" id="aiText"></p>
+        <div class="ai-actions" id="aiActions">
+          <button type="button" class="btn small" id="aiUse">メモに入れる</button>
+          <button type="button" class="btn small sub" id="aiAgain">もう一度作る</button>
+          <button type="button" class="btn small ghost" id="aiClose">やめる</button>
+        </div>
+        <p class="note" id="aiNote"></p>
+      </div>
       <label class="lbl">写真<small id="phCount">0/4枚</small></label>
       <div class="photos" id="fPhotos"></div>
       <input type="file" id="fPhotoInput" accept="image/*" multiple class="hidden">
@@ -789,6 +805,7 @@ const CONFIG = {
   },
   liffId: "2011755874-qh0gBohK",
   lineOaId: "@626hnkgo",
+  aiUrl: "https://hibiruka-line.okm-co.workers.dev/ai/memory-text",
   defaultOwnerName: "理絵"
 };
 /* ========================================================= */
@@ -1096,6 +1113,7 @@ function setupForm() {
   $("catEditBtn").onclick = openCatSheet;
   $("fFav").onclick = () => { form.fav = !form.fav; $("fFav").classList.toggle("on", form.fav); };
   $("fPhotoInput").onchange = addPhotos;
+  $("aiWrite").onclick = writeWithAi; bindAiActions();
   $("fInsta").onclick = () => {
     if (form.photoPending) { toast("写真を準備しています。少し待ってからもう一度押してください。"); return; }
     const p = form.photos[0];
@@ -1120,6 +1138,7 @@ function resetForm() {
   $("fKind").value = "plan"; $("fDate").value = todayStr(); $("fTime").value = "";
   $("fPlace").value = ""; $("fTitle").value = ""; $("fMemo").value = ""; $("fLink").value = "";
   $("fFav").classList.remove("on");
+  closeAi();
   $("saveBtn").textContent = "この内容で記録する";
   $("cancelEditBtn").classList.add("hidden");
   $("recEyebrow").textContent = "記録の種類を選ぶ";
@@ -1210,6 +1229,56 @@ async function addPhotos(ev) {
     if (form === targetForm) renderPhotos();
   }
 }
+/* ✨ AIで文章を作成：題名・日付・場所・メモから、思い出の文章（80〜120文字）を作る */
+let aiBusy = false;
+const AI_ACTIONS = '<button type="button" class="btn small" id="aiUse">メモに入れる</button><button type="button" class="btn small sub" id="aiAgain">もう一度作る</button><button type="button" class="btn small ghost" id="aiClose">やめる</button>';
+function bindAiActions() {
+  $("aiActions").innerHTML = AI_ACTIONS;
+  $("aiUse").onclick = useAiText; $("aiAgain").onclick = writeWithAi; $("aiClose").onclick = closeAi;
+}
+function closeAi() {
+  if (!$("aiBox")) return;
+  $("aiBox").classList.add("hidden"); $("aiText").textContent = ""; $("aiNote").textContent = "";
+  bindAiActions();
+}
+async function writeWithAi() {
+  if (aiBusy) return;
+  const input = { title: $("fTitle").value.trim(), place: $("fPlace").value.trim(), memo: $("fMemo").value.trim(), date: $("fDate").value || todayStr(), cat: form.cat ? catLabel(form.cat) : "" };
+  if (!input.title && !input.place && !input.memo) { toast("「どこで？」か「なにをする？」を入れてから押してください"); $("fTitle").focus(); return; }
+  const btn = $("aiWrite"), started = form;
+  aiBusy = true; btn.disabled = true; btn.setAttribute("aria-busy", "true"); btn.textContent = "✨ 文章を作っています…";
+  try {
+    const token = await auth.currentUser.getIdToken();
+    const r = await fetch(CONFIG.aiUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify(input) });
+    const out = await r.json().catch(() => ({}));
+    if (form !== started) return;
+    if (!r.ok || !out.text) {
+      const msg = out.error === "limit" ? "AIの文章は1日10回までです。また明日使ってください。"
+        : out.error === "busy" ? "今日はAIがとても混んでいます。また明日お試しください。"
+        : out.error === "not_configured" ? "AIの文章作成は、いま準備中です。"
+        : out.error === "auth" ? "もう一度アプリを開き直してから試してください。"
+        : "うまく作れませんでした。少し待ってもう一度お試しください。";
+      toast(msg, 5000); return;
+    }
+    bindAiActions();
+    $("aiText").textContent = out.text;
+    $("aiNote").textContent = `AIが作った文章です。違うところは直してください。（今日はあと${out.left ?? 0}回）`;
+    $("aiBox").classList.remove("hidden");
+  } catch {
+    toast("通信できませんでした。電波のよい所でもう一度お試しください。", 5000);
+  } finally {
+    aiBusy = false; btn.disabled = false; btn.removeAttribute("aria-busy"); btn.textContent = "✨ AIで文章を作成";
+  }
+}
+function useAiText() {
+  const before = $("fMemo").value;
+  $("fMemo").value = $("aiText").textContent;
+  $("aiActions").innerHTML = '<button type="button" class="btn small sub" id="aiUndo">元に戻す</button><button type="button" class="btn small ghost" id="aiDone">閉じる</button>';
+  $("aiNote").textContent = "メモに入れました。自由に書き直せます。";
+  $("aiUndo").onclick = () => { $("fMemo").value = before; closeAi(); toast("メモを元に戻しました"); };
+  $("aiDone").onclick = closeAi;
+}
+
 /* 写真の撮影日と場所（EXIF）から、日付と「どこで？」を入れる */
 async function readExif(file) {
   const part = file.slice(0, 256 * 1024);
