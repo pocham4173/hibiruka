@@ -5,6 +5,7 @@
 // - 返事は reply API だけを使う（月の送信数に数えられない）。
 // - 名前・メッセージ本文・トークンはログに出さない。
 const APP_URL = 'https://pocham4173.github.io/hibiruka/index/index/';
+const GUIDE_URL = 'https://pocham4173.github.io/hibiruka/guide/';
 const DEFAULT_CATS = ['遊び','食事','カフェ','旅行','買い物','病院','美容院'];
 const CODE = /^[A-HJ-NP-Z2-9]{10}$/;
 const MAX_EVENTS = 5;
@@ -105,8 +106,24 @@ const HELP = [
   '「また行きたい」と送る → また行きたいリスト',
   '',
   '写真やくわしい内容は、アプリで追加できます。',
+  APP_URL,
+  '',
+  '📖 写真つきの使い方',
+  GUIDE_URL
+].join('\n');
+
+// つながっていない人（予定のお知らせを受け取っている友だちなど）向け
+const GUEST_HELP = [
+  'ヒビルカは、予定と思い出をひとつに残せるアプリです。',
+  '無料・ダウンロード不要で使えます。',
+  '',
+  '📖 写真つきの使い方',
+  GUIDE_URL,
+  '',
+  '▶ アプリを開く',
   APP_URL
 ].join('\n');
+const GUEST_CONNECT = 'この機能は、ヒビルカのアプリとつなぐと使えます。\nアプリの「設定」→「LINEから記録する」からつないでください。\n\n📖 使い方\n' + GUIDE_URL;
 
 async function addLocation(db, owner, ev, now) {
   const loc = ev.message;
@@ -173,7 +190,10 @@ export async function handleEvent(db, env, ev, now = Date.now()) {
   const owner = await resolveOwner(db, userId);
   if (!owner) {
     // つながっていない人。予定のお知らせを受け取っている友だちもここ。
-    if (msg && msg.type !== 'text') return [text('ヒビルカのアプリとつなぐと、位置情報を送るだけで記録できます。\nアプリの「設定」→「LINEから記録する」からつないでください。\n' + APP_URL)];
+    if (msg && msg.type !== 'text') return [text('ヒビルカのアプリとつなぐと、位置情報を送るだけで記録できます。\nアプリの「設定」→「LINEから記録する」からつないでください。\n' + APP_URL + '\n\n📖 使い方\n' + GUIDE_URL)];
+    const g = msg?.type === 'text' ? msg.text.normalize('NFKC').trim() : '';
+    if (/^(使い方|説明書|ヘルプ|help)$/i.test(g)) return [text(GUEST_HELP)];
+    if (/^(今日|きょう)(の予定)?$|^また行きたい$/.test(g)) return [text(GUEST_CONNECT)];
     return []; // ふつうの文字は返事しない（手動でのやりとり用）
   }
   if (ev.type === 'postback') return setCategory(db, owner, ev.postback?.data || '');
@@ -184,7 +204,7 @@ export async function handleEvent(db, env, ev, now = Date.now()) {
   const t = msg.text.normalize('NFKC').trim();
   if (/^(今日|きょう)(の予定)?$/.test(t)) return listToday(db, owner, now);
   if (/^また行きたい$/.test(t)) return listFavorites(db, owner);
-  if (/^(使い方|ヘルプ|help)$/i.test(t)) return [text(HELP)];
+  if (/^(使い方|説明書|ヘルプ|help)$/i.test(t)) return [text(HELP)];
   return [text('位置情報を送ると記録できます。「使い方」と送ると、できることを確認できます。')];
 }
 
