@@ -19,17 +19,16 @@ function memoryDb() {
   const ref = (c, id) => ({path: c + '/' + id, get: async () => ({exists: (c + '/' + id) in data, data: () => data[c + '/' + id]})});
   return {data, collection: c => ({doc: id => ref(c, id)}), commit: async ops => { for (const o of ops) data[o.ref.path] = o.value; }};
 }
-function setup({aiStatus = 200, aiText = 'ゆっくり呼吸をして、肩が軽くなった一日。'} = {}) {
-  const calls = [];
+function setup({fail = null, aiText = 'ゆっくり呼吸をして、肩が軽くなった一日。'} = {}) {
+  const calls = [], runs = [];
   const fetcher = async (url, opt) => {
     calls.push([url, opt]);
-    if (url.includes('googleapis.com')) return new Response(JSON.stringify({keys: [jwk]}), {headers: {'cache-control': 'public, max-age=20000'}});
-    return new Response(JSON.stringify({content: [{type: 'text', text: aiText}]}), {status: aiStatus});
+    return new Response(JSON.stringify({keys: [jwk]}), {headers: {'cache-control': 'public, max-age=20000'}});
   };
+  const AI = {run: async (model, input) => { runs.push([model, input]); if (fail) throw Error(fail); return {choices: [{message: {role: 'assistant', content: aiText}}]}; }};
   const db = memoryDb();
-  return {calls, db, fetcher, deps: {db: async () => db, fetcher, now: () => NOW}};
+  return {calls, runs, db, fetcher, env: {AI, FIREBASE_SERVICE_ACCOUNT: '{}'}, deps: {db: async () => db, fetcher, now: () => NOW}};
 }
-const env = {ANTHROPIC_API_KEY: 'sk-test', FIREBASE_SERVICE_ACCOUNT: '{}'};
 const req = (body, {token = idToken(), origin = ORIGIN, method = 'POST'} = {}) => new Request('https://w/ai/memory-text', {method, headers: {origin, authorization: 'Bearer ' + token, 'content-type': 'application/json'}, ...(method === 'POST' ? {body: JSON.stringify(body)} : {})});
 const record = {title: 'ベーシックヨガ', date: '2026-10-04', place: 'LOIVE 上田店', cat: 'ヨガ', memo: '久しぶりで体がかたかった'};
 
@@ -45,43 +44,43 @@ test('ID tokens: only this project, valid signature and unexpired tokens give a 
   assert.equal(await verifyIdToken('not.a.token', {fetcher, now: NOW}), null);
 });
 
-test('writes a diary line with the key kept server-side and the record fenced as data', async () => {
-  resetKeyCache(); const {calls, db, deps} = setup();
+test('writes a diary line with the free Workers AI model and the record fenced as data', async () => {
+  resetKeyCache(); const {calls, runs, db, deps, env} = setup();
   const res = await handleAi(req(record), env, deps);
   assert.equal(res.status, 200); assert.equal(res.headers.get('access-control-allow-origin'), ORIGIN);
   const out = await res.json(); assert.equal(out.text, 'ゆっくり呼吸をして、肩が軽くなった一日。'); assert.equal(out.left, PER_USER_DAILY - 1);
-  const [url, opt] = calls.find(([u]) => u.includes('anthropic'));
-  assert.equal(url, 'https://api.anthropic.com/v1/messages'); assert.equal(opt.headers['x-api-key'], 'sk-test');
-  const sent = JSON.parse(opt.body); assert.equal(sent.model, MODEL); assert.equal(sent.system, SYSTEM_PROMPT);
-  assert.match(sent.messages[0].content, /<記録>[\s\S]*題名=ベーシックヨガ[\s\S]*メモ=久しぶりで体がかたかった[\s\S]*<\/記録>/);
+  assert.equal(calls.length, 1, 'only Google keys are fetched; no paid API is called');
+  const [model, sent] = runs[0]; assert.equal(model, MODEL); assert.equal(sent.messages[0].role, 'system'); assert.equal(sent.messages[0].content, SYSTEM_PROMPT);
+  assert.match(sent.messages[1].content, /<記録>[\s\S]*題名=ベーシックヨガ[\s\S]*メモ=久しぶりで体がかたかった[\s\S]*<\/記録>/);
   assert.equal(db.data['aiUsage/20261004_alice'].count, 1); assert.equal(db.data['aiUsage/20261004_total'].count, 1);
 });
 
 test('future dates are marked as plans; empty records and bad dates are refused', async () => {
   assert.match(userMessage({...record, date: '2026-10-10'}, '2026-10-04'), /これからの予定/);
   assert.doesNotMatch(userMessage(record, '2026-10-04'), /これからの予定/);
-  resetKeyCache(); const {deps} = setup();
+  resetKeyCache(); const {deps, env} = setup();
   assert.equal((await handleAi(req({date: '2026-10-04'}), env, deps)).status, 400);
   assert.equal((await handleAi(req({...record, date: 'tomorrow'}), env, deps)).status, 400);
 });
 
 test('daily limits per person, sign-in, origin and missing key are enforced before calling Claude', async () => {
-  resetKeyCache(); const {calls, deps} = setup();
+  resetKeyCache(); const {runs, deps, env} = setup();
   for (let i = 0; i < PER_USER_DAILY; i++) assert.equal((await handleAi(req(record), env, deps)).status, 200);
   const limited = await handleAi(req(record), env, deps); assert.equal(limited.status, 429); assert.equal((await limited.json()).error, 'limit');
-  assert.equal(calls.filter(([u]) => u.includes('anthropic')).length, PER_USER_DAILY);
+  assert.equal(runs.length, PER_USER_DAILY);
   assert.equal((await handleAi(req(record, {token: 'bad'}), env, deps)).status, 401);
   assert.equal((await handleAi(req(record, {origin: 'https://evil.example'}), env, deps)).status, 403);
-  assert.equal((await handleAi(req(record), {FIREBASE_SERVICE_ACCOUNT: '{}'}, deps)).status, 503);
+  assert.equal((await handleAi(req(record), {FIREBASE_SERVICE_ACCOUNT: '{}'}, deps)).status, 503, 'no AI binding');
   const pre = await handleAi(req(null, {method: 'OPTIONS'}), env, deps);
   assert.equal(pre.status, 204); assert.match(pre.headers.get('access-control-allow-headers'), /authorization/);
 });
 
-test('Claude errors become a short failure and quotes around the answer are removed', async () => {
-  resetKeyCache();
-  assert.equal((await handleAi(req(record), env, setup({aiStatus: 529}).deps)).status, 502);
-  resetKeyCache();
-  assert.equal((await (await handleAi(req(record), env, setup({aiText: '「楽しい一日。」'}).deps)).json()).text, '楽しい一日。');
+test('AI errors become a short failure (used-up free allowance says busy); quotes and thinking are removed', async () => {
+  resetKeyCache(); let s = setup({fail: '4006: you have used up your daily free allocation of 10,000 neurons'});
+  const busy = await handleAi(req(record), s.env, s.deps); assert.equal(busy.status, 502); assert.equal((await busy.json()).error, 'busy');
+  resetKeyCache(); s = setup({fail: 'network'}); assert.equal((await (await handleAi(req(record), s.env, s.deps)).json()).error, 'ai');
+  resetKeyCache(); s = setup({aiText: '<think>考え中</think>「楽しい一日。」'});
+  assert.equal((await (await handleAi(req(record), s.env, s.deps)).json()).text, '楽しい一日。');
 });
 
 test('worker routes the AI writer and still hides everything else', async () => {

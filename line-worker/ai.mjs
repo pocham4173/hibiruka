@@ -1,10 +1,11 @@
 // 「✨ AIで文章を作成」: turns a record's title/date/place/memo into a short diary line.
-// The Claude API key stays in the Worker. Callers must send a Firebase ID token for
-// this project, and use is capped per person and per day so the bill stays tiny.
+// Uses Cloudflare Workers AI on the free plan (10,000 Neurons/day; on the free plan extra use
+// is refused, never billed). Callers must send a Firebase ID token for this project, and use
+// is capped per person and per day so the free allowance is never exhausted by one person.
 const PROJECT = 'hibiruka-f66fb';
 const ORIGINS = ['https://pocham4173.github.io'];
 const JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
-export const MODEL = 'claude-haiku-4-5';
+export const MODEL = '@cf/google/gemma-4-26b-a4b-it';
 export const PER_USER_DAILY = 10;
 export const TOTAL_DAILY = 300;
 
@@ -87,7 +88,7 @@ export async function handleAi(request, env, { db, fetcher = fetch, now = Date.n
   const origin = request.headers.get('origin') || '';
   if (request.method === 'OPTIONS') return new Response(null, { status: ORIGINS.includes(origin) ? 204 : 403, headers: cors(origin) });
   if (!ORIGINS.includes(origin)) return json({ error: 'origin' }, 403, origin);
-  if (!env.ANTHROPIC_API_KEY || !env.FIREBASE_SERVICE_ACCOUNT) return json({ error: 'not_configured' }, 503, origin);
+  if (!env.AI || !env.FIREBASE_SERVICE_ACCOUNT) return json({ error: 'not_configured' }, 503, origin);
   const t = now();
   const uid = await verifyIdToken((request.headers.get('authorization') || '').replace(/^Bearer\s+/i, ''), { fetcher, now: t }).catch(() => null);
   if (!uid) return json({ error: 'auth' }, 401, origin);
@@ -99,14 +100,15 @@ export async function handleAi(request, env, { db, fetcher = fetch, now = Date.n
   const quota = await takeQuota(store, uid, t);
   if (!quota.ok) return json({ error: quota.reason === 'user' ? 'limit' : 'busy', left: quota.left }, 429, origin);
   const today = `${jstDay(t).slice(0, 4)}-${jstDay(t).slice(4, 6)}-${jstDay(t).slice(6)}`;
-  const r = await fetcher('https://api.anthropic.com/v1/messages', {
-    method: 'POST', signal: AbortSignal.timeout(25000),
-    headers: { 'content-type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: MODEL, max_tokens: 400, system: SYSTEM_PROMPT, messages: [{ role: 'user', content: userMessage(input, today) }] }),
-  });
-  if (!r.ok) { console.error('Hibiruka AI request failed with HTTP ' + r.status); return json({ error: 'ai' }, 502, origin); }
-  const out = await r.json();
-  const text = clean((out.content || []).filter(c => c.type === 'text').map(c => c.text).join(''), 200).replace(/^[「『"]|[」』"]$/g, '');
+  let out;
+  try {
+    out = await env.AI.run(MODEL, { messages: [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: userMessage(input, today) }], max_completion_tokens: 400, temperature: 0.7 });
+  } catch (e) {
+    console.error('Hibiruka AI request failed: ' + String(e?.message || e).slice(0, 80));
+    return json({ error: /neuron|quota|limit|capacity/i.test(String(e?.message)) ? 'busy' : 'ai' }, 502, origin);
+  }
+  const raw = out?.choices?.[0]?.message?.content ?? out?.response ?? '';
+  const text = clean(String(raw).replace(/<think>[\s\S]*?<\/think>/g, ''), 200).replace(/^[「『"]|[」』"]$/g, '');
   if (!text) return json({ error: 'ai' }, 502, origin);
   return json({ text, left: quota.left }, 200, origin);
 }
