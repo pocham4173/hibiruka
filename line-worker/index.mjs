@@ -44,7 +44,7 @@ export default {
     }
     if(request.method!=='POST'||url.pathname!=='/line/webhook')return new Response('Not found',{status:404});
     try{
-      return await handleWebhook(request,env,{db:async()=>firestore(await googleToken(env.FIREBASE_SERVICE_ACCOUNT),fetch,20)});
+      return await handleWebhook(request,env,{db:async()=>firestore(await googleToken(env.FIREBASE_SERVICE_ACCOUNT),fetch,400)});
     }catch{
       console.error('Hibiruka webhook failed; check credentials and service status.');
       return new Response('Temporarily unavailable',{status:503});

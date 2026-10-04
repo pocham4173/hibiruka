@@ -1,3 +1,4 @@
+import { parseRecord, monthText, takeQuota } from './ai.mjs';
 // LINEから届いたメッセージを受け取る係（Webhook）。
 // - LINEの署名を確かめたリクエストだけを処理する（それ以外は401）。
 // - アプリ側で作った使い捨ての連携番号を、LINEから送ってもらって本人をつなぐ。
@@ -101,9 +102,13 @@ async function link(db, lineUserId, code, now) {
 
 const HELP = [
   'このトークでできること',
+  '💬 話しかけるだけで記録',
+  '　「10/12 14時 歯医者」→ 予定に入る',
+  '　「昨日ゆかちゃんとランチ行った」→ 思い出に',
   '📍 位置情報を送る → その場所を「思い出」に記録',
   '「今日」と送る → 今日の予定・記録',
   '「また行きたい」と送る → また行きたいリスト',
+  '「ふりかえり」と送る → 今月の思い出をAIがまとめる',
   '',
   '写真やくわしい内容は、アプリで追加できます。',
   APP_URL,
@@ -162,7 +167,7 @@ async function listToday(db, owner, now) {
   const {date} = jstNow(now);
   let q = db.collection(eventsOf(owner.scope));
   if (owner.scope === 'personal') q = q.where('ownerUid', '==', owner.uid);
-  const docs = (await q.where('date', '==', date).get()).docs.map(d => d.data()).sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
+  const docs = (await q.where('date', '==', date).select('date', 'time', 'title', 'place', 'cat').get()).docs.map(d => d.data()).sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
   if (!docs.length) return [text('今日の予定・記録はまだありません。')];
   return [text('📅 今日の予定・記録\n\n' + docs.map(e => `${e.time ? e.time + ' ' : ''}${e.title || e.place || e.cat || '記録'}${e.title && e.place ? '（' + e.place + '）' : ''}`).join('\n'))];
 }
@@ -170,9 +175,73 @@ async function listToday(db, owner, now) {
 async function listFavorites(db, owner) {
   let q = db.collection(eventsOf(owner.scope));
   if (owner.scope === 'personal') q = q.where('ownerUid', '==', owner.uid);
-  const docs = (await q.where('fav', '==', true).get()).docs.map(d => d.data());
+  const docs = (await q.where('fav', '==', true).select('place', 'title', 'cat').limit(40).get()).docs.map(d => d.data());
   if (!docs.length) return [text('「また行きたい」はまだありません。アプリで記録に♥をつけると、ここに出ます。')];
   return [text('♥ また行きたい\n\n' + docs.map(e => '・' + (e.place || e.title || e.cat || '記録')).join('\n') + '\n\nほかはアプリで見られます。')];
+}
+
+const WEEK = ['日', '月', '火', '水', '木', '金', '土'];
+const jpDate = d => { const [y, m, dd] = d.split('-').map(Number); return `${m}月${dd}日(${WEEK[new Date(Date.UTC(y, m - 1, dd)).getUTCDay()]})`; };
+const AI_LIMIT = 'AIは1日20回までです。また明日送ってください。（位置情報での記録は、いつでも使えます）';
+
+// 💬 話しかけるだけで記録：AIが文を読んで、予定か思い出を1件作る
+async function fromText(db, env, owner, ev, message, now) {
+  const quota = await takeQuota(db, owner.uid, now);
+  if (!quota.ok) return [text(AI_LIMIT)];
+  const cats = await categories(db, owner);
+  const {date: today, time: nowTime} = jstNow(now);
+  let r;
+  try { r = await parseRecord(env, message, today, cats.map(c => c.name)); }
+  catch { return [text('うまく読み取れませんでした。少し待ってもう一度送ってください。')]; }
+  if (r.type === 'none') return [text('予定や思い出として記録するときは、こんなふうに送ってください。\n\n「10/12 14時 歯医者」\n「明日 ゆかちゃんとランチ」\n「昨日 上田城でお花見した」\n\n「使い方」と送ると、できることを確認できます。')];
+  if (!r.date) return [text('いつの予定か分かりませんでした。\n「10/12 14時 歯医者」「来週の土曜 ランチ」のように、日にちも入れて送ってください。')];
+  if (!r.title && !r.place) return [text('何の予定か分かりませんでした。「10/12 14時 歯医者」のように送ってください。')];
+  const id = 'line_' + (docId(ev.webhookEventId) || randomId());
+  const data = {
+    cat:r.cat || cats[0]?.name || '遊び', kind:r.type === 'plan' ? 'plan' : 'memory', date:r.date, time:r.time || (r.type === 'memory' && r.date === today ? nowTime : ''),
+    who:r.who, place:r.place, title:r.title, memo:r.diary, link:'', fav:false, thumbs:[], sends:[], nextSendAt:null,
+    source:'line', createdAt:new Date(now), updatedAt:new Date(now)
+  };
+  if (owner.scope === 'personal') data.ownerUid = owner.uid;
+  try { await db.create(db.collection(eventsOf(owner.scope)).doc(id), data); }
+  catch (e) { if (e.status !== 409 && e.code !== 'ALREADY_EXISTS') throw e; }
+  const what = [data.title || data.place, data.title && data.place ? '📍' + data.place : '', data.who.length ? '👥' + data.who.join('・') : ''].filter(Boolean).join('　');
+  const when = jpDate(data.date) + (data.time ? ' ' + data.time : '');
+  const quickReply = {items:[{type:'action', action:{type:'postback', label:'取り消す', data:`a=del&e=${id}`, displayText:'取り消す'}}]};
+  if (data.kind === 'plan') return [text(`📅 予定に入れました\n${when}\n${what}\n\nLINEで誰かに届けるときは、アプリで予定を開いて「LINEで予定を送る」を押してください。\nちがっていたら「取り消す」を押してください。`, quickReply)];
+  return [text(`📝 思い出に記録しました\n${when}\n${what}${data.memo ? '\n\n' + data.memo : ''}\n\n写真はアプリで追加できます。ちがっていたら「取り消す」を押してください。`, quickReply)];
+}
+
+// LINEから作った記録だけ、1日以内なら取り消せる
+async function undoRecord(db, owner, postback, now) {
+  const id = docId(new URLSearchParams(postback).get('e'));
+  const snap = id && await ownedEvent(db, owner, id);
+  if (!snap) return [text('その記録は見つかりませんでした（もう取り消し済みかもしれません）。')];
+  const d = snap.data(), made = d.createdAt instanceof Date ? d.createdAt.getTime() : 0;
+  if (d.source !== 'line' || now - made > 864e5) return [text('この記録は、アプリから消してください。')];
+  await db.remove(snap.ref);
+  return [text('取り消しました。')];
+}
+
+// 「ふりかえり」：その月の思い出をAIがまとめる
+async function lookBack(db, env, owner, monthsAgo, now) {
+  if (!env.AI) return [text('ふりかえりは、いま準備中です。')];
+  const j = new Date(now + 9 * 3600000); j.setUTCDate(1); j.setUTCMonth(j.getUTCMonth() - monthsAgo);
+  const ym = `${j.getUTCFullYear()}-${pad(j.getUTCMonth() + 1)}`, label = `${j.getUTCFullYear()}年${j.getUTCMonth() + 1}月`;
+  const {date: today} = jstNow(now);
+  let q = db.collection(eventsOf(owner.scope));
+  if (owner.scope === 'personal') q = q.where('ownerUid', '==', owner.uid);
+  const rows = (await q.select('date', 'title', 'place', 'cat', 'memo', 'fav', 'kind').limit(400).get()).docs.map(d => d.data())
+    .filter(e => String(e.date || '').startsWith(ym) && (e.kind === 'memory' || e.date < today) && (e.title || e.place))
+    .sort((a, b) => a.date < b.date ? -1 : 1).slice(0, 40)
+    .map(e => ({date:e.date, title:clip(e.title, 40), place:clip(shortAddress(e.place), 40), cat:clip(e.cat, 20), memo:clip(e.memo, 60), fav:!!e.fav}));
+  if (!rows.length) return [text(`${label}の思い出はまだありません。位置情報を送ったり、「昨日 ランチ行った」と送ったりすると記録できます。`)];
+  const quota = await takeQuota(db, owner.uid, now);
+  if (!quota.ok) return [text(AI_LIMIT)];
+  let body;
+  try { body = await monthText(env, label, rows); } catch { body = ''; }
+  if (!body) return [text('うまくまとめられませんでした。少し待ってもう一度送ってください。')];
+  return [text(`✨ ${label}のふりかえり（${rows.length}件）\n\n${body}`)];
 }
 
 // LINE gives "日本、〒386-0013 長野県…"; the country and postal code only add noise.
@@ -193,10 +262,10 @@ export async function handleEvent(db, env, ev, now = Date.now()) {
     if (msg && msg.type !== 'text') return [text('ヒビルカのアプリとつなぐと、位置情報を送るだけで記録できます。\nアプリの「設定」→「LINEから記録する」からつないでください。\n' + APP_URL + '\n\n📖 使い方\n' + GUIDE_URL)];
     const g = msg?.type === 'text' ? msg.text.normalize('NFKC').trim() : '';
     if (/^(使い方|説明書|ヘルプ|help)$/i.test(g)) return [text(GUEST_HELP)];
-    if (/^(今日|きょう)(の予定)?$|^また行きたい$/.test(g)) return [text(GUEST_CONNECT)];
+    if (/^(今日|きょう)(の予定)?$|^また行きたい$|ふりかえり|振り返り/.test(g)) return [text(GUEST_CONNECT)];
     return []; // ふつうの文字は返事しない（手動でのやりとり用）
   }
-  if (ev.type === 'postback') return setCategory(db, owner, ev.postback?.data || '');
+  if (ev.type === 'postback') return new URLSearchParams(ev.postback?.data || '').get('a') === 'del' ? undoRecord(db, owner, ev.postback.data, now) : setCategory(db, owner, ev.postback?.data || '');
   if (!msg) return [];
   if (msg.type === 'location') return addLocation(db, owner, ev, now);
   if (msg.type === 'image') return [text('写真からの記録は、これから使えるようになります。今はアプリの記録に写真を追加してください。\n' + APP_URL)];
@@ -205,6 +274,9 @@ export async function handleEvent(db, env, ev, now = Date.now()) {
   if (/^(今日|きょう)(の予定)?$/.test(t)) return listToday(db, owner, now);
   if (/^また行きたい$/.test(t)) return listFavorites(db, owner);
   if (/^(使い方|説明書|ヘルプ|help)$/i.test(t)) return [text(HELP)];
+  const look = t.match(/^(今月|先月)?の?(ふりかえり|振り返り)$|^(今月|先月)$/);
+  if (look) return lookBack(db, env, owner, (look[1] || look[3]) === '先月' ? 1 : 0, now);
+  if (env.AI && t.length >= 2 && t.length <= 200) return fromText(db, env, owner, ev, t, now);
   return [text('位置情報を送ると記録できます。「使い方」と送ると、できることを確認できます。')];
 }
 
