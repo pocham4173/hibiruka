@@ -25,8 +25,6 @@ const {parseServiceAccount}=require('../scripts/service-account.cjs');
   const secrets={FIREBASE_SERVICE_ACCOUNT:JSON.stringify(account),LINE_CHANNEL_ACCESS_TOKEN:process.env.LINE_CHANNEL_ACCESS_TOKEN};
   // Optional: enables the signed LINE webhook. Without it the webhook answers 503 and sending is unaffected.
   if(process.env.LINE_CHANNEL_SECRET)secrets.LINE_CHANNEL_SECRET=process.env.LINE_CHANNEL_SECRET.trim();
-  // Optional: enables 「✨ AIで文章を作成」. Without it the AI writer answers 503 and nothing else changes.
-  if(process.env.ANTHROPIC_API_KEY)secrets.ANTHROPIC_API_KEY=process.env.ANTHROPIC_API_KEY.trim();
   run(['secret','bulk','--config',path],JSON.stringify(secrets));
   if(enable){config.vars.SENDING_ENABLED='true';fs.writeFileSync(path,JSON.stringify(config));run(['deploy','--config',path]);}
   console.log(enable?'Scheduled sender enabled. Verify heartbeat and the next authorized reservation.':'Verify-only cron deployed. No LINE messages will be sent. Wait for a successful cron heartbeat before activation.');
