@@ -119,6 +119,33 @@ export function userMessage(input, today, mode = 'diary') {
   const ask = { diary: '思い出の文章', short: 'ひとこと', sns: '投稿文', title: '題名の案を3つ' }[mode];
   return `次の記録から、${ask}を作ってください。\n<記録>\n${recordLines(input, today)}\n</記録>`;
 }
+// モデルの答えの取り出し（文字列・部品の配列・古い形のどれでも）
+export function answerText(out) {
+  const m = out?.choices?.[0]?.message;
+  const c = m?.content ?? out?.choices?.[0]?.text ?? out?.response ?? out?.result?.response;
+  if (Array.isArray(c)) return c.map(p => typeof p === 'string' ? p : p?.text || '').join('');
+  return typeof c === 'string' ? c : '';
+}
+// うまくいかなかったときの手がかり（本文や個人情報は入れない）
+export function aiDiag(out, err) {
+  if (err && /neuron|quota|limit|capacity/i.test(String(err?.message))) return 'busy';
+  if (err) return 'T:' + String(err?.message || err).replace(/[^\x20-\x7e]/g, '').slice(0, 40);
+  const ch = out?.choices?.[0];
+  return 'E:' + [ch?.finish_reason || '-', Object.keys(ch?.message || out || {}).slice(0, 4).join('.')].join(':').slice(0, 40);
+}
+// 1回目が空や失敗なら、長さに余裕をもたせてもう1回だけ聞く
+export async function runText(env, messages, maxTokens, temperature) {
+  let last = '';
+  for (const tokens of [maxTokens, Math.max(maxTokens * 2, 1500)]) {
+    let out, err;
+    try { out = await env.AI.run(MODEL, { messages, max_completion_tokens: tokens, temperature }); } catch (e) { err = e; }
+    const text = err ? '' : answerText(out);
+    if (text.replace(/<think>[\s\S]*?<\/think>/g, '').trim()) return { text };
+    last = aiDiag(out, err);
+    if (err && /neuron|quota|limit|capacity/i.test(String(err?.message))) break;
+  }
+  return { text: '', diag: last };
+}
 const keepLines = (s, n) => String(s ?? '').replace(/<think>[\s\S]*?<\/think>/g, '').replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, n);
 const unquote = s => s.replace(/^[「『"]|[」』"]$/g, '').trim();
 
@@ -159,14 +186,12 @@ export async function handleAi(request, env, { db, fetcher = fetch, now = Date.n
   const quota = await takeQuota(store, uid, t);
   if (!quota.ok) return json({ error: quota.reason === 'user' ? 'limit' : 'busy', left: quota.left }, 429, origin);
   const today = `${jstDay(t).slice(0, 4)}-${jstDay(t).slice(4, 6)}-${jstDay(t).slice(6)}`;
-  let out;
-  try {
-    out = await env.AI.run(MODEL, { messages: [{ role: 'system', content: PROMPTS[mode] }, { role: 'user', content: userMessage(input, today, mode) }], max_completion_tokens: TOKENS[mode], temperature: mode === 'title' ? 0.9 : 0.7 });
-  } catch (e) {
-    console.error('Hibiruka AI request failed: ' + String(e?.message || e).slice(0, 80));
-    return json({ error: /neuron|quota|limit|capacity/i.test(String(e?.message)) ? 'busy' : 'ai' }, 502, origin);
+  const res = await runText(env, [{ role: 'system', content: PROMPTS[mode] }, { role: 'user', content: userMessage(input, today, mode) }], TOKENS[mode], mode === 'title' ? 0.9 : 0.7);
+  if (!res.text) {
+    console.error('Hibiruka AI request failed: ' + res.diag);
+    return json({ error: res.diag === 'busy' ? 'busy' : 'ai', diag: res.diag }, 502, origin);
   }
-  const raw = keepLines(out?.choices?.[0]?.message?.content ?? out?.response ?? '', LIMITS[mode] + 200);
+  const raw = keepLines(res.text, LIMITS[mode] + 200);
   if (mode === 'title') {
     const titles = [...new Set(raw.split('\n').map(l => unquote(l.replace(/^\s*(?:[-*・●]|\d+[.)．、])\s*/, '')).slice(0, 25)).filter(Boolean))].slice(0, 3);
     if (!titles.length) return json({ error: 'ai' }, 502, origin);
@@ -206,8 +231,9 @@ export const PARSE_PROMPT = `あなたは「ヒビルカ」という予定と思
 const firstJson = s => { const m = String(s || '').replace(/<think>[\s\S]*?<\/think>/g, '').match(/\{[\s\S]*\}/); if (!m) return null; try { return JSON.parse(m[0]); } catch { return null; } };
 export async function parseRecord(env, message, today, catNames) {
   const user = `今日: ${today}\n分類の一覧: ${catNames.join('、')}\n\n<カレンダー>\n${calendarLines(today)}\n</カレンダー>\n\n<送られた文>\n${clean(message, 200)}\n</送られた文>`;
-  const out = await env.AI.run(MODEL, { messages: [{ role: 'system', content: PARSE_PROMPT }, { role: 'user', content: user }], max_completion_tokens: 500, temperature: 0.2 });
-  const j = firstJson(out?.choices?.[0]?.message?.content ?? out?.response);
+  const r = await runText(env, [{ role: 'system', content: PARSE_PROMPT }, { role: 'user', content: user }], 600, 0.2);
+  if (!r.text) return { type: 'error', diag: r.diag };
+  const j = firstJson(r.text);
   if (!j || !['plan', 'memory', 'none'].includes(j.type)) return { type: 'none' };
   if (j.type === 'none') return { type: 'none' };
   const base = Date.parse(today + 'T00:00:00Z');
@@ -226,6 +252,6 @@ export async function parseRecord(env, message, today, catNames) {
 
 // ひと月のふりかえり（LINEとアプリで同じ指示文）
 export async function monthText(env, label, records) {
-  const out = await env.AI.run(MODEL, { messages: [{ role: 'system', content: PROMPTS.month }, { role: 'user', content: userMessage({ month: label, records }, '', 'month') }], max_completion_tokens: TOKENS.month, temperature: 0.7 });
-  return unquote(keepLines(out?.choices?.[0]?.message?.content ?? out?.response ?? '', 600).replace(/\s*\n+\s*/g, '')).slice(0, LIMITS.month);
+  const r = await runText(env, [{ role: 'system', content: PROMPTS.month }, { role: 'user', content: userMessage({ month: label, records }, '', 'month') }], TOKENS.month, 0.7);
+  return { text: unquote(keepLines(r.text, 600).replace(/\s*\n+\s*/g, '')).slice(0, LIMITS.month), diag: r.diag };
 }
