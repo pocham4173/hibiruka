@@ -280,7 +280,14 @@ export async function handleEvent(db, env, ev, now = Date.now()) {
   return [text('位置情報を送ると記録できます。「使い方」と送ると、できることを確認できます。')];
 }
 
-export async function handleWebhook(request, env, {db, fetcher = fetch, now = Date.now} = {}) {
+// LINEは返事を長く待たないので、AIを使うときは「入力中…」を出してから考える（無料・送信数に数えない）
+async function showTyping(env, ev, fetcher) {
+  const id = ev.source?.type === 'user' ? ev.source.userId : null;
+  if (!id) return;
+  await fetcher('https://api.line.me/v2/bot/chat/loading/start', {method:'POST', headers:{'Content-Type':'application/json', Authorization:'Bearer ' + env.LINE_CHANNEL_ACCESS_TOKEN}, body:JSON.stringify({chatId:id, loadingSeconds:20}), signal:AbortSignal.timeout(5000)}).catch(() => {});
+}
+
+export async function handleWebhook(request, env, {db, fetcher = fetch, now = Date.now, waitUntil} = {}) {
   if (!env.LINE_CHANNEL_SECRET || !env.LINE_CHANNEL_ACCESS_TOKEN) return new Response('Not configured', {status:503});
   const body = await request.text();
   if (body.length > 200000 || !(await verifySignature(env.LINE_CHANNEL_SECRET, body, request.headers.get('x-line-signature')))) return new Response('Unauthorized', {status:401});
@@ -288,15 +295,22 @@ export async function handleWebhook(request, env, {db, fetcher = fetch, now = Da
   try { payload = JSON.parse(body); } catch { return new Response('Bad request', {status:400}); }
   const events = Array.isArray(payload.events) ? payload.events.slice(0, MAX_EVENTS) : [];
   if (!events.length) return new Response('OK'); // LINE Developersの「検証」
-  const database = await db();
-  for (const ev of events) {
-    try {
-      const messages = await handleEvent(database, env, ev, now());
-      await reply(env.LINE_CHANNEL_ACCESS_TOKEN, ev.replyToken, messages, fetcher);
-    } catch {
-      console.error('Hibiruka webhook event failed.'); // 本文・名前・トークンは出さない
-      try { await reply(env.LINE_CHANNEL_ACCESS_TOKEN, ev.replyToken, [text('うまく受け取れませんでした。少し待ってもう一度送ってください。')], fetcher); } catch {}
+  const work = (async () => {
+    let database;
+    try { database = await db(); } catch { console.error('Hibiruka webhook could not open the database.'); return; }
+    for (const ev of events) {
+      try {
+        if (env.AI && ev.type === 'message' && ev.message?.type === 'text') await showTyping(env, ev, fetcher);
+        const messages = await handleEvent(database, env, ev, now());
+        await reply(env.LINE_CHANNEL_ACCESS_TOKEN, ev.replyToken, messages, fetcher);
+      } catch {
+        console.error('Hibiruka webhook event failed.'); // 本文・名前・トークンは出さない
+        try { await reply(env.LINE_CHANNEL_ACCESS_TOKEN, ev.replyToken, [text('うまく受け取れませんでした。少し待ってもう一度送ってください。')], fetcher); } catch {}
+      }
     }
-  }
+  })();
+  // 本番：LINEにはすぐ「受け取った」と返し、続きはそのあとで（AIの返事に数秒かかっても切られない）
+  if (waitUntil) { waitUntil(work); return new Response('OK'); }
+  await work;
   return new Response('OK');
 }

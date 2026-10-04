@@ -36,7 +36,7 @@ export async function tick(env,controller){
 export default {
   scheduled(controller,env,ctx){ctx.waitUntil(tick(env,controller));},
   // There is deliberately no public HTTP send endpoint. Only LINE-signed webhooks and the signed-in AI writer are accepted.
-  async fetch(request,env){
+  async fetch(request,env,ctx){
     const url=new URL(request.url);
     if(url.pathname==='/ai/memory-text'&&['POST','OPTIONS'].includes(request.method)){
       try{return await handleAi(request,env,{db:async()=>firestore(await googleToken(env.FIREBASE_SERVICE_ACCOUNT),fetch,4)});}
@@ -44,7 +44,7 @@ export default {
     }
     if(request.method!=='POST'||url.pathname!=='/line/webhook')return new Response('Not found',{status:404});
     try{
-      return await handleWebhook(request,env,{db:async()=>firestore(await googleToken(env.FIREBASE_SERVICE_ACCOUNT),fetch,400)});
+      return await handleWebhook(request,env,{db:async()=>firestore(await googleToken(env.FIREBASE_SERVICE_ACCOUNT),fetch,400),waitUntil:ctx?.waitUntil?.bind(ctx)});
     }catch{
       console.error('Hibiruka webhook failed; check credentials and service status.');
       return new Response('Temporarily unavailable',{status:503});
