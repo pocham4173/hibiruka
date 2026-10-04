@@ -1082,7 +1082,7 @@ function goTab(t) {
 /* =========================================================
    記録する
    ========================================================= */
-let form = { cat: "", who: new Set(), fav: false, photos: [] }; // photos: [{thumb, full}] 新規 or {id, thumb} 既存
+let form = { cat: "", who: new Set(), fav: false, photos: [], geo: null, dateTouched: false }; // photos: [{thumb, full}] 新規 or {id, thumb} 既存
 let editingId = null;
 let draftRecordId = null;
 
@@ -1104,18 +1104,19 @@ function setupForm() {
   $("saveBtn").onclick = saveRecord;
   $("cancelEditBtn").onclick = () => { resetForm(); goTab("list"); };
   $("fDate").oninput = () => {
+    form.dateTouched = true;
     if ($("fDate").value && $("fDate").value < todayStr()) $("fKind").value = "memory";
     updateSaveNote();
   };
   document.querySelectorAll('[data-kind]').forEach(b => b.onclick = () => {
     $("fKind").value = b.dataset.kind; updateSaveNote();
   });
-  $("fPlace").oninput = updateMapLink;
+  $("fPlace").oninput = () => { if (form.geo && $("fPlace").value.trim() !== form.geo.place) form.geo = null; updateMapLink(); };
 }
 function resetForm() {
   editingId = null;
   draftRecordId = null;
-  form = { cat: "", who: new Set(), fav: false, photos: [] };
+  form = { cat: "", who: new Set(), fav: false, photos: [], geo: null, dateTouched: false };
   $("fKind").value = "plan"; $("fDate").value = todayStr(); $("fTime").value = "";
   $("fPlace").value = ""; $("fTitle").value = ""; $("fMemo").value = ""; $("fLink").value = "";
   $("fFav").classList.remove("on");
@@ -1155,7 +1156,7 @@ function renderWho() {
 }
 const mapUrl = (q) => "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q);
 const placeUrl = (e) => Number.isFinite(e.lat) && Number.isFinite(e.lng) ? "https://www.google.com/maps/search/?api=1&query=" + e.lat + "," + e.lng : mapUrl(e.place);
-function updateMapLink() { const q = $("fPlace").value.trim(); $("fMapLink").classList.toggle("hidden", !q); if (q) $("fMapLink").href = mapUrl(q); }
+function updateMapLink() { const q = $("fPlace").value.trim(); $("fMapLink").classList.toggle("hidden", !q); if (q) $("fMapLink").href = form.geo ? placeUrl({ ...form.geo, place: q }) : mapUrl(q); }
 function gcalUrl(e) {
   const d = e.date.replace(/-/g, "");
   let dates;
@@ -1197,6 +1198,7 @@ async function addPhotos(ev) {
   targetForm.photoPending = (targetForm.photoPending || 0) + 1;
   renderPhotos();
   try {
+    if (files[0]) fillFromPhoto(files[0], targetForm);
     for (const f of files) {
       try {
         const photo = { thumb: await shrink(f, 220, 0.7), full: await shrink(f, 1000, 0.72) };
@@ -1207,6 +1209,75 @@ async function addPhotos(ev) {
     targetForm.photoPending--;
     if (form === targetForm) renderPhotos();
   }
+}
+/* 写真の撮影日と場所（EXIF）から、日付と「どこで？」を入れる */
+async function readExif(file) {
+  const part = file.slice(0, 256 * 1024);
+  const ab = part.arrayBuffer ? await part.arrayBuffer() : await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsArrayBuffer(part); });
+  const buf = new DataView(ab);
+  if (buf.byteLength < 4 || buf.getUint16(0) !== 0xFFD8) return null;
+  let off = 2;
+  while (off + 10 < buf.byteLength) {
+    const marker = buf.getUint16(off), size = buf.getUint16(off + 2);
+    if (marker === 0xFFE1 && buf.getUint32(off + 4) === 0x45786966) return parseTiff(buf, off + 10);
+    if ((marker & 0xFF00) !== 0xFF00 || marker === 0xFFDA) break;
+    off += 2 + size;
+  }
+  return null;
+}
+function parseTiff(v, t) {
+  const le = v.getUint16(t) === 0x4949, u16 = o => v.getUint16(o, le), u32 = o => v.getUint32(o, le);
+  const tags = ifd => { const out = {}; if (t + ifd + 2 > v.byteLength) return out; const n = u16(t + ifd); for (let i = 0; i < n; i++) { const e = t + ifd + 2 + i * 12; if (e + 12 > v.byteLength) break; out[u16(e)] = e; } return out; };
+  const ascii = e => { const len = u32(e + 4), o = len > 4 ? t + u32(e + 8) : e + 8; let s = ""; for (let i = 0; i < len - 1 && o + i < v.byteLength; i++) s += String.fromCharCode(v.getUint8(o + i)); return s; };
+  const rats = e => { const o = t + u32(e + 8); return [0, 1, 2].map(i => u32(o + i * 8) / (u32(o + i * 8 + 4) || 1)); };
+  const ifd0 = tags(u32(t + 4)), out = {};
+  if (ifd0[0x8769]) {
+    const ex = tags(u32(ifd0[0x8769] + 8)), d = ex[0x9003] || ex[0x9004];
+    const m = d && ascii(d).match(/^(\d{4}):(\d{2}):(\d{2})(?: (\d{2}):(\d{2}))?/);
+    if (m && m[1] !== "0000") { out.date = `${m[1]}-${m[2]}-${m[3]}`; if (m[4]) out.time = `${m[4]}:${m[5]}`; }
+  }
+  if (ifd0[0x8825]) {
+    const g = tags(u32(ifd0[0x8825] + 8));
+    if (g[2] && g[4]) {
+      const deg = a => a[0] + a[1] / 60 + a[2] / 3600;
+      let lat = deg(rats(g[2])), lng = deg(rats(g[4]));
+      if (g[1] && ascii(g[1]) === "S") lat = -lat;
+      if (g[3] && ascii(g[3]) === "W") lng = -lng;
+      if (Number.isFinite(lat) && Number.isFinite(lng) && (lat || lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) { out.lat = Math.round(lat * 1e6) / 1e6; out.lng = Math.round(lng * 1e6) / 1e6; }
+    }
+  }
+  return out;
+}
+// 座標から場所の名前（OpenStreetMap）。お店や施設の名前があればそれを、なければ町名まで
+async function placeName(lat, lng) {
+  const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&accept-language=ja`, { headers: { Accept: "application/json" } });
+  if (!r.ok) throw new Error("reverse " + r.status);
+  const j = await r.json(), a = j.address || {};
+  const area = [a.city || a.town || a.village || a.county || "", a.suburb || a.quarter || a.neighbourhood || a.city_district || ""].filter(Boolean).join("");
+  const poi = j.name && !/^\d/.test(j.name) && j.name !== a.road ? j.name : "";
+  return poi || area || a.state || "";
+}
+async function fillFromPhoto(file, targetForm) {
+  let ex = null;
+  try { ex = await readExif(file); } catch {}
+  if (!ex || form !== targetForm) return;
+  const said = [];
+  if (ex.date && !targetForm.dateTouched && !editingId && ex.date <= todayStr() && ex.date !== $("fDate").value) {
+    $("fDate").value = ex.date;
+    if (ex.date < todayStr()) $("fKind").value = "memory";
+    if (!$("fTime").value && ex.time) $("fTime").value = ex.time;
+    updateSaveNote(); said.push("日付");
+  }
+  if (Number.isFinite(ex.lat) && !$("fPlace").value.trim()) {
+    let name = "";
+    try { name = await placeName(ex.lat, ex.lng); } catch {}
+    if (form === targetForm && !$("fPlace").value.trim()) {
+      name ||= "写真の場所";
+      $("fPlace").value = name; targetForm.geo = { lat: ex.lat, lng: ex.lng, place: name };
+      updateMapLink(); said.push("場所");
+    }
+  }
+  if (said.length && form === targetForm) toast(`📷 写真から${said.join("と")}を入れました。違うときは直してください`, 5000);
 }
 function renderPhotos() {
   const box = $("fPhotos");
@@ -1230,6 +1301,10 @@ async function saveRecord() {
     memo: $("fMemo").value.trim(), link: $("fLink").value.trim(), fav: form.fav,
     thumbs: form.photos.map(p => p.thumb), updatedAt: TS()
   };
+  // 場所の座標は、写真やLINEから入れた場所のままのときだけ残す（直したら消す）
+  const geo = form.geo && form.geo.place === data.place ? form.geo : null;
+  if (geo) { data.lat = geo.lat; data.lng = geo.lng; }
+  else if (editingId) { data.lat = firebase.firestore.FieldValue.delete(); data.lng = firebase.firestore.FieldValue.delete(); }
   if (!data.title && !data.place) { toast("「どこで？」か「なにをする？」を入れてください"); $("fTitle").focus(); return; }
   if ($("saveBtn").disabled) return;
   if (form.photos.some(p => !p.full)) { toast("写真を読み込めませんでした。記録を開き直してください。"); return; }
@@ -1273,6 +1348,8 @@ async function editRecord(id) {
   editingId = id;
   form.cat = e.cat || cats[0]?.name; form.who = new Set(e.who || []); form.fav = !!e.fav;
   form.photos = (e.thumbs || []).map(t => ({ thumb: t, full: null }));
+  form.geo = Number.isFinite(e.lat) && Number.isFinite(e.lng) ? { lat: e.lat, lng: e.lng, place: e.place || "" } : null;
+  form.dateTouched = true;
   $("fKind").value = isPlan(e) ? "plan" : "memory"; $("fDate").value = e.date; $("fTime").value = e.time || "";
   $("fPlace").value = e.place || ""; $("fTitle").value = e.title || ""; $("fMemo").value = e.memo || ""; $("fLink").value = e.link || "";
   $("fFav").classList.toggle("on", form.fav);
@@ -1468,7 +1545,7 @@ function renderList() {
     html = items.length ? `<div class="album">${items.map(e => {
       const p = parts(e.date);
       return `<div class="m" data-open="${e.id}">${(e.thumbs || [])[0] ? `<div class="img"><img src="${e.thumbs[0]}" alt=""></div>` : memoryCover(e)}
-      <div class="t"><b>${esc(e.title || e.place || catLabel(e.cat))}${e.fav ? ' <span class="fav-mark">♥</span>' : ""}</b><small>${p.y}.${p.m}.${p.d}　${esc(catLabel(e.cat))}</small>${e.place ? `<div><a class="memory-map" href="${mapUrl(e.place)}" target="_blank" rel="noopener" data-stop>📍 地図で見る</a></div>` : ""}</div></div>`;
+      <div class="t"><b>${esc(e.title || e.place || catLabel(e.cat))}${e.fav ? ' <span class="fav-mark">♥</span>' : ""}</b><small>${p.y}.${p.m}.${p.d}　${esc(catLabel(e.cat))}</small>${e.place ? `<div><a class="memory-map" href="${placeUrl(e)}" target="_blank" rel="noopener" data-stop>📍 地図で見る</a></div>` : ""}</div></div>`;
     }).join("")}</div>` : emptyBox("image", "思い出はまだありません。", "行ったところや、あったことを残そう");
   } else if (view === "fav") {
     title = "また行きたい"; items = list.filter(e => e.fav).sort((a, b) => a.date < b.date ? 1 : -1);
