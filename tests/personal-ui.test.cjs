@@ -26,7 +26,7 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
  w.firebase={initializeApp:()=>{},auth:authFn,firestore};w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.console.error=(...args)=>errors.push(args);w.liff={init:async()=>{},isLoggedIn:()=>true,getProfile:async()=>({userId:'U'+'a'.repeat(32),displayName:'A'}),isInClient:()=>false};
  const script=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean).pop();
  w.testNavigate=url=>calls.push(['navigate',url]);
- w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setWishes:value=>wishes=value,setShown:value=>findShown=value,setFriends:(value,self)=>{friends=value;selfFriendId=self;},config:CONFIG,setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
+ w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setWishes:value=>wishes=value,setShown:value=>findShown=value,spotMapLink,setFriends:(value,self)=>{friends=value;selfFriendId=self;},config:CONFIG,setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
  return{w,d,data,calls,queries,db,errors,close:()=>{w.close();assert.equal(errors.length,0,errors.map(String).join(' '));}};
 }
 test('new user gets a private profile and all list queries are owner-filtered',async()=>{
@@ -776,5 +776,11 @@ test('app notifications: turn on for this device, send a test, and choose 📱 �
   await w.addSend(true);assert.equal(a.data.get('personalEvents/p1').sends[0].friendIds.join(),'push:self');
   assert.match(d.getElementById('sQuota').textContent,/今月あと30通/);
   await w.pushDisable();await settle();assert.equal(sub,null);assert(calls.some(c=>c[0]==='push/subscribe'&&c[1].action==='remove'));
+ }finally{a.close();}
+});
+
+test('map links always open the exact position, never a name search that can jump to another city',async()=>{
+ const a=app();try{const {w}=a;
+  for(const name of ['喫煙所','セブン-イレブン 上田店','ソラノカフェ']){const u=new URL(w.h.spotMapLink({name,lat:36.4027936,lng:138.2463693}));assert.equal(u.searchParams.get('query'),'36.402794,138.246369');}
  }finally{a.close();}
 });
