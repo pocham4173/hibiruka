@@ -403,3 +403,23 @@ test('find spots: Nagano parks and hot springs come from the weekly data; わん
   assert.match(d.getElementById('findResults').textContent,/Powered by ホットペッパー/);
  }finally{a.close();}
 });
+test('find spots: the range switch searches 1km, 3km or the whole city and repeats the last search',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  Object.defineProperty(w.navigator,'geolocation',{value:{getCurrentPosition:(ok)=>ok({coords:{latitude:36.40,longitude:138.25}})},configurable:true});
+  const sent=[];
+  w.fetch=async(url,opt)=>{url=String(url);
+   if(url.includes('/spots/search')){sent.push(JSON.parse(opt.body));return{ok:true,status:200,json:async()=>({shops:[{id:'hp:1',name:'焼肉 はなこ',genre:'焼肉',lat:36.45,lng:138.3,url:'',photo:''}]})};}
+   if(url.includes('nominatim')&&url.includes('reverse'))return{ok:true,json:async()=>({address:{city:'上田市'}})};
+   return{ok:true,json:async()=>[]};};
+  const settle=()=>new Promise(r=>setTimeout(r,20));
+  d.querySelector('.maintabs [data-tab="find"]').click();
+  d.querySelector('[data-find="yakiniku"]').click();await settle();await settle();
+  assert.deepEqual(sent.at(-1),{kind:'yakiniku',lat:36.4,lng:138.25,range:5});
+  d.querySelector('[data-range="3"]').click();await settle();await settle();
+  assert.deepEqual(sent.at(-1),{kind:'yakiniku',lat:36.4,lng:138.25,range:3});
+  d.querySelector('[data-range="city"]').click();await settle();await settle();
+  assert.deepEqual(sent.at(-1),{kind:'yakiniku',keyword:'上田市',count:100});
+  assert.match(d.getElementById('findNote').textContent,/^上田市で1件見つかりました（近い順）/);
+  assert(d.querySelector('[data-range="city"]').classList.contains('on-range'));
+ }finally{a.close();}
+});

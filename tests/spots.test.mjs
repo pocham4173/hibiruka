@@ -22,6 +22,7 @@ test('queries: near me by genre, lunch, or a keyword like 上田駅 ランチ', 
   let q = buildQuery({kind: 'cafe', lat: 36.4, lng: 138.25}, 'K');
   assert.equal(q.get('genre'), 'G014'); assert.equal(q.get('lat'), '36.40000'); assert.equal(q.get('range'), '5'); assert.equal(q.get('key'), 'K');
   q = buildQuery({kind: 'lunch', lat: 36.4, lng: 138.25, range: 3}, 'K'); assert.equal(q.get('lunch'), '1'); assert.equal(q.get('range'), '3'); assert.equal(q.has('genre'), false);
+  assert.equal(q.get('count'), '30'); assert.equal(buildQuery({keyword: '上田市', count: 500}, 'K').get('count'), '100');
   q = buildQuery({keyword: '上田駅 ランチ'}, 'K'); assert.equal(q.get('keyword'), '上田駅 ランチ'); assert.equal(q.has('lat'), false);
   q = buildQuery({kind: 'sushi', keyword: '上田'}, 'K'); assert.equal(q.get('keyword'), '上田 寿司'); assert.equal(q.get('genre'), 'G004');
   assert.equal(buildQuery({kind: 'cafe'}, 'K'), null, 'needs a place or a keyword');

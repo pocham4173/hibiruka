@@ -11,7 +11,8 @@ const clean = (s, n) => String(s ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').t
 const num = v => (typeof v === 'number' || (typeof v === 'string' && v.trim() !== '')) && Number.isFinite(Number(v)) ? Number(v) : NaN;
 
 export function buildQuery(body, key) {
-  const p = new URLSearchParams({ key, format: 'json', count: '30' });
+  const count = Math.min(100, Math.max(1, Math.round(num(body.count)) || 30));
+  const p = new URLSearchParams({ key, format: 'json', count: String(count) });
   const kind = GENRES[body.kind] !== undefined ? body.kind : '';
   const keyword = clean(body.keyword, 40);
   const lat = num(body.lat), lng = num(body.lng);
