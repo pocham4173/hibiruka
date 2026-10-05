@@ -47,3 +47,14 @@ test('search: signed-in app only, key stays in the Worker, errors are short', as
   resetKeyCache(); s = setup({results: {error: [{code: 2000, message: 'bad key'}]}});
   assert.equal((await handleSpots(req({keyword: 'カフェ'}), env, s.deps)).status, 502);
 });
+
+test('coupons: coupon search and filter ask Hotpepper for shops with coupons; coupon links come back', () => {
+  let q = buildQuery({kind: 'coupon', lat: 36.4, lng: 138.25}, 'K');
+  assert.equal(q.get('ktai_coupon'), '0'); assert.equal(q.get('genre'), null);
+  q = buildQuery({kind: 'cafe', lat: 36.4, lng: 138.25, filters: ['coupon']}, 'K');
+  assert.equal(q.get('ktai_coupon'), '0'); assert.equal(q.get('coupon'), null);
+  const s = shopOut({id: 'J1', name: '森', lat: '36.4', lng: '138.2', ktai_coupon: 0, coupon_urls: {pc: 'https://www.hotpepper.jp/strJ1/map/', sp: 'https://www.hotpepper.jp/strJ1/scoupon/'}});
+  assert.equal(s.coupon, true); assert.equal(s.couponUrl, 'https://www.hotpepper.jp/strJ1/scoupon/');
+  const n = shopOut({id: 'J2', name: '林', lat: 36.4, lng: 138.2, ktai_coupon: 1, coupon_urls: {sp: 'javascript:alert(1)'}});
+  assert.equal(n.coupon, false); assert.equal(n.couponUrl, '');
+});
