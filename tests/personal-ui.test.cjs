@@ -325,7 +325,7 @@ test('find spots: nearby category search, save to the wish list, plan it, and wi
   const settle=()=>new Promise(r=>setTimeout(r,15));
   d.querySelector('.maintabs [data-tab="find"]').click();assert(!d.getElementById('tab-find').classList.contains('hidden'));
   d.querySelector('[data-find="cafe"]').click();await settle();await settle();
-  const ov=urls.find(([u])=>u.includes('overpass'));assert.match(decodeURIComponent(ov[1]),/nwr\["amenity"="cafe"\]\(around:1500,36\.4,138\.25\)/);
+  const ov=urls.find(([u])=>u.includes('overpass'));assert(urls.some(([u,b])=>u.includes('overpass')&&/around:2500,36\.4000,138\.2500/.test(decodeURIComponent(b))));assert(urls.some(([u,b])=>u.includes('overpass')&&/nwr\["amenity"="cafe"\]\(around:10000,36\.4000,138\.2500\)/.test(decodeURIComponent(b))));
   const cards=d.querySelectorAll('#findResults .spot');assert.equal(cards.length,7,'unnamed places are skipped');
   assert.match(cards[0].textContent,/ソラノカフェ/);assert.match(cards[0].textContent,/カフェ/);assert.match(cards[0].textContent,/上田市/);
   // save a wish
