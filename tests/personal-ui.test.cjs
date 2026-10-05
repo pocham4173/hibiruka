@@ -601,3 +601,31 @@ test('deals: local show-only coupons, Hotpepper coupon shops and travel coupons,
   assert(d.querySelector('[data-filter="coupon"]'));
  }finally{a.close();}
 });
+
+test('find tab reads top to bottom: where, when, weather, then food with its conditions and coupons, then outings with travel coupons',async()=>{
+ const a=app();try{const d=a.d;
+  const ids=['wherePick','findWhen','findWeather','findForm','findCondTitle','findDealTitle','findTripTitle'];
+  const food=d.querySelector('[data-find="cafe"]'),out=d.querySelector('[data-find="park"]');
+  const order=[...ids.map(id=>d.getElementById(id)),food,out];
+  const pos=el=>[...d.querySelectorAll('*')].indexOf(el);
+  const want=['wherePick','findWhen','findWeather','findForm','cafe','findCondTitle','findDealTitle','park','findTripTitle'];
+  const els={cafe:food,park:out};ids.forEach(id=>els[id]=d.getElementById(id));
+  const got=want.slice().sort((x,y)=>pos(els[x])-pos(els[y]));assert.deepEqual(got,want);assert(order.every(Boolean));
+ }finally{a.close();}
+});
+
+test('a search result list can be closed from the top or the bottom',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  Object.defineProperty(w.navigator,'geolocation',{value:{getCurrentPosition:(ok)=>ok({coords:{latitude:36.40,longitude:138.25}})},configurable:true});
+  w.fetch=async(url)=>String(url).includes('/spots/search')?{ok:true,status:200,json:async()=>({shops:[{id:'hp:J1',name:'森',lat:36.401,lng:138.251}]})}:{ok:true,json:async()=>[]};
+  const settle=async()=>{for(let i=0;i<3;i++)await new Promise(r=>setTimeout(r,20));};
+  d.querySelector('.maintabs [data-tab="find"]').click();
+  assert(d.getElementById('findCloseTop').classList.contains('hidden'),'nothing to close yet');
+  for(const id of ['findCloseTop','findCloseBottom']){
+   d.querySelector('[data-find="cafe"]').click();await settle();
+   assert(d.querySelector('#findResults .spot'));assert(!d.getElementById(id).classList.contains('hidden'));
+   d.getElementById(id).click();assert.equal(d.getElementById('findResults').innerHTML,'');
+   assert(d.getElementById('findCloseTop').classList.contains('hidden')&&d.getElementById('findCloseBottom').classList.contains('hidden'));
+  }
+ }finally{a.close();}
+});
