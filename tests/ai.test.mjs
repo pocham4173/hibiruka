@@ -127,3 +127,17 @@ test('answers are read from any shape; thinking is turned off and an empty answe
   const empty = {AI:{run:async () => ({choices:[{finish_reason:'length', message:{content:null, reasoning_content:'x'}}]})}};
   assert.match((await runText(empty, [], 800, 0.7)).diag, /^E:length:content\.reasoning_content/);
 });
+
+test('outing plan: only places from the candidates are kept, in time order; too few candidates are refused', async () => {
+  const {planSteps} = await import('../line-worker/ai.mjs');
+  const spots = [{name: '上田城跡公園', kind: '公園'}, {name: 'ソラノカフェ', kind: 'カフェ'}, {name: '信州の湯', kind: '温泉'}];
+  const raw = '14:00｜信州の湯｜あったまろう。\n10:00 | 上田城跡公園 | 朝のおさんぽ。\n12:00｜架空のレストラン｜おいしい。\n12:30｜「ソラノカフェ」｜ランチでひと休み。\nまとめ: 楽しい一日';
+  assert.deepEqual(planSteps(raw, spots), [{time: '10:00', name: '上田城跡公園', note: '朝のおさんぽ。'}, {time: '12:30', name: 'ソラノカフェ', note: 'ランチでひと休み。'}, {time: '14:00', name: '信州の湯', note: 'あったまろう。'}]);
+  resetKeyCache(); let s = setup({aiText: raw});
+  const out = await (await handleAi(req({mode: 'plan', date: '2026-10-11', dayText: '10月11日(土)', area: '上田市', weather: '雨 最高18℃', spots}), s.env, s.deps)).json();
+  assert.equal(out.steps.length, 3); assert.equal(s.runs[0][1].messages[0].content, PROMPTS.plan);
+  assert.match(s.runs[0][1].messages[1].content, /<候補>\n上田城跡公園（公園）\nソラノカフェ（カフェ）\n信州の湯（温泉）\n<\/候補>/);
+  assert.equal((await handleAi(req({mode: 'plan', date: '2026-10-11', spots: [spots[0]]}), s.env, s.deps)).status, 400);
+  resetKeyCache(); s = setup({aiText: '10:00｜どこか｜x'});
+  assert.equal((await handleAi(req({mode: 'plan', date: '2026-10-11', spots}), s.env, s.deps)).status, 502);
+});

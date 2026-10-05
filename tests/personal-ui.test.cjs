@@ -26,7 +26,7 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
  w.firebase={initializeApp:()=>{},auth:authFn,firestore};w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.console.error=(...args)=>errors.push(args);w.liff={init:async()=>{},isLoggedIn:()=>true,getProfile:async()=>({userId:'U'+'a'.repeat(32),displayName:'A'}),isInClient:()=>false};
  const script=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean).pop();
  w.testNavigate=url=>calls.push(['navigate',url]);
- w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setFriends:(value,self)=>{friends=value;selfFriendId=self;},config:CONFIG,setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
+ w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setWishes:value=>wishes=value,setShown:value=>findShown=value,setFriends:(value,self)=>{friends=value;selfFriendId=self;},config:CONFIG,setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
  return{w,d,data,calls,queries,db,errors,close:()=>{w.close();assert.equal(errors.length,0,errors.map(String).join(' '));}};
 }
 test('new user gets a private profile and all list queries are owner-filtered',async()=>{
@@ -665,6 +665,8 @@ test('area: choose a prefecture and city; food and outings search inside it, and
   assert.match(evLinks[2].textContent,/長野県の遊び・体験を予約/);assert(evLinks[2].querySelector('.pr'));
   assert.equal(evLinks[2].href,'https://hb.afl.rakuten.co.jp/hgc/583df298.b5d045a3.583df299.c1b690a8/?pc='+encodeURIComponent('https://experiences.travel.rakuten.co.jp/destinations/nagano')+'&link_type=hybrid_url');
   assert.doesNotMatch(d.getElementById('eventSearch').textContent,/上田/);
+  const gifts=[...d.querySelectorAll('#giftLinks a')];assert.equal(gifts.length,2);assert.match(gifts[0].textContent,/長野のお土産/);assert.match(gifts[1].textContent,/松本市のふるさと納税/);
+  assert(decodeURIComponent(decodeURIComponent(gifts[0].href)).includes('search.rakuten.co.jp/search/mall/長野 お土産/'));assert(gifts[0].href.startsWith('https://hb.afl.rakuten.co.jp/hgc/'));
   // outings inside the city
   d.querySelector('[data-find="park"]').click();await settle();
   assert(ovp.some(q=>q.includes('"ISO3166-2"="JP-20"')&&q.includes('"name"~"^松本市$"')&&q.includes('(area.a)')),ovp.join('\n'));
@@ -721,5 +723,28 @@ test('memory map: memories with a place are pinned on the map; the count of othe
   assert(d.getElementById('memMap'));assert.equal(markers.length,2);assert.equal(fitted.length,2);
   assert.match(markers[0][1],/松本城 ♥/);assert.match(d.getElementById('listBox').textContent,/場所がわかる思い出 2件.*ほかの1件/s);
   assert.equal(d.getElementById('listTitle').textContent,'思い出マップ');assert(!d.getElementById('memoryViews').classList.contains('hidden'));
+ }finally{a.close();}
+});
+
+test('AI outing plan: uses wishes nearby and found places, shows the steps and each can become a plan with its time',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  let asked=null;
+  w.fetch=async(url,opt)=>{url=String(url);
+   if(url.includes('/ai/memory-text')){asked=JSON.parse(opt.body);return{ok:true,status:200,json:async()=>({steps:[{time:'10:00',name:'上田城跡公園',note:'朝のおさんぽ。'},{time:'12:00',name:'ソラノカフェ',note:'ランチ。'}],left:19})};}
+   if(url.includes('/weather'))return{ok:true,json:async()=>({results:[{code:61,max:18,rain:80}]})};
+   return{ok:true,json:async()=>[]};};
+  const settle=async()=>{for(let i=0;i<4;i++)await new Promise(r=>setTimeout(r,20));};
+  d.querySelector('.maintabs [data-tab="find"]').click();await settle();
+  await w.makePlan();assert.match(d.getElementById('aiPlan').textContent,/候補が足りません/);assert.equal(asked,null);
+  w.h.setWishes([{id:'w1',kind:'wish',status:'wished',place:'上田城跡公園',genre:'公園',lat:36.403,lng:138.244},{id:'w2',kind:'wish',status:'visited',place:'行った所',lat:36.40,lng:138.25},{id:'w3',kind:'wish',status:'wished',place:'遠い所',lat:43,lng:141}]);
+  w.h.setShown([{name:'ソラノカフェ',genre:'カフェ',lat:36.401,lng:138.251}]);
+  await w.makePlan();
+  assert.equal(asked.mode,'plan');assert.deepEqual(asked.spots.map(x=>x.name),['上田城跡公園','ソラノカフェ']);assert.match(asked.weather,/雨/);
+  const box=d.getElementById('aiPlan');assert.match(box.textContent,/10:00上田城跡公園朝のおさんぽ。/);assert.match(box.textContent,/今日はあと19回/);
+  const course=[...box.querySelectorAll('a')].find(x=>/コースを車で/.test(x.textContent));const u=new URL(course.href);
+  assert.equal(u.searchParams.get('travelmode'),'driving');assert.equal(u.searchParams.get('destination'),'36.40100,138.25100');assert.equal(u.searchParams.get('waypoints'),'36.40300,138.24400');
+  assert.equal(new URL(box.querySelectorAll('.plan-step a')[1].href).searchParams.get('origin'),'36.40300,138.24400','from the previous place');
+  box.querySelectorAll('[data-plan-step]')[1].click();
+  assert.equal(d.getElementById('fPlace').value,'ソラノカフェ');assert.equal(d.getElementById('fTime').value,'12:00');assert.equal(d.getElementById('fKind').value,'plan');
  }finally{a.close();}
 });
