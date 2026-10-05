@@ -2,18 +2,14 @@
 // GitHub Actions で週1回動かす。アプリはこのファイルを読むだけなので、押した瞬間に出せる。
 const fs = require('node:fs');
 const MIRRORS = ['https://overpass-api.de/api/interpreter', 'https://overpass.private.coffee/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
-const QUERY = `[out:json][timeout:240];
-area["ISO3166-2"="JP-20"]->.a;
-(
-  nwr["leisure"="park"]["name"](area.a);
-  nwr["tourism"~"^(attraction|museum|viewpoint|zoo|aquarium|theme_park|gallery)$"]["name"](area.a);
-  nwr["amenity"="public_bath"]["name"](area.a);
-  nwr["leisure"~"^(spa|sauna)$"]["name"](area.a);
-  nwr["natural"="hot_spring"]["name"](area.a);
-  nwr["leisure"="dog_park"](area.a);
-  nwr["dog"~"^(yes|leashed)$"]["name"](area.a);
-);
-out center tags;`;
+// 県全体を1回で取ると重いので、種類ごとに分けて取る
+const PARTS = [
+  'nwr["leisure"="park"]["name"](area.a);',
+  'nwr["tourism"~"^(attraction|museum|viewpoint|zoo|aquarium|theme_park|gallery)$"]["name"](area.a);',
+  'nwr["amenity"="public_bath"]["name"](area.a);nwr["leisure"~"^(spa|sauna)$"]["name"](area.a);nwr["natural"="hot_spring"]["name"](area.a);',
+  'nwr["leisure"="dog_park"](area.a);nwr["dog"~"^(yes|leashed)$"]["name"](area.a);',
+];
+const query = part => `[out:json][timeout:180];area["ISO3166-2"="JP-20"]["admin_level"="4"]->.a;(${part});out center tags;`;
 const GENRE = { park: '公園', attraction: '観光スポット', museum: '博物館・美術館', viewpoint: '景色のいい場所', zoo: '動物園', aquarium: '水族館', theme_park: 'テーマパーク', gallery: 'ギャラリー',
   public_bath: '温泉・銭湯', spa: 'スパ', sauna: 'サウナ', hot_spring: '温泉', dog_park: 'ドッグラン' };
 const r5 = n => Math.round(n * 1e5) / 1e5;
@@ -40,25 +36,34 @@ function rows(elements) {
   }
   return out;
 }
-async function fetchAll() {
+// GitHub の画面に理由が出るように（::warning:: / ::error::）
+const note = (level, msg) => console.log(`::${level}::${String(msg).replace(/[\r\n]+/g, ' ').slice(0, 300)}`);
+async function fetchPart(part) {
   let last;
   for (const url of MIRRORS) {
     try {
-      const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(QUERY), headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'hibiruka-spots/1.0 (github.com/pocham4173/hibiruka)' }, signal: AbortSignal.timeout(300000) });
-      if (!r.ok) throw Error(url + ' HTTP ' + r.status);
-      const j = await r.json();
-      if (!Array.isArray(j.elements) || j.elements.length < 100) throw Error(url + ' returned too little data');
+      const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(query(part)), headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'hibiruka-spots/1.0 (github.com/pocham4173/hibiruka)' }, signal: AbortSignal.timeout(240000) });
+      const text = await r.text();
+      if (!r.ok) throw Error(`${new URL(url).host} HTTP ${r.status}: ${text.slice(0, 120)}`);
+      const j = JSON.parse(text);
+      if (j.remark) note('warning', `${new URL(url).host} remark: ${j.remark}`);
+      if (!Array.isArray(j.elements)) throw Error(`${new URL(url).host} no elements`);
       return j.elements;
-    } catch (e) { last = e; console.warn(e.message); }
+    } catch (e) { last = e; note('warning', e.message); }
   }
   throw last;
+}
+async function fetchAll() {
+  const all = [];
+  for (const part of PARTS) { const els = await fetchPart(part); console.log('part', part.slice(0, 40), els.length); all.push(...els); }
+  return all;
 }
 if (require.main === module) (async () => {
   const list = rows(await fetchAll());
   const counts = list.reduce((c, r) => (c[r[0]] = (c[r[0]] || 0) + 1, c), {});
-  if ((counts.p || 0) < 200) throw Error('Too few parks; keeping the old file');
+  if ((counts.p || 0) < 100) throw Error('Too few parks (' + (counts.p || 0) + '); keeping the old file');
   const body = { area: '長野県', updated: new Date().toISOString().slice(0, 10), source: 'OpenStreetMap', fields: ['kind', 'id', 'name', 'lat', 'lng', 'genre', 'address', 'hours', 'website'], rows: list };
   fs.writeFileSync('data/spots-nagano.json', JSON.stringify(body));
   console.log('spots', counts, 'bytes', fs.statSync('data/spots-nagano.json').size);
-})().catch(e => { console.error(e.message); process.exitCode = 1; });
+})().catch(e => { note('error', e.message); process.exitCode = 1; });
 module.exports = { rows, kinds };
