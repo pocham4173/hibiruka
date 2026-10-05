@@ -1637,6 +1637,11 @@ async function loadSpotData() {
   } catch { return null; }
 }
 let michiData = null;
+// 喫煙所はCLUB JT（JT）の喫煙所マップでも探せるようにする
+function jtBox() {
+  const pref = findArea ? findArea.pref : findCity.pref, n = Object.keys(PREF_SLUG).indexOf(pref) + 1;
+  return `<div class="find-sub" style="margin:0 0 10px"><p class="find-subh" style="margin:0 0 6px">🚬 JTの喫煙所マップでも探せます<small>CLUB JT・喫煙できるカフェも</small></p><div class="find-deal-links"><a class="btn small sub" href="https://www.clubjt.jp/map/" target="_blank" rel="noopener">🗺 喫煙所MAP（CLUB JT）</a>${n ? `<a class="btn small sub" href="https://www.clubjt.jp/place/spot/pref-${String(n).padStart(2, "0")}/" target="_blank" rel="noopener">📋 ${esc(pref)}の喫煙所一覧</a>` : ""}</div></div>`;
+}
 /* ---------- 行き方（Googleマップ：無料のリンク） ---------- */
 const ll = p => `${(+p.lat).toFixed(5)},${(+p.lng).toFixed(5)}`;
 function dirUrl(to, { from = null, mode = "", via = [] } = {}) {
@@ -1844,7 +1849,7 @@ function spotFromOsm(e) {
   const smoke = t.amenity === "smoking_area" || t.smoking === "designated";
   const name = t["name:ja"] || t.name || (smoke ? `喫煙所${t.operator ? `（${t.operator}）` : ""}` : "");
   if (!name || !Number.isFinite(lat)) return null;
-  return { id: `osm:${e.type}/${e.id}`, name, genre: genreOf(t), address: addrOf(t), lat, lng, hours: t.opening_hours || "", website: t.website || t["contact:website"] || "" };
+  return { id: `osm:${e.type}/${e.id}`, name, genre: genreOf(t) || (smoke ? "喫煙所" : ""), address: addrOf(t), lat, lng, hours: t.opening_hours || "", website: t.website || t["contact:website"] || "", ...(t.name || t["name:ja"] ? {} : { generic: true }) };
 }
 function spotFromNominatim(n) {
   const a = n.address || {}, lat = Number(n.lat), lng = Number(n.lon);
@@ -1853,7 +1858,8 @@ function spotFromNominatim(n) {
   const area = [a.province || a.state, a.city || a.town || a.village, a.suburb || a.quarter || a.neighbourhood].filter(Boolean).join("");
   return { id: `osm:${n.osm_type}/${n.osm_id}`, name, genre: GENRE[n.type] || GENRE[n.category] || "", address: area, lat, lng, hours: "", website: "" };
 }
-const spotMapLink = s => "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(`${s.name} ${s.lat},${s.lng}`);
+// 名前のない場所（喫煙所など）は名前で探すと遠くの別の場所が出るので、位置だけで開く
+const spotMapLink = s => "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(s.generic ? `${(+s.lat).toFixed(6)},${(+s.lng).toFixed(6)}` : `${s.name} ${s.lat},${s.lng}`);
 function catForSpot(keys) {
   for (const k of keys || []) { const c = cats.find(x => x.name === k); if (c) return c.name; }
   return cats[0]?.name || "";
@@ -1948,9 +1954,11 @@ async function findSpots({ key = "", words = "" } = {}) {
     spots = spots.filter(s => !seen.has(s.id) && seen.add(s.id)).map(s => ({ ...s, dist: distanceM(from, s), catKeys: key ? FIND_CATS[key].cat : [] }))
       .sort((a, b) => a.dist - b.dist).slice(0, usedHp && findRange === "city" ? 60 : 30);
     findShown = spots;
-    if (!spots.length) { box.innerHTML = mineBox(mine); bindMine(); note.textContent = mine.length ? "自分の記録で見つかりました。お店や場所は見つかりませんでした。" : "見つかりませんでした。ことばを変えるか、地名を足してみてください（例：「上田駅 カフェ」）。"; return; }
+    if (key === "smoke" && !findCity.pref && (findHere || findPlace)) await cityOf(findPlace || findHere).catch(() => "");
+    const jt = key === "smoke" ? jtBox() : "";
+    if (!spots.length) { box.innerHTML = jt + mineBox(mine); bindMine(); note.textContent = key === "smoke" ? "地図データでは近くの喫煙所が見つかりませんでした。下のJTの喫煙所マップで探せます。" : mine.length ? "自分の記録で見つかりました。お店や場所は見つかりませんでした。" : "見つかりませんでした。ことばを変えるか、地名を足してみてください（例：「上田駅 カフェ」）。"; return; }
     note.textContent = `${centerLabel}${cityMode ? "で" : "のまわりで"}${spots.length}件見つかりました${cityMode ? "（近い順）" : ""}${!findHere && centerLabel === FIND_HOME.label ? "（現在地が使えないため、上田駅を基準にしています）" : ""}。`;
-    box.innerHTML = mineBox(mine) + spots.map((s, i) => spotCard(s, i)).join("") + (usedHp ? '<p class="note center hp-credit"><a href="https://webservice.recruit.co.jp/" target="_blank" rel="noopener">Powered by ホットペッパーグルメ Webサービス</a></p>' : "");
+    box.innerHTML = jt + mineBox(mine) + spots.map((s, i) => spotCard(s, i)).join("") + (usedHp ? '<p class="note center hp-credit"><a href="https://webservice.recruit.co.jp/" target="_blank" rel="noopener">Powered by ホットペッパーグルメ Webサービス</a></p>' : "");
     bindMine();
     badgeWeather(spots);
     if (!usedHp && (findFilters.size || findBudget) && (FOOD.has(key) || !key)) note.textContent += "（こだわり・予算はホットペッパーのお店だけに使えます）";

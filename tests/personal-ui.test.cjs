@@ -699,6 +699,9 @@ test('smoking: the 喫煙OK condition goes to Hotpepper, cards show the smoking 
   d.querySelector('[data-find="smoke"]').click();await settle();
   assert(ovp.some(q=>q.includes('"amenity"="smoking_area"')));
   const names=[...d.querySelectorAll('#findResults .spot h3')].map(h=>h.textContent);assert.deepEqual(names.sort(),['喫煙所','喫煙所（上田市）']);
+  const unnamed=[...d.querySelectorAll('#findResults .spot')].find(c=>c.querySelector('h3').textContent==='喫煙所');
+  const map=[...unnamed.querySelectorAll('a')].find(x=>/地図/.test(x.textContent));assert.equal(new URL(map.href).searchParams.get('query'),'36.401000,138.251000','no name search that jumps to another city');
+  const jt=[...d.querySelectorAll('#findResults a')].filter(x=>x.href.includes('clubjt.jp'));assert(jt.length>=1);assert.equal(jt[0].href,'https://www.clubjt.jp/map/');
  }finally{a.close();}
 });
 
