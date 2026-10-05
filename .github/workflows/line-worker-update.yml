@@ -30,7 +30,10 @@ jobs:
           node-version: 22
       - run: npm ci --prefix line-worker --no-audit --no-fund
       - run: npm install --prefix scripts firebase-admin@12 --omit=dev --no-audit --no-fund
-      - run: node --test tests/line.test.cjs tests/worker.test.mjs tests/webhook.test.mjs tests/ai.test.mjs tests/spots.test.mjs
+      - run: node --test tests/line.test.cjs tests/worker.test.mjs tests/webhook.test.mjs tests/ai.test.mjs tests/spots.test.mjs tests/weather.test.mjs
+      - name: Check real JMA weather data
+        continue-on-error: true
+        run: node scripts/jma-check.mjs
       - run: npm run build --prefix line-worker
       - name: Deploy without sending
         run: node line-worker/deploy.cjs

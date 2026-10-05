@@ -429,9 +429,9 @@ test('find spots: the range switch searches 1km, 3km or the whole city and repea
 test('find extras: conditions and budget go to Hotpepper, my own records match first, weather suggests places',async()=>{
  const a=app();try{const {w,d}=a;await w.h.startOwner();
   Object.defineProperty(w.navigator,'geolocation',{value:{getCurrentPosition:(ok)=>ok({coords:{latitude:36.40,longitude:138.25}})},configurable:true});
-  const sent=[];let weather={daily:{weather_code:[63],temperature_2m_max:[18.4],precipitation_probability_max:[80]}};
+  const sent=[];let weather={code:61,max:18,rain:80};
   w.fetch=async(url,opt)=>{url=String(url);
-   if(url.includes('open-meteo'))return{ok:true,json:async()=>weather};
+   if(url.includes('/weather'))return{ok:true,json:async()=>({results:JSON.parse(opt.body).points.map(()=>(weather))})};
    if(url.includes('/spots/search')){sent.push(JSON.parse(opt.body));return{ok:true,status:200,json:async()=>({shops:[{id:'hp:1',name:'中華 はなこ',genre:'中華',lat:36.401,lng:138.251,url:'',photo:''}]})};}
    if(url.includes('spots-nagano'))return{ok:true,json:async()=>({rows:[['p','n1','上田市立博物館',36.401,138.244,'博物館・美術館','','',''],['p','n2','常田公園',36.402,138.25,'公園','','',''],['o','n3','千古温泉',36.42,138.2,'温泉','','','']]})};
    return{ok:true,json:async()=>[]};};
@@ -459,9 +459,9 @@ test('道の駅 come from the nationwide list; spot cards and plan details show 
  const a=app();try{const {w,d}=a;await w.h.startOwner();
   Object.defineProperty(w.navigator,'geolocation',{value:{getCurrentPosition:(ok)=>ok({coords:{latitude:36.40,longitude:138.25}})},configurable:true});
   const wx=[];
-  w.fetch=async(url)=>{url=String(url);
+  w.fetch=async(url,opt)=>{url=String(url);
    if(url.includes('michinoeki'))return{ok:true,json:async()=>({rows:[['n1','道の駅 雷電くるみの里',36.36,138.36,'東御市','',''],['n2','道の駅 遠すぎ',43.0,141.3,'札幌市','','']]})};
-   if(url.includes('open-meteo')){wx.push(url);const n=new URL(url).searchParams.get('latitude').split(',').length;const one={daily:{weather_code:[0],temperature_2m_max:[24.2],temperature_2m_min:[11],precipitation_probability_max:[0]}};return{ok:true,json:async()=>n>1?Array(n).fill(one):one};}
+   if(url.includes('/weather')){wx.push(opt.body);return{ok:true,json:async()=>({results:JSON.parse(opt.body).points.map(()=>({code:0,max:24,min:11,rain:0}))})};}
    return{ok:true,json:async()=>[]};};
   const settle=()=>new Promise(r=>setTimeout(r,25));
   d.querySelector('.maintabs [data-tab="find"]').click();await settle();
@@ -474,7 +474,7 @@ test('道の駅 come from the nationwide list; spot cards and plan details show 
   const t=new Date();t.setDate(t.getDate()+3);const day=`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
   w.h.setEvents([{id:'p1',kind:'plan',date:day,title:'ドライブ',place:'道の駅 雷電くるみの里',lat:36.36,lng:138.36,cat:'旅行'}]);
   w.eval('openDetail("p1")');await settle();
-  assert(wx.some(u=>u.includes('start_date='+day)));
+  assert(wx.some(u=>JSON.parse(u).date===day));
   assert.match(d.getElementById('dWeather').textContent,/道の駅 雷電くるみの里の天気予報：☀️ 晴れ 24℃ 雨0%（最低11℃）/);
  }finally{a.close();}
 });
@@ -484,7 +484,7 @@ test('search place: here by default, or a named place that moves the search, wea
   const sent=[],wx=[];
   w.fetch=async(url,opt)=>{url=String(url);
    if(url.includes('nominatim')&&url.includes('search'))return{ok:true,json:async()=>[{lat:'36.3428',lon:'138.6353',name:'軽井沢駅'}]};
-   if(url.includes('open-meteo')){wx.push(url);return{ok:true,json:async()=>({daily:{weather_code:[3],temperature_2m_max:[17],precipitation_probability_max:[20]}})};}
+   if(url.includes('/weather')){wx.push(opt.body);return{ok:true,json:async()=>({results:JSON.parse(opt.body).points.map(()=>({code:3,max:17,rain:20}))})};}
    if(url.includes('/spots/search')){sent.push(JSON.parse(opt.body));return{ok:true,status:200,json:async()=>({shops:[{id:'hp:1',name:'森のカフェ',genre:'カフェ',lat:36.345,lng:138.636,url:'',photo:''}]})};}
    return{ok:true,json:async()=>[]};};
   const settle=()=>new Promise(r=>setTimeout(r,25));
@@ -492,7 +492,7 @@ test('search place: here by default, or a named place that moves the search, wea
   d.getElementById('wherePick').click();assert(!d.getElementById('findPlaceForm').classList.contains('hidden'));
   d.getElementById('findPlaceQ').value='軽井沢駅';d.getElementById('findPlaceForm').dispatchEvent(new w.Event('submit',{cancelable:true}));for(let i=0;i<3;i++)await settle();
   assert.equal(d.getElementById('wherePick').textContent,'🗺 軽井沢駅');assert(d.getElementById('wherePick').classList.contains('on-where'));
-  assert.match(d.getElementById('findWeather').textContent,/軽井沢駅あたり・今日の天気/);assert.match(wx.at(-1),/latitude=36\.343/);
+  assert.match(d.getElementById('findWeather').textContent,/軽井沢駅あたり・今日の天気/);assert.equal(JSON.parse(wx.at(-1)).points[0].lat,36.343);
   d.querySelector('[data-find="cafe"]').click();for(let i=0;i<3;i++)await settle();
   assert.deepEqual(sent.at(-1),{kind:'cafe',lat:36.3428,lng:138.6353,range:5});assert.equal(geo,0,'no location needed for a named place');
   assert.match(d.getElementById('findNote').textContent,/^軽井沢駅のまわりで1件/);assert.match(d.querySelector('#findResults .spot').textContent,/📍(2\d0|3\d0)m/);
@@ -520,9 +520,9 @@ test('plan sending: an optional ひとこと is counted, saved with the reservat
 test('going out: choose where and which day first, then the weather of that day there suggests what to look for',async()=>{
  const a=app();try{const {w,d}=a;await w.h.startOwner();
   const wx=[];let code=0,max=24;
-  w.fetch=async(url)=>{url=String(url);
+  w.fetch=async(url,opt)=>{url=String(url);
    if(url.includes('nominatim'))return{ok:true,json:async()=>[{lat:'36.3428',lon:'138.6353',name:'軽井沢駅'}]};
-   if(url.includes('open-meteo')){wx.push(url);return{ok:true,json:async()=>({daily:{weather_code:[code],temperature_2m_max:[max],temperature_2m_min:[10],precipitation_probability_max:[code?80:0]}})};}
+   if(url.includes('/weather')){wx.push(opt.body);return{ok:true,json:async()=>({results:JSON.parse(opt.body).points.map(()=>({code,max,min:10,rain:code?80:0}))})};}
    return{ok:true,json:async()=>[]};};
   const settle=async()=>{for(let i=0;i<3;i++)await new Promise(r=>setTimeout(r,20));};
   d.querySelector('.maintabs [data-tab="find"]').click();await settle();
@@ -532,11 +532,11 @@ test('going out: choose where and which day first, then the weather of that day 
   d.getElementById('wherePick').click();d.getElementById('findPlaceQ').value='軽井沢駅';d.getElementById('findPlaceForm').dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();
   code=61;d.querySelector('#findWhen [data-day]:not([data-day=""])').click();await settle();
   const t=new Date(),tm=new Date(t.getFullYear(),t.getMonth(),t.getDate()+1),day=`${tm.getFullYear()}-${String(tm.getMonth()+1).padStart(2,'0')}-${String(tm.getDate()).padStart(2,'0')}`;
-  assert.match(wx.at(-1),new RegExp('start_date='+day));assert.match(wx.at(-1),/latitude=36\.343/);
+  assert.equal(JSON.parse(wx.at(-1)).date,day);assert.equal(JSON.parse(wx.at(-1)).points[0].lat,36.343);
   const wb=d.getElementById('findWeather');assert.match(wb.textContent,/軽井沢駅あたり・明日の天気/);assert.match(wb.textContent,/屋内で楽しめる/);
   assert.equal(wb.querySelector('[data-wfind]').dataset.wfind,'indoor');
   code=0;max=33;d.getElementById('findDayOther').click();assert(!d.getElementById('findDayBox').classList.contains('hidden'));
-  const p=d.getElementById('findDayPick');const far=new Date(t.getFullYear(),t.getMonth(),t.getDate()+12);p.value=`${far.getFullYear()}-${String(far.getMonth()+1).padStart(2,'0')}-${String(far.getDate()).padStart(2,'0')}`;p.onchange();await settle();
+  const p=d.getElementById('findDayPick');let far;for(let k=2;k<=6;k++){const x=new Date(t.getFullYear(),t.getMonth(),t.getDate()+k);if(x.getDay()%6){far=x;break;}}p.value=`${far.getFullYear()}-${String(far.getMonth()+1).padStart(2,'0')}-${String(far.getDate()).padStart(2,'0')}`;p.onchange();await settle();
   assert.match(wb.textContent,new RegExp(`${far.getMonth()+1}月${far.getDate()}日\\(.\\)の天気`));assert.match(wb.textContent,/暑くなりそう/);
   assert.match(d.getElementById('findDayOther').textContent,new RegExp(`${far.getMonth()+1}月${far.getDate()}日`));
   const before=wx.length;p.value='2000-01-01';p.onchange();await settle();assert.equal(wx.length,before,'past days are refused');
