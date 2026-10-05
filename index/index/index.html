@@ -91,6 +91,11 @@
   .find-res-head { display: flex; align-items: flex-start; gap: 8px; }
   .find-res-head .note { flex: 1; }
   .find-res-head .btn { flex: 0 0 auto; margin-top: 2px; }
+  .mem-map { height: 60vh; min-height: 320px; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); margin-bottom: 8px; z-index: 0; }
+  .map-pop { display: flex; flex-direction: column; gap: 4px; min-width: 150px; font-family: inherit; }
+  .map-pop img { width: 100%; max-height: 110px; object-fit: cover; border-radius: 8px; }
+  .map-pop b { color: var(--navy); font-size: 14px; }
+  .map-pop small { color: var(--muted); }
   .countdown { display: flex; gap: 8px; overflow-x: auto; margin: 4px 0 12px; padding-bottom: 2px; }
   .cd { flex: 0 0 auto; min-width: 128px; max-width: 200px; text-align: left; background: #fff4e8; border: 1px solid #f0d2ae; border-radius: 14px; padding: 10px 12px; cursor: pointer; font: inherit; color: var(--navy); }
   .cd .n { font-size: 13px; color: var(--rose); font-weight: 800; }
@@ -652,6 +657,7 @@
     <div class="tiles hidden" id="memoryViews">
       <button type="button" class="tile c2" data-view="mem" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>思い出</button>
       <button type="button" class="tile c0" data-view="fav" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.5-1.4 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.1 3 5.5l7 7Z"/></svg>また行きたい</button>
+      <button type="button" class="tile c1" data-view="map" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/></svg>思い出マップ</button>
     </div>
 
     <div class="pills" id="filterPills"></div>
@@ -1373,7 +1379,7 @@ function setupTabs() {
   $("heroPlus").onclick = () => { resetForm(); if (view === "mem") { $("fKind").value = "memory"; updateSaveNote(); } goTab("rec"); };
 }
 function goTab(t) {
-  const active = t === "rec" ? "list" : t === "list" && ["mem", "fav"].includes(view) ? "mem" : t;
+  const active = t === "rec" ? "list" : t === "list" && ["mem", "fav", "map"].includes(view) ? "mem" : t;
   document.querySelectorAll(".maintabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === active));
   ["rec", "list", "find", "set"].forEach(x => $("tab-" + x).classList.toggle("hidden", x !== t));
   window.scrollTo(0, 0);
@@ -2526,7 +2532,7 @@ function selectView(next) {
     const on = x.dataset.view === view;
     x.classList.toggle("on", on); x.setAttribute("aria-pressed", String(on));
   });
-  const memories = ["mem", "fav"].includes(view);
+  const memories = ["mem", "fav", "map"].includes(view);
   $("heroPlus").classList.toggle("hidden", memories);
   $("memoryViews").classList.toggle("hidden", !memories);
   $("listHeading").textContent = memories ? "思い出を振り返る" : "これからの予定";
@@ -2640,6 +2646,12 @@ function renderList() {
       return `<div class="m" data-open="${e.id}">${(e.thumbs || [])[0] ? `<div class="img"><img src="${e.thumbs[0]}" alt=""></div>` : memoryCover(e)}
       <div class="t"><b>${esc(e.title || e.place || catLabel(e.cat))}${e.fav ? ' <span class="fav-mark">♥</span>' : ""}</b><small>${p.y}.${p.m}.${p.d}　${esc(catLabel(e.cat))}</small>${e.place ? `<div><a class="memory-map" href="${placeUrl(e)}" target="_blank" rel="noopener" data-stop>📍 地図で見る</a></div>` : ""}</div></div>`;
     }).join("")}</div>` : emptyBox("image", "思い出はまだありません。", "行ったところや、あったことを残そう");
+  } else if (view === "map") {
+    title = "思い出マップ"; items = list.filter(e => !isPlan(e));
+    const placed = items.filter(e => Number.isFinite(e.lat) && Number.isFinite(e.lng));
+    html = placed.length ? `<div id="memMap" class="mem-map" role="region" aria-label="思い出の地図"></div><p class="note">地図に出ているのは場所がわかる思い出 ${placed.length}件です${items.length > placed.length ? `（ほかの${items.length - placed.length}件は場所がないので出ていません。写真の位置や「場所」から地図に出せます）` : ""}。<br>地図：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a></p>`
+      : emptyBox("pin", "地図に出せる思い出はまだありません。", "位置情報のある写真を入れたり、場所を選んで記録すると、ここに並びます");
+    items = placed;
   } else if (view === "fav") {
     title = "また行きたい"; items = list.filter(e => e.fav).sort((a, b) => a.date < b.date ? 1 : -1);
     html = items.length ? items.map(card).join("") : emptyBox("heart", "「また行きたい」はまだありません。", "記録するときに ♥ を押すとここに集まります");
@@ -2655,6 +2667,39 @@ function renderList() {
   const retry = $("listBox").querySelector("[data-retry-records]"); if (retry) retry.onclick = watchRecords;
   $("listBox").querySelectorAll("[data-open]").forEach(el => el.onclick = (ev) => { if (ev.target.closest("[data-cancel],[data-stop]")) return; openDetail(el.dataset.open); });
   $("listBox").querySelectorAll("[data-cancel]").forEach(b => b.onclick = (ev) => { ev.stopPropagation(); const [a, c] = b.dataset.cancel.split("|"); cancelSend(a, c); });
+  if (view === "map" && $("memMap")) drawMemMap(items);
+}
+// ④ 思い出マップ（地図は国土地理院、表示はLeaflet）
+let leafletLoad = null;
+function loadLeaflet() {
+  if (window.L) return Promise.resolve(window.L);
+  if (leafletLoad) return leafletLoad;
+  leafletLoad = new Promise((res, rej) => {
+    const css = document.createElement("link"); css.rel = "stylesheet"; css.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"; document.head.appendChild(css);
+    const js = document.createElement("script"); js.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+    js.onload = () => window.L ? res(window.L) : rej(new Error("leaflet")); js.onerror = () => { leafletLoad = null; rej(new Error("leaflet")); };
+    document.head.appendChild(js);
+  });
+  return leafletLoad;
+}
+let memMap = null;
+async function drawMemMap(items) {
+  let L;
+  try { L = await loadLeaflet(); } catch { if ($("memMap")) $("memMap").innerHTML = '<p class="note center" style="padding:20px">地図を読み込めませんでした。電波のよい所でもう一度開いてください。</p>'; return; }
+  const el = $("memMap"); if (!el || view !== "map") return;
+  if (memMap) { try { memMap.remove(); } catch {} memMap = null; }
+  memMap = L.map(el, { zoomControl: true, attributionControl: true });
+  memMap.attributionControl?.setPrefix?.('<a href="https://leafletjs.com" target="_blank" rel="noopener">Leaflet</a>');
+  L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", { maxZoom: 18, attribution: '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a>' }).addTo(memMap);
+  const pts = [];
+  for (const e of items) {
+    const p = parts(e.date), thumb = (e.thumbs || [])[0];
+    const html = `<div class="map-pop">${thumb ? `<img src="${thumb}" alt="">` : ""}<b>${esc(e.title || e.place || catLabel(e.cat))}${e.fav ? " ♥" : ""}</b><small>${p.y}.${p.m}.${p.d}${e.place ? "　" + esc(e.place) : ""}</small><button type="button" class="btn small sub" data-map-open="${esc(e.id)}">開く</button></div>`;
+    L.marker([e.lat, e.lng]).addTo(memMap).bindPopup(html);
+    pts.push([e.lat, e.lng]);
+  }
+  if (pts.length === 1) memMap.setView(pts[0], 14); else memMap.fitBounds(pts, { padding: [30, 30], maxZoom: 15 });
+  memMap.on("popupopen", ev => { const b = ev.popup.getElement()?.querySelector("[data-map-open]"); if (b) b.onclick = () => openDetail(b.dataset.mapOpen); });
 }
 function renderCal(list) {
   const y = calMonth.getFullYear(), m = calMonth.getMonth();
