@@ -680,7 +680,7 @@
       <div class="find-place hidden" id="findDayBox"><input type="date" id="findDayPick" aria-label="行く日を選ぶ"></div>
       <h3 class="find-h" style="margin-top:14px"><span class="find-n">3</span>その日の天気とおすすめ</h3>
       <div id="findWeather" class="find-weather" aria-live="polite"><div class="t">天気を調べています…</div></div>
-      <p class="note" style="text-align:right;margin-top:4px;font-size:11px">天気予報：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a></p>
+      <p class="note" style="text-align:right;margin-top:4px;font-size:11px">出典：<a href="https://www.jma.go.jp/" target="_blank" rel="noopener">気象庁ホームページ</a>（天気予報）</p>
     </section>
     <section class="find-sec" aria-labelledby="findWhatTitle">
       <h3 class="find-h" id="findWhatTitle"><span class="find-n">4</span>何を探す？<small>押すとすぐ探します</small></h3>
@@ -1044,6 +1044,7 @@ const CONFIG = {
   lineOaId: "@626hnkgo",
   aiUrl: "https://hibiruka-line.okm-co.workers.dev/ai/memory-text",
   spotsUrl: "https://hibiruka-line.okm-co.workers.dev/spots/search",
+  weatherUrl: "https://hibiruka-line.okm-co.workers.dev/weather",
   // アフィリエイト（登録ができたら値を入れるだけ。空のあいだは普通のリンクで開く）
   //   valuecommerce: バリューコマースの MyLink の sid と pid（ホットペッパーグルメのプログラム）
   //   rakuten: 楽天アフィリエイトID（例 "1a2b3c4d.5e6f7a8b.1a2b3c4e.5f6a7b8c"）
@@ -1814,27 +1815,25 @@ function bindMine() {
     else $("wishList").scrollIntoView({ block: "start", behavior: "smooth" });
   });
 }
-// ③ 天気に合わせたおすすめ（Open-Meteo・キー不要・無料）
+// ③ 天気に合わせたおすすめ（気象庁の予報・無料）
 let weatherAt = 0, weatherHere = false;
 function weatherKind(code) {
-  if ([0, 1].includes(code)) return { icon: "☀️", text: "晴れ", rain: false };
-  if ([2, 3, 45, 48].includes(code)) return { icon: "⛅", text: "くもり", rain: false };
-  if (code >= 71 && code <= 77 || code === 85 || code === 86) return { icon: "❄️", text: "雪", rain: true };
-  if (code >= 95) return { icon: "⛈️", text: "雷雨", rain: true };
-  return { icon: "☔", text: "雨", rain: true };
+  // 天気の種類（ワーカーが気象庁の天気コードから決める）
+  const K = { 0: ["☀️", "晴れ", false], 1: ["🌤", "晴れ時々くもり", false], 2: ["🌦", "晴れ時々雨", false], 5: ["🌨", "晴れ時々雪", false],
+    3: ["☁️", "くもり", false], 4: ["🌦", "くもり時々雨", false], 6: ["🌨", "くもり時々雪", false], 61: ["☔", "雨", true], 71: ["❄️", "雪", true], 95: ["⛈️", "雷雨", true] }[code] || ["☁️", "くもり", false];
+  return { icon: K[0], text: K[1], rain: K[2] };
 }
-// 天気予報（Open-Meteo・無料・キー不要）。いくつかの場所をまとめて1回で聞ける。date は "YYYY-MM-DD"（16日先まで）
+// 天気予報：気象庁の予報をワーカー経由で（無料・出典表示で商用利用可）。いくつかの場所をまとめて1回で聞ける。date は "YYYY-MM-DD"（6日先まで）
+const WX_DAYS = 6;
 async function forecast(points, date) {
   if (!points.length) return [];
-  const q = new URLSearchParams({ latitude: points.map(p => p.lat.toFixed(3)).join(","), longitude: points.map(p => p.lng.toFixed(3)).join(","),
-    daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max", timezone: "Asia/Tokyo", ...(date ? { start_date: date, end_date: date } : { forecast_days: "1" }) });
-  const r = await fetch("https://api.open-meteo.com/v1/forecast?" + q.toString(), { signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+  const r = await fetch(CONFIG.weatherUrl, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ points: points.map(p => ({ lat: +p.lat.toFixed(3), lng: +p.lng.toFixed(3) })), ...(date ? { date } : {}) }), signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined });
   if (!r.ok) throw new Error("weather " + r.status);
-  const j = await r.json(), list = Array.isArray(j) ? j : [j];
-  return list.map(x => { const d = x.daily || {}, code = Number(d.weather_code?.[0]); return Number.isFinite(code) ? { code, max: d.temperature_2m_max?.[0], min: d.temperature_2m_min?.[0], rain: d.precipitation_probability_max?.[0] } : null; });
+  const j = await r.json();
+  return (Array.isArray(j.results) ? j.results : []).map(w => w && Number.isFinite(w.code) ? w : null);
 }
 const wxText = w => { const k = weatherKind(w.code); return `${k.icon} ${k.text}${Number.isFinite(w.max) ? ` ${Math.round(w.max)}℃` : ""}${Number.isFinite(w.rain) ? ` 雨${w.rain}%` : ""}`; };
-// 行く日：""=今日、それ以外は "YYYY-MM-DD"（天気予報が出る15日先まで）
+// 行く日：""=今日、それ以外は "YYYY-MM-DD"（天気予報が出る6日先まで）
 let findDay = "";
 const dayWord = day => { if (!day || day === todayStr()) return "今日"; if (day === addDays(todayStr(), 1)) return "明日"; const [, m, d] = day.split("-").map(Number); return `${m}月${d}日(${"日月火水木金土"[new Date(day + "T12:00").getDay()]})`; };
 function renderWhen() {
@@ -1847,8 +1846,8 @@ function renderWhen() {
   $("findWhen").innerHTML = opts.map(([d, l]) => `<button type="button" class="chip ${d === findDay ? "on-where" : ""}" data-day="${d}">${l}</button>`).join("")
     + `<button type="button" class="chip ${preset ? "" : "on-where"}" id="findDayOther">📅 ${preset ? "日にちを選ぶ" : esc(dayWord(findDay))}</button>`;
   $("findWhen").querySelectorAll("[data-day]").forEach(b => b.onclick = () => { $("findDayBox").classList.add("hidden"); setFindDay(b.dataset.day); });
-  $("findDayOther").onclick = () => { const p = $("findDayPick"); p.min = t; p.max = addDays(t, 15); p.value = findDay || t; $("findDayBox").classList.toggle("hidden"); if (!$("findDayBox").classList.contains("hidden")) p.focus(); };
-  $("findDayPick").onchange = () => { const v = $("findDayPick").value, t2 = todayStr(); if (!v) return; if (v < t2 || v > addDays(t2, 15)) { toast("天気が分かるのは今日から15日先までです"); return; } $("findDayBox").classList.add("hidden"); setFindDay(v === t2 ? "" : v); };
+  $("findDayOther").onclick = () => { const p = $("findDayPick"); p.min = t; p.max = addDays(t, WX_DAYS); p.value = findDay || t; $("findDayBox").classList.toggle("hidden"); if (!$("findDayBox").classList.contains("hidden")) p.focus(); };
+  $("findDayPick").onchange = () => { const v = $("findDayPick").value, t2 = todayStr(); if (!v) return; if (v < t2 || v > addDays(t2, WX_DAYS)) { toast(`天気が分かるのは今日から${WX_DAYS}日先までです`); return; } $("findDayBox").classList.add("hidden"); setFindDay(v === t2 ? "" : v); };
 }
 function setFindDay(day) {
   findDay = day; renderWhen(); weatherAt = 0; showWeather();
@@ -1863,7 +1862,8 @@ async function showWeather() {
   const where = findPlace ? "🗺 " + esc(findPlace.label) + "あたり" : findHere ? "📍 今いる場所" : "📍 上田駅あたり";
   try {
     const [w] = await forecast([c], day || undefined);
-    if (!w || day !== findDay) return;
+    if (day !== findDay) return;
+    if (!w) { box.className = "find-weather"; box.innerHTML = '<div class="t">この場所・この日の天気予報はありません（気象庁の予報は日本国内・6日先まで）</div>'; return; }
     const k = weatherKind(w.code), wet = k.rain || w.rain >= 60, hot = !wet && w.max >= 30, cold = !wet && w.max <= 8;
     const [say, picks] = wet ? ["雨の予報。屋内で楽しめるところはどう？", [["indoor", "🏛 屋内"], ["onsen", "♨️ 温泉"], ["cafe", "☕ カフェ"]]]
       : hot ? ["暑くなりそう。涼しい屋内や甘いものでひと休み", [["indoor", "🏛 屋内"], ["cafe", "☕ カフェ"], ["sweets", "🍰 スイーツ"]]]
@@ -2556,9 +2556,9 @@ async function openDetail(id) {
   $("detailSheet").onclick = (ev) => { if (ev.target.id === "detailSheet") closeSheets(); };
   $("detailSheet").classList.remove("hidden");
   // 行く場所・行く日の天気予報（場所の位置が分かっていて、16日先までの予定）
-  if (Number.isFinite(e.lat) && Number.isFinite(e.lng) && e.date >= todayStr() && e.date <= addDays(todayStr(), 15)) {
+  if (Number.isFinite(e.lat) && Number.isFinite(e.lng) && e.date >= todayStr() && e.date <= addDays(todayStr(), WX_DAYS)) {
     forecast([{ lat: e.lat, lng: e.lng }], e.date).then(([w]) => {
-      if (w && $("dWeather") && $("detailSheet") && !$("detailSheet").classList.contains("hidden")) $("dWeather").innerHTML = `<div class="plan-wx">${e.date === todayStr() ? "今日" : esc(fmtDate(e.date))}の${esc(e.place || "行く場所")}の天気予報：<b>${wxText(w)}</b>${Number.isFinite(w.min) ? `（最低${Math.round(w.min)}℃）` : ""}</div>`;
+      if (w && $("dWeather") && $("detailSheet") && !$("detailSheet").classList.contains("hidden")) $("dWeather").innerHTML = `<div class="plan-wx">${e.date === todayStr() ? "今日" : esc(fmtDate(e.date))}の${esc(e.place || "行く場所")}の天気予報：<b>${wxText(w)}</b>${Number.isFinite(w.min) ? `（最低${Math.round(w.min)}℃）` : ""}<small style="color:var(--muted);margin-left:6px">出典：気象庁</small></div>`;
     }).catch(() => {});
   }
   // 大きい写真に差し替え

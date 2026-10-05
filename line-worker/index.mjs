@@ -3,6 +3,7 @@ import {firestore} from './firestore.mjs';
 import {handleWebhook} from './webhook.mjs';
 import {handleAi} from './ai.mjs';
 import {handleSpots} from './spots.mjs';
+import {handleWeather} from './weather.mjs';
 let cached;
 const base64url=bytes=>Buffer.from(bytes).toString('base64url');
 export async function googleToken(secret,fetcher=fetch){
@@ -42,6 +43,10 @@ export default {
     if(url.pathname==='/spots/search'&&['POST','OPTIONS'].includes(request.method)){
       try{return await handleSpots(request,env);}
       catch{console.error('Hibiruka spot search failed.');return new Response(JSON.stringify({error:'upstream'}),{status:502,headers:{'content-type':'application/json','access-control-allow-origin':'https://pocham4173.github.io',vary:'origin'}});}
+    }
+    if(url.pathname==='/weather'&&['POST','OPTIONS'].includes(request.method)){
+      try{return await handleWeather(request,env);}
+      catch{console.error('Hibiruka weather failed.');return new Response(JSON.stringify({error:'busy'}),{status:502,headers:{'content-type':'application/json','access-control-allow-origin':'https://pocham4173.github.io',vary:'origin'}});}
     }
     if(url.pathname==='/ai/memory-text'&&['POST','OPTIONS'].includes(request.method)){
       try{return await handleAi(request,env,{db:async()=>firestore(await googleToken(env.FIREBASE_SERVICE_ACCOUNT),fetch,4)});}
