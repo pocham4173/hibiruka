@@ -105,6 +105,28 @@
   .find-weather { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--sage); border: 1px solid var(--sage-b); border-radius: 14px; padding: 12px 14px; margin: 4px 0 2px; }
   .find-n { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 12px; margin-right: 6px; vertical-align: 1px; }
   .find-weather.rain { background: var(--lav); border-color: var(--lav-b); }
+  .find-deal-btn { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; width: 100%; text-align: left; background: #fff4e8; border: 1px solid #f0d2ae; border-radius: 14px; padding: 12px 14px; cursor: pointer; font: inherit; color: var(--navy); }
+  .find-deal-btn span { font-size: 24px; }
+  .find-deal-btn b { font-size: 15px; }
+  .find-deal-btn small { flex-basis: 100%; color: var(--muted); font-size: 12px; padding-left: 34px; }
+  .find-deal-links { display: flex; flex-wrap: wrap; gap: 6px; }
+  .find-deal-links a { text-decoration: none; }
+  .pr { display: inline-block; font-size: 10px; font-weight: 700; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 4px; vertical-align: 1px; }
+  .coupon-card { display: flex; gap: 12px; align-items: center; width: 100%; text-align: left; background: #fffaf0; border: 2px dashed #e8b96a; border-radius: 14px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; font: inherit; color: var(--ink, #2b2b2b); }
+  .coupon-card .ic { font-size: 28px; }
+  .coupon-card b { display: block; color: var(--navy); }
+  .coupon-card small { color: var(--muted); }
+  .coupon-sheet { text-align: center; }
+  .coupon-ticket { background: #fffaf0; border: 3px dashed #e8b96a; border-radius: 18px; padding: 18px 16px; margin: 10px 0 14px; }
+  .coupon-ticket .ic { font-size: 44px; }
+  .coupon-ticket .shop { font-size: 15px; font-weight: 700; color: var(--muted); margin-top: 4px; }
+  .coupon-ticket .benefit { font-size: 22px; font-weight: 900; color: var(--rose); margin: 8px 0; line-height: 1.4; }
+  .coupon-ticket .show { background: var(--navy); color: #fff; border-radius: 10px; padding: 8px; font-weight: 700; margin-top: 10px; }
+  .coupon-ticket .clock { font-size: 13px; color: var(--muted); margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .coupon-ticket dl { text-align: left; font-size: 13px; margin: 10px 0 0; }
+  .coupon-ticket dt { font-weight: 700; color: var(--navy); margin-top: 6px; }
+  .coupon-ticket dd { margin: 0; color: var(--ink, #2b2b2b); white-space: pre-wrap; }
+  .spot .coupon-tag { display: inline-block; background: #fff1de; color: #a3560a; border-radius: 6px; font-size: 12px; font-weight: 700; padding: 1px 6px; margin-right: 4px; }
   .find-weather .w { font-size: 30px; line-height: 1; }
   .find-weather .wx-where { font-size: 12.5px; font-weight: 700; color: var(--sage-t); }
   .find-weather.rain .wx-where { color: var(--lav-t); }
@@ -237,6 +259,7 @@
   .btn.line { background: var(--line-green); }
   .btn.navy { background: var(--navy); }
   .btn.rose { background: var(--rose); }
+  .btn.rose-ghost { background: #fff1de; color: #a3560a; border: 1px solid #f0d2ae; }
   .btn.ghost { background: none; color: var(--muted); font-weight: 500; }
   .btn.danger { background: #fff; color: var(--danger); border: 1px solid #efd3d1; }
   .btn.small { display: inline-flex; width: auto; font-size: 13px; padding: 7px 12px; border-radius: 8px; }
@@ -488,7 +511,7 @@
     <a class="btn sub" href="?signin=1">ログイン</a>
     <a class="back-link" href="../../guide/">使い方を見る</a>
     <p class="note">登録なしではじめられます。メールの登録はあとから設定でできます。</p>
-    <div class="disclaimer"><b>ご利用上の注意（免責事項）</b><p>本サービス（ヒビルカ）は、個人が非営利・無料で提供している試作開発アプリです。</p><ul><li>無料枠の範囲内で運用しているため、利用状況によっては通知の遅延・未達、一時的なアクセス制限、または予告のない機能変更・サービス停止が発生する場合があります。</li><li>本サービスのご利用により生じた損害等について、開発者は一切の責任を負いかねますのであらかじめご了承ください。</li></ul></div>
+    <div class="disclaimer"><b>ご利用上の注意（免責事項）</b><p>本サービス（ヒビルカ）は、個人が無料で提供している試作開発アプリです。</p><ul><li>無料枠の範囲内で運用しているため、利用状況によっては通知の遅延・未達、一時的なアクセス制限、または予告のない機能変更・サービス停止が発生する場合があります。</li><li>本サービスのご利用により生じた損害等について、開発者は一切の責任を負いかねますのであらかじめご了承ください。</li></ul></div>
     <details id="pinDetails" class="hidden"><summary>以前の記録を復元</summary>
     <h2 style="margin-top:0" id="pinTitle">暗証番号を入れてください</h2>
     <p id="pinText" style="text-align:left;font-size:15px">このブラウザに記録を引き継ぐため、設定済みの6けたの番号を入れてください。</p>
@@ -586,7 +609,7 @@
       <p>日付と内容があればOK。写真やLINEの設定は、あとからでも。</p>
       <div class="start-actions"><button class="btn" id="firstPlan" type="button">＋ 予定を入れる</button><button class="btn sub" id="firstMemory" type="button">思い出を残す</button></div>
       <button class="back-link" id="skipFirstRecord" type="button">あとで</button>
-      <div class="disclaimer"><b>ご利用上の注意（免責事項）</b><p>本サービス（ヒビルカ）は、個人が非営利・無料で提供している試作開発アプリです。</p><ul><li>無料枠の範囲内で運用しているため、利用状況によっては通知の遅延・未達、一時的なアクセス制限、または予告のない機能変更・サービス停止が発生する場合があります。</li><li>本サービスのご利用により生じた損害等について、開発者は一切の責任を負いかねますのであらかじめご了承ください。</li></ul></div>
+      <div class="disclaimer"><b>ご利用上の注意（免責事項）</b><p>本サービス（ヒビルカ）は、個人が無料で提供している試作開発アプリです。</p><ul><li>無料枠の範囲内で運用しているため、利用状況によっては通知の遅延・未達、一時的なアクセス制限、または予告のない機能変更・サービス停止が発生する場合があります。</li><li>本サービスのご利用により生じた損害等について、開発者は一切の責任を負いかねますのであらかじめご了承ください。</li></ul></div>
     </aside>
     <aside id="savedNextSteps" class="card hidden" aria-labelledby="savedNextTitle">
       <h2 id="savedNextTitle">最初の記録を保存しました</h2><p>次もすぐ開けるように、ホームにアイコンを置けます。</p>
@@ -678,6 +701,13 @@
         <button type="button" class="find-tile" data-find="dog"><span>🐕</span>ドッグラン</button>
       </div>
     </section>
+    <section class="find-sec find-deal" aria-labelledby="findDealTitle">
+      <h3 class="find-h" id="findDealTitle">🎟 お得・クーポン</h3>
+      <div id="localCoupons"></div>
+      <button type="button" class="find-deal-btn" data-find="coupon"><span>🍽</span><b>クーポンのあるお店を探す</b><small>ホットペッパーのクーポンが使えるお店を、行く場所のまわりで</small></button>
+      <div class="find-gt" style="margin-top:12px">🏨 旅行のクーポン（楽天トラベル）</div>
+      <div class="find-deal-links" id="travelDeals"></div>
+    </section>
     <section class="find-sec find-cond" aria-labelledby="findCondTitle">
       <h3 class="find-h" id="findCondTitle">お店の条件<small>食べるお店を探すときに使えます</small></h3>
       <div class="find-row"><span class="find-opt-label">範囲</span>
@@ -693,6 +723,7 @@
         <button type="button" class="chip" data-filter="free_food">🍽 食べ放題</button>
         <button type="button" class="chip" data-filter="free_drink">🍻 飲み放題</button>
         <button type="button" class="chip" data-filter="card">💳 カードOK</button>
+        <button type="button" class="chip" data-filter="coupon">🎟 クーポンあり</button>
       </div>
       <div class="find-row"><span class="find-opt-label">予算<br><small>夜の目安</small></span>
         <button type="button" class="chip" data-budget="B009,B010">〜1,000円</button>
@@ -800,7 +831,7 @@
       <p id="accountError" class="err" role="alert"></p>
       <button class="btn sub hidden" id="accountLogout" type="button">ログアウト</button>
     </div>
-    <div class="card" id="noticeCard"><div class="disclaimer"><b>ご利用上の注意（免責事項）</b><p>本サービス（ヒビルカ）は、個人が非営利・無料で提供している試作開発アプリです。</p><ul><li>無料枠の範囲内で運用しているため、利用状況によっては通知の遅延・未達、一時的なアクセス制限、または予告のない機能変更・サービス停止が発生する場合があります。</li><li>本サービスのご利用により生じた損害等について、開発者は一切の責任を負いかねますのであらかじめご了承ください。</li></ul></div></div>
+    <div class="card" id="noticeCard"><div class="disclaimer"><b>ご利用上の注意（免責事項）</b><p>本サービス（ヒビルカ）は、個人が無料で提供している試作開発アプリです。</p><ul><li>無料枠の範囲内で運用しているため、利用状況によっては通知の遅延・未達、一時的なアクセス制限、または予告のない機能変更・サービス停止が発生する場合があります。</li><li>本サービスのご利用により生じた損害等について、開発者は一切の責任を負いかねますのであらかじめご了承ください。</li></ul></div></div>
   </section>
 </div>
 
@@ -931,6 +962,9 @@
   <button class="btn ghost" id="sNoBtn">送らない</button>
 </div></div>
 
+<!-- 見せるだけクーポン -->
+<div id="couponSheet" class="sheet-bg hidden"><div class="sheet coupon-sheet" id="couponBody"></div></div>
+
 <!-- 詳細 -->
 <div id="detailSheet" class="sheet-bg hidden"><div class="sheet" id="detailBody"></div></div>
 
@@ -999,6 +1033,10 @@ const CONFIG = {
   lineOaId: "@626hnkgo",
   aiUrl: "https://hibiruka-line.okm-co.workers.dev/ai/memory-text",
   spotsUrl: "https://hibiruka-line.okm-co.workers.dev/spots/search",
+  // アフィリエイト（登録ができたら値を入れるだけ。空のあいだは普通のリンクで開く）
+  //   valuecommerce: バリューコマースの MyLink の sid と pid（ホットペッパーグルメのプログラム）
+  //   rakuten: 楽天アフィリエイトID（例 "1a2b3c4d.5e6f7a8b.1a2b3c4e.5f6a7b8c"）
+  affiliate: { vcSid: "", vcPid: "", rakuten: "" },
   defaultOwnerName: "理絵"
 };
 /* ========================================================= */
@@ -1283,7 +1321,7 @@ function setupFirstRecordGuide() {
 function setupTabs() {
   document.querySelectorAll(".maintabs button").forEach(b => b.onclick = () => {
     if (b.dataset.tab === "set") return goTab("set");
-    if (b.dataset.tab === "find") { renderWishes(); showWeather(); return goTab("find"); }
+    if (b.dataset.tab === "find") { renderWishes(); showWeather(); renderLocalCoupons(); return goTab("find"); }
     selectView(b.dataset.tab === "mem" ? "mem" : "cal"); goTab("list");
   });
   $("backToPlans").onclick = () => { selectView("cal"); goTab("list"); };
@@ -1453,6 +1491,7 @@ const FIND_CATS = {
   indoor: { label: "屋内のお出かけ", sel: ['["tourism"~"museum|gallery|aquarium"]["name"]', '["amenity"="cinema"]["name"]', '["shop"="mall"]["name"]'], cat: ["遊び"] },
   dog:    { label: "ドッグラン", sel: ['["leisure"="dog_park"]', '["dog"~"yes|leashed"]["name"]'], cat: ["遊び"] },
   dogfood: { label: "わんこと入れるお店", sel: ['["amenity"~"cafe|restaurant"]["dog"~"yes|leashed"]'], cat: ["カフェ", "食事"] },
+  coupon: { label: "クーポンのあるお店", sel: ['["amenity"="restaurant"]'], cat: ["食事"] },
   michi:  { label: "道の駅", sel: ['["name"~"^道の駅"]'], cat: ["旅行", "遊び"] },
   yakiniku: { label: "焼肉", sel: ['["amenity"="restaurant"]["cuisine"~"yakiniku|barbecue|bbq"]'], cat: ["食事"] },
   sushi:  { label: "寿司", sel: ['["amenity"="restaurant"]["cuisine"~"sushi"]'], cat: ["食事"] },
@@ -1477,7 +1516,7 @@ async function cityOf(c) {
   findCity = { key, name };
   return name;
 }
-const FOOD = new Set(["cafe", "lunch", "ramen", "sweets", "yakiniku", "sushi", "izakaya", "dogfood"]);
+const FOOD = new Set(["cafe", "lunch", "ramen", "sweets", "yakiniku", "sushi", "izakaya", "dogfood", "coupon"]);
 // 飲食店はホットペッパー（写真・予算つき、速い）。使えないときは地図データ（OpenStreetMap）で探す
 async function hotpepper(body) {
   if (!hpReady) return null;
@@ -1488,7 +1527,7 @@ async function hotpepper(body) {
     const out = await r.json().catch(() => ({}));
     if (r.status === 503) { hpReady = false; return null; }
     if (!r.ok) return null;
-    return (out.shops || []).map(h => ({ id: h.id, name: h.name, genre: h.genre, catchText: h.catch, budget: h.budget, address: h.address, access: h.access, hours: h.hours, lat: h.lat, lng: h.lng, website: h.url, photo: h.photo, source: "hp" }));
+    return (out.shops || []).map(h => ({ id: h.id, name: h.name, genre: h.genre, catchText: h.catch, budget: h.budget, address: h.address, access: h.access, hours: h.hours, lat: h.lat, lng: h.lng, website: h.url, photo: h.photo, coupon: !!h.coupon, couponUrl: h.couponUrl || "", source: "hp" }));
   } catch { return null; }
 }
 
@@ -1531,6 +1570,62 @@ async function loadSpotData() {
   } catch { return null; }
 }
 let michiData = null;
+/* ---------- お得・クーポン ---------- */
+// アフィリエイトのリンクに変える（IDが空なら元のリンクのまま）。変えたときは「PR」を付ける
+function affLink(url, kind) {
+  const a = CONFIG.affiliate || {};
+  if (!/^https:\/\//.test(url || "")) return { href: "", pr: false };
+  if (kind === "hp" && a.vcSid && a.vcPid) return { href: `https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=${encodeURIComponent(a.vcSid)}&pid=${encodeURIComponent(a.vcPid)}&vc_url=${encodeURIComponent(url)}`, pr: true };
+  if (kind === "rakuten" && a.rakuten) return { href: `https://hb.afl.rakuten.co.jp/hgc/${encodeURIComponent(a.rakuten)}/?pc=${encodeURIComponent(url)}&m=${encodeURIComponent(url)}`, pr: true };
+  return { href: url, pr: false };
+}
+function affButton(url, kind, label, cls) {
+  const l = affLink(url, kind); if (!l.href) return "";
+  return `<a class="${cls}" href="${esc(l.href)}" target="_blank" rel="noopener${l.pr ? " sponsored" : ""}">${label}${l.pr ? '<span class="pr">PR</span>' : ""}</a>`;
+}
+const TRAVEL_DEALS = [
+  ["🎟 楽天トラベルのクーポン", "https://travel.rakuten.co.jp/coupon/"],
+  ["🏨 宿のクーポン", "https://travel.rakuten.co.jp/coupon/yado/"],
+  ["🍎 長野県の宿", "https://travel.rakuten.co.jp/yado/nagano/"],
+];
+function renderTravelDeals() {
+  $("travelDeals").innerHTML = TRAVEL_DEALS.map(([l, u]) => affButton(u, "rakuten", l, "btn small sub")).join("");
+}
+// 地元のお店の「見せるだけクーポン」：data/coupons.json に書いたものを出す（Firestoreを読まないので無料枠を使わない）
+let localCoupons = null, couponClock = 0;
+async function loadCoupons() {
+  if (localCoupons) return localCoupons;
+  try { const r = await fetch("../../data/coupons.json", { cache: "no-cache" }); const j = r.ok ? await r.json() : {}; localCoupons = Array.isArray(j.coupons) ? j.coupons : []; }
+  catch { localCoupons = []; }
+  return localCoupons;
+}
+const couponOk = (c, t = todayStr()) => c && typeof c === "object" && c.shop && c.benefit && c.hidden !== true && (!c.from || c.from <= t) && (!c.until || c.until >= t);
+const untilText = d => { if (!d) return "期限なし"; const [y, m, dd] = d.split("-").map(Number); return `${y}年${m}月${dd}日まで`; };
+async function renderLocalCoupons() {
+  const box = $("localCoupons"); if (!box) return;
+  const list = (await loadCoupons()).filter(c => couponOk(c));
+  const here = findPlace || findHere;
+  if (here) list.sort((a, b) => (Number.isFinite(a.lat) ? distanceM(here, a) : 9e9) - (Number.isFinite(b.lat) ? distanceM(here, b) : 9e9));
+  box.innerHTML = list.length ? `<div class="find-gt">🤝 地元のお店のクーポン<small style="font-weight:500;margin-left:6px">画面を見せるだけ</small></div>` + list.map((c, i) => `<button type="button" class="coupon-card" data-coupon="${i}"><span class="ic">${esc(c.icon || "🎁")}</span><span><b>${esc(c.benefit)}</b>${esc(c.shop)}<br><small>${esc(untilText(c.until))}${here && Number.isFinite(c.lat) ? "・📍" + fmtDist(distanceM(here, c)) : ""}</small></span></button>`).join("") : "";
+  box.querySelectorAll("[data-coupon]").forEach(b => b.onclick = () => openCoupon(list[+b.dataset.coupon]));
+}
+function openCoupon(c) {
+  if (!c) return;
+  const rows = [["使える日", untilText(c.until)], ["利用条件", c.conditions], ["場所", c.address]].filter(r => r[1]);
+  $("couponBody").innerHTML = `<h2 style="margin:0">🎟 クーポン</h2>
+    <div class="coupon-ticket"><div class="ic">${esc(c.icon || "🎁")}</div><div class="shop">${esc(c.shop)}</div><div class="benefit">${esc(c.benefit)}</div>
+      <div class="show">この画面をスタッフに見せてください</div><div class="clock" id="couponNow"></div>
+      <dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl></div>
+    ${c.url && /^https:\/\//.test(c.url) ? `<a class="btn sub" href="${esc(c.url)}" target="_blank" rel="noopener">🔗 お店のページ</a>` : ""}
+    ${Number.isFinite(c.lat) && Number.isFinite(c.lng) ? `<a class="btn sub" href="${spotMapLink({ name: c.shop, lat: c.lat, lng: c.lng })}" target="_blank" rel="noopener">🗺 地図で見る</a>` : ""}
+    <button class="btn ghost" type="button" id="couponClose">閉じる</button>`;
+  // いまの日時が動いて見える＝前に撮ったスクリーンショットではない目印
+  const tick = () => { const n = new Date(); if ($("couponNow")) $("couponNow").textContent = `${n.getMonth() + 1}月${n.getDate()}日 ${pad(n.getHours())}:${pad(n.getMinutes())}:${pad(n.getSeconds())} 現在`; };
+  clearInterval(couponClock); tick(); couponClock = setInterval(tick, 1000);
+  $("couponClose").onclick = closeSheets;
+  $("couponSheet").onclick = x => { if (x.target.id === "couponSheet") closeSheets(); };
+  $("couponSheet").classList.remove("hidden");
+}
 async function loadMichi() {
   if (michiData) return michiData;
   try { const r = await fetch("../../data/michinoeki.json"); if (!r.ok) return null; const j = await r.json(); return (michiData = Array.isArray(j.rows) ? j.rows : null); } catch { return null; }
@@ -1618,6 +1713,8 @@ async function findSpots({ key = "", words = "" } = {}) {
       if (hp && hp.length) { spots = hp; usedHp = true; center = base; cityMode = !!(key && !area && findRange === "city" && findCity.name); centerLabel = key && area ? area : cityMode ? findCity.name : findPlace ? findPlace.label : findHere ? "現在地" : FIND_HOME.label; }
     }
     // 2) それ以外（公園・温泉・道の駅など）や、ホットペッパーで見つからないときは地図データ
+    // クーポンはホットペッパーのお店だけ（地図データにはクーポンがない）
+    if (!usedHp && key === "coupon") { findShown = []; box.innerHTML = ""; note.textContent = hpReady ? "このあたりでは、クーポンのあるお店が見つかりませんでした。「市内まるごと」や別の場所でも探せます。" : "クーポンのお店は、いま探せません。少し待ってもう一度お試しください。"; return; }
     if (!usedHp) {
       if (area && key) {
         const g = (await nominatim(area, findHere || FIND_HOME, 1))[0];
@@ -1771,12 +1868,13 @@ async function badgeWeather(spots) {
 function spotCard(s, i) {
   const have = wishes.some(w => w.placeId === s.id);
   return `<div class="spot${s.photo ? " has-photo" : ""}">${s.photo ? `<img class="spot-photo" src="${esc(s.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}<div class="spot-body"><h3>${esc(s.name)}</h3>
-    <div class="meta">${s.genre ? `<b>${esc(s.genre)}</b>　` : ""}${Number.isFinite(s.dist) ? "📍" + fmtDist(s.dist) : ""}${s.budget ? "　💴" + esc(s.budget) : ""}<span class="wx" data-wx="${i}"></span>${s.catchText ? `<br>${esc(s.catchText)}` : ""}<br>${esc(s.access || s.address || "")}${s.hours ? `<br>🕐 ${esc(s.hours.slice(0, 60))}` : ""}</div></div>
+    <div class="meta">${s.genre ? `<b>${esc(s.genre)}</b>　` : ""}${Number.isFinite(s.dist) ? "📍" + fmtDist(s.dist) : ""}${s.budget ? "　💴" + esc(s.budget) : ""}<span class="wx" data-wx="${i}"></span>${s.coupon ? `<br><span class="coupon-tag">🎟 クーポンあり</span>` : ""}${s.catchText ? `<br>${esc(s.catchText)}` : ""}<br>${esc(s.access || s.address || "")}${s.hours ? `<br>🕐 ${esc(s.hours.slice(0, 60))}` : ""}</div></div>
     <div class="acts">
       <button type="button" class="btn small ${have ? "sub" : "rose"}" data-wish="${i}" ${have ? "disabled" : ""}>${have ? "✓ 行きたいリストにあります" : "📌 ここ行きたい！"}</button>
       <button type="button" class="btn small sub" data-plan="${i}">📅 予定に追加</button>
       <a class="btn small ghost" href="${spotMapLink(s)}" target="_blank" rel="noopener">🗺 地図</a>
-      ${s.website && /^https?:\/\//.test(s.website) ? `<a class="btn small ghost" href="${esc(s.website)}" target="_blank" rel="noopener">${s.source === "hp" ? "🔗 ホットペッパーで見る" : "🔗 お店のページ"}</a>` : ""}
+      ${s.source === "hp" && s.couponUrl ? affButton(s.couponUrl, "hp", s.coupon ? "🎟 クーポンを見る" : "🎟 クーポン・予約", "btn small rose-ghost") : ""}
+      ${s.website && /^https?:\/\//.test(s.website) ? (s.source === "hp" ? affButton(s.website, "hp", "🔗 ホットペッパーで見る", "btn small ghost") : `<a class="btn small ghost" href="${esc(s.website)}" target="_blank" rel="noopener">🔗 お店のページ</a>`) : ""}
     </div></div>`;
 }
 async function addWish(s, btn) {
@@ -1846,10 +1944,11 @@ function renderWishes() {
 }
 let lastFind = null;
 function setupFind() {
+  renderTravelDeals();
   $("findForm").onsubmit = e => { e.preventDefault(); const q = $("findQ").value.trim(); if (!q) { $("findQ").focus(); return; } $("findQ").blur(); lastFind = { words: q }; findSpots(lastFind); };
   document.querySelectorAll("[data-find]").forEach(b => b.onclick = () => { lastFind = { key: b.dataset.find }; findSpots(lastFind); });
   const markWhere = () => document.querySelectorAll("[data-where]").forEach(b => b.classList.toggle("on-where", (b.dataset.where === "pick") === !!findPlace));
-  const placeChanged = () => { markWhere(); weatherAt = 0; showWeather(); if (lastFind && !findBusy) findSpots(lastFind); };
+  const placeChanged = () => { markWhere(); weatherAt = 0; showWeather(); renderLocalCoupons(); if (lastFind && !findBusy) findSpots(lastFind); };
   document.querySelector('[data-where="here"]').onclick = async () => {
     findPlace = null; $("wherePick").textContent = "🗺 場所を指定"; $("findPlaceForm").classList.add("hidden");
     if (!findHere) { markWhere(); $("findWeather").innerHTML = '<div class="t">📍 今いる場所を確認しています…</div>'; findHere = await hereNow(); if (!findHere) toast("位置情報が使えませんでした。設定で位置情報を許可してください。"); }
@@ -2438,7 +2537,7 @@ async function openDetail(id) {
     if (full.length && $("dPhotos")) $("dPhotos").innerHTML = full.map(s => `<img src="${s}" alt="">`).join("");
   } catch {}
 }
-function closeSheets() { closeInsta(); ["detailSheet", "catSheet", "sendSheet"].forEach(x => $(x).classList.add("hidden")); }
+function closeSheets() { closeInsta(); clearInterval(couponClock); ["detailSheet", "catSheet", "sendSheet", "couponSheet"].forEach(x => $(x).classList.add("hidden")); }
 
 /* =========================================================
    インスタに投稿：画像を作ってiPhoneの共有画面へ

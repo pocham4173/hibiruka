@@ -5,9 +5,9 @@ import { verifyIdToken, cors } from './ai.mjs';
 const ORIGINS = ['https://pocham4173.github.io'];
 const API = 'https://webservice.recruit.co.jp/hotpepper/gourmet/v1/';
 // ジャンル（ホットペッパーのジャンルコード）
-export const FILTERS = ['parking', 'private_room', 'child', 'non_smoking', 'free_food', 'free_drink', 'card'];
+export const FILTERS = ['parking', 'private_room', 'child', 'non_smoking', 'free_food', 'free_drink', 'card', 'coupon'];
 export const BUDGETS = ['B009', 'B010', 'B011', 'B001', 'B002', 'B003', 'B008', 'B004', 'B005', 'B006', 'B012', 'B013', 'B014'];
-export const GENRES = { cafe: 'G014', sweets: 'G014', ramen: 'G013', yakiniku: 'G008', izakaya: 'G001', sushi: 'G004', lunch: '', dog: '' };
+export const GENRES = { cafe: 'G014', sweets: 'G014', ramen: 'G013', yakiniku: 'G008', izakaya: 'G001', sushi: 'G004', lunch: '', dog: '', coupon: '' };
 const json = (body, status, origin) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...cors(origin) } });
 const clean = (s, n) => String(s ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, n);
 const num = v => (typeof v === 'number' || (typeof v === 'string' && v.trim() !== '')) && Number.isFinite(Number(v)) ? Number(v) : NaN;
@@ -28,7 +28,8 @@ export function buildQuery(body, key) {
   if (kind === 'lunch') p.set('lunch', '1');
   if (kind === 'dog') p.set('pet', '1'); // ペット可のお店だけ
   // こだわり条件（ホットペッパーの絞り込み）と予算（夜の平均予算のコード、2つまで）
-  for (const f of Array.isArray(body.filters) ? body.filters : []) if (FILTERS.includes(f)) p.set(f, '1');
+  for (const f of Array.isArray(body.filters) ? body.filters : []) if (FILTERS.includes(f)) f === 'coupon' ? p.set('ktai_coupon', '0') : p.set(f, '1');
+  if (kind === 'coupon') p.set('ktai_coupon', '0'); // ホットペッパー: 0 = 携帯クーポンあり
   for (const b of (Array.isArray(body.budget) ? body.budget : []).filter(b => BUDGETS.includes(b)).slice(0, 2)) p.append('budget', b);
   if (kind === 'sweets') p.set('keyword', [keyword, 'スイーツ'].filter(Boolean).join(' '));
   else if (kind === 'sushi') p.set('keyword', [keyword, '寿司'].filter(Boolean).join(' '));
@@ -40,10 +41,12 @@ export function shopOut(s) {
   if (!s?.name || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
   const url = s.urls?.pc && /^https:\/\//.test(s.urls.pc) ? s.urls.pc : '';
   const photo = s.photo?.mobile?.l || s.photo?.pc?.l || '';
+  const couponUrl = [s.coupon_urls?.sp, s.coupon_urls?.pc].find(u => typeof u === 'string' && /^https:\/\//.test(u)) || '';
   return {
     id: 'hp:' + clean(s.id, 20), name: clean(s.name, 60), genre: clean(s.genre?.name, 30), catch: clean(s.genre?.catch || s.catch, 60),
     budget: clean(s.budget?.name, 30), address: clean(s.address, 80), access: clean(s.mobile_access || s.access, 60), hours: clean(s.open, 80),
     lat, lng, url, photo: /^https:\/\//.test(photo) ? photo : '',
+    coupon: String(s.ktai_coupon) === '0', couponUrl: clean(couponUrl, 300),
   };
 }
 export async function handleSpots(request, env, { fetcher = fetch, now = Date.now } = {}) {

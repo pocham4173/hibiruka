@@ -26,7 +26,7 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
  w.firebase={initializeApp:()=>{},auth:authFn,firestore};w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.console.error=(...args)=>errors.push(args);w.liff={init:async()=>{},isLoggedIn:()=>true,getProfile:async()=>({userId:'U'+'a'.repeat(32),displayName:'A'}),isInClient:()=>false};
  const script=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean).pop();
  w.testNavigate=url=>calls.push(['navigate',url]);
- w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setFriends:(value,self)=>{friends=value;selfFriendId=self;},setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
+ w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setFriends:(value,self)=>{friends=value;selfFriendId=self;},config:CONFIG,setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
  return{w,d,data,calls,queries,db,errors,close:()=>{w.close();assert.equal(errors.length,0,errors.map(String).join(' '));}};
 }
 test('new user gets a private profile and all list queries are owner-filtered',async()=>{
@@ -553,6 +553,43 @@ test('free-tier safety: monthly LINE allowance per person, 2 photos per record, 
   d.querySelector('#sWho [data-id="f2"]').click();assert.equal(d.getElementById('sNowBtn').disabled,true,'two people would go over');
   await a.w.addSend(true);assert.equal(a.data.get('personalEvents/p1').sends,undefined);
   a.w.renderPhotos();assert.match(d.getElementById('phCount').textContent,/^0\/2枚/);
-  for(const id of ['pairView','tab-set','firstRecordGuide'])assert.match(d.getElementById(id).textContent,/ご利用上の注意（免責事項）[\s\S]*非営利・無料[\s\S]*一切の責任を負いかねます/,id);
+  for(const id of ['pairView','tab-set','firstRecordGuide'])assert.match(d.getElementById(id).textContent,/ご利用上の注意（免責事項）[\s\S]*個人が無料で提供[\s\S]*一切の責任を負いかねます/,id);
+ }finally{a.close();}
+});
+
+test('deals: local show-only coupons, Hotpepper coupon shops and travel coupons, with affiliate links and PR only when set up',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  Object.defineProperty(w.navigator,'geolocation',{value:{getCurrentPosition:(ok)=>ok({coords:{latitude:36.40,longitude:138.25}})},configurable:true});
+  const sent=[],t=new Date(),iso=x=>`${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;
+  const later=iso(new Date(t.getFullYear(),t.getMonth(),t.getDate()+10)),past=iso(new Date(t.getFullYear(),t.getMonth(),t.getDate()-1));
+  let shops=[{id:'hp:J1',name:'森のごはん',lat:36.401,lng:138.251,url:'https://www.hotpepper.jp/strJ1/',coupon:true,couponUrl:'https://www.hotpepper.jp/strJ1/scoupon/'}];
+  w.fetch=async(url,opt)=>{url=String(url);
+   if(url.includes('coupons.json'))return{ok:true,json:async()=>({coupons:[{shop:'わんこカフェ',benefit:'おやつ1個サービス',icon:'🐶',until:later,conditions:'1回まで',lat:36.401,lng:138.251},{shop:'終わった店',benefit:'x',until:past},{shop:'隠し',benefit:'y',hidden:true},{benefit:'名前なし'}]})};
+   if(url.includes('/spots/search')){sent.push(JSON.parse(opt.body));return{ok:true,status:200,json:async()=>({shops})};}
+   return{ok:true,json:async()=>[]};};
+  const settle=async()=>{for(let i=0;i<3;i++)await new Promise(r=>setTimeout(r,20));};
+  d.querySelector('.maintabs [data-tab="find"]').click();await settle();
+  const cards=d.querySelectorAll('#localCoupons .coupon-card');assert.equal(cards.length,1,'expired, hidden and broken ones are left out');
+  assert.match(cards[0].textContent,/おやつ1個サービス.*わんこカフェ/s);
+  cards[0].click();const sheet=d.getElementById('couponSheet');assert(!sheet.classList.contains('hidden'));
+  assert.match(sheet.textContent,/この画面をスタッフに見せてください/);assert.match(sheet.textContent,/利用条件1回まで/);assert.match(d.getElementById('couponNow').textContent,/\d+:\d\d:\d\d 現在/);
+  d.getElementById('couponClose').click();assert(sheet.classList.contains('hidden'));
+  // travel links: plain while no ID
+  let links=[...d.querySelectorAll('#travelDeals a')];assert.equal(links[0].href,'https://travel.rakuten.co.jp/coupon/');assert(!d.querySelector('#travelDeals .pr'));
+  // Hotpepper coupon shops
+  d.querySelector('[data-find="coupon"]').click();await settle();
+  assert.deepEqual(sent.at(-1),{kind:'coupon',lat:36.4,lng:138.25,range:5});
+  const card=d.querySelector('#findResults .spot');assert.match(card.textContent,/🎟 クーポンあり/);
+  const btn=[...card.querySelectorAll('a')].find(x=>x.textContent.includes('クーポンを見る'));assert.equal(btn.href,'https://www.hotpepper.jp/strJ1/scoupon/');assert(!btn.querySelector('.pr'));
+  shops=[];d.querySelector('[data-find="coupon"]').click();await settle();assert.match(d.getElementById('findNote').textContent,/クーポンのあるお店が見つかりませんでした/);
+  // affiliate set up: links go through it and carry PR
+  Object.assign(w.h.config.affiliate,{vcSid:'111',vcPid:'222',rakuten:'aa.bb'});w.renderTravelDeals();
+  links=[...d.querySelectorAll('#travelDeals a')];assert(links[0].href.startsWith('https://hb.afl.rakuten.co.jp/hgc/aa.bb/?pc=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F'));assert.equal(d.querySelectorAll('#travelDeals .pr').length,links.length);assert.match(links[0].rel,/sponsored/);
+  shops=[{id:'hp:J1',name:'森のごはん',lat:36.401,lng:138.251,url:'https://www.hotpepper.jp/strJ1/',coupon:true,couponUrl:'https://www.hotpepper.jp/strJ1/scoupon/'}];
+  d.querySelector('[data-find="coupon"]').click();await settle();
+  const c2=[...d.querySelectorAll('#findResults .spot a')].find(x=>x.textContent.includes('クーポンを見る'));
+  assert.equal(c2.href,'https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=111&pid=222&vc_url='+encodeURIComponent('https://www.hotpepper.jp/strJ1/scoupon/'));assert(c2.querySelector('.pr'));
+  // the coupon filter chip goes to Hotpepper too
+  assert(d.querySelector('[data-filter="coupon"]'));
  }finally{a.close();}
 });
