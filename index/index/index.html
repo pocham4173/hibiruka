@@ -1377,6 +1377,18 @@ function addrOf(t) {
 // 地図データ（OpenStreetMap）の検索サーバーは混みやすいので、いくつかに同時に聞いて一番早い答えを使う
 const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
 const findCache = new Map();
+// 長野県の公園・温泉・わんこOKは、週1回まとめたデータ（data/spots-nagano.json）を使う
+const inNagano = c => c && c.lat > 35.19 && c.lat < 37.04 && c.lng > 137.32 && c.lng < 138.75;
+let spotData = null;
+async function loadSpotData() {
+  if (spotData) return spotData;
+  try {
+    const r = await fetch("../../data/spots-nagano.json", { cache: "default" });
+    if (!r.ok) return null;
+    const j = await r.json();
+    return (spotData = Array.isArray(j.rows) ? j.rows : null);
+  } catch { return null; }
+}
 async function overpass(sel, c, radius) {
   const q = `[out:json][timeout:15];(${sel.map(x => `nwr${x}(around:${radius},${c.lat.toFixed(4)},${c.lng.toFixed(4)});`).join("")});out center 150;`;
   const cacheKey = q, hit = findCache.get(cacheKey);
@@ -1440,8 +1452,8 @@ async function findSpots({ key = "", words = "" } = {}) {
     if (!key) for (const [re, k] of FIND_WORDS) if (re.test(area)) { key = k; area = area.replace(re, "").replace(/(の|で|近く|周辺|あたり)/g, " ").trim(); break; }
     let center = null, centerLabel = "", spots = [], usedHp = false;
     // 1) 飲食店はホットペッパー（速い・写真つき）
-    if (FOOD.has(key) || (!key && words)) {
-      findLoading("お店を探しています…", "ホットペッパーで探しています");
+    if (FOOD.has(key) || key === "dog" || (!key && words)) {
+      findLoading("お店を探しています…", key === "dog" ? "ホットペッパーでペット可のお店を探しています" : "ホットペッパーで探しています");
       if (!findHere && !(key && area)) findHere = await hereNow();
       const base = findHere || FIND_HOME;
       let hp;
@@ -1453,8 +1465,9 @@ async function findSpots({ key = "", words = "" } = {}) {
       }
       if (hp && hp.length) { spots = hp; usedHp = true; center = base; centerLabel = key && area ? area : findHere ? "現在地" : FIND_HOME.label; }
     }
-    // 2) それ以外（公園・温泉など）や、ホットペッパーで見つからないときは地図データ
-    if (!usedHp) {
+    // 2) それ以外（公園・温泉など）や、ホットペッパーで見つからないときは地図データ。わんこOKはドッグランも足す
+    if (!usedHp || key === "dog") {
+      const hpSpots = spots;
       if (area && key) {
         const g = (await nominatim(area, findHere || FIND_HOME, 1))[0];
         if (g) { center = { lat: Number(g.lat), lng: Number(g.lon) }; centerLabel = area; }
@@ -1464,7 +1477,13 @@ async function findSpots({ key = "", words = "" } = {}) {
         center = findHere || FIND_HOME; centerLabel = findHere ? "現在地" : FIND_HOME.label;
       }
       findLoading("お店や場所を探しています…", `${centerLabel}のまわりを探しています`);
-      if (key) {
+      const letter = { park: "p", onsen: "o", dog: "d" }[key];
+      const ready = letter && inNagano(center) ? await loadSpotData() : null;
+      if (ready) {
+        // 長野県内は、前もってまとめたデータから（すぐ出る）
+        spots = ready.filter(r => r[0] === letter).map(r => ({ id: "osm:" + r[1], name: r[2], lat: r[3], lng: r[4], genre: r[5], address: r[6], hours: r[7], website: r[8] }))
+          .map(x => ({ x, d: distanceM(center, x) })).filter(o => o.d < 40000).sort((a, b) => a.d - b.d).slice(0, 40).map(o => o.x);
+      } else if (key) {
         const sel = FIND_CATS[key].sel;
         // 近く（2.5km）と広め（10km）を同時に聞く。近くで十分見つかればそれを、足りなければ広めを使う
         const near = overpass(sel, center, 2500), wide = overpass(sel, center, 10000);
@@ -1474,6 +1493,7 @@ async function findSpots({ key = "", words = "" } = {}) {
       } else {
         spots = (await nominatim(words, center)).map(spotFromNominatim).filter(Boolean);
       }
+      if (key === "dog") spots = hpSpots.concat(spots);
     }
     const from = findHere || center;
     const seen = new Set();

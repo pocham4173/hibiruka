@@ -25,6 +25,7 @@ test('queries: near me by genre, lunch, or a keyword like 上田駅 ランチ', 
   q = buildQuery({keyword: '上田駅 ランチ'}, 'K'); assert.equal(q.get('keyword'), '上田駅 ランチ'); assert.equal(q.has('lat'), false);
   q = buildQuery({kind: 'sushi', keyword: '上田'}, 'K'); assert.equal(q.get('keyword'), '上田 寿司'); assert.equal(q.get('genre'), 'G004');
   assert.equal(buildQuery({kind: 'cafe'}, 'K'), null, 'needs a place or a keyword');
+  q = buildQuery({kind: 'dog', lat: 36.4, lng: 138.25}, 'K'); assert.equal(q.get('pet'), '1'); assert.equal(q.has('genre'), false);
 });
 test('shops are trimmed to safe fields; links and photos must be https', () => {
   const s = shopOut(shop); assert.equal(s.id, 'hp:J001'); assert.equal(s.photo, 'https://imgfp.hotp.jp/a.jpg'); assert.equal(s.url, 'https://www.hotpepper.jp/strJ001/'); assert.equal(s.budget, '～1000円');
