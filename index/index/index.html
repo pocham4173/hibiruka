@@ -96,6 +96,8 @@
   .map-pop img { width: 100%; max-height: 110px; object-fit: cover; border-radius: 8px; }
   .map-pop b { color: var(--navy); font-size: 14px; }
   .map-pop small { color: var(--muted); }
+  .card-acts { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .card-acts .btn { width: auto; }
   .countdown { display: flex; gap: 8px; overflow-x: auto; margin: 4px 0 12px; padding-bottom: 2px; }
   .cd { flex: 0 0 auto; min-width: 128px; max-width: 200px; text-align: left; background: #fff4e8; border: 1px solid #f0d2ae; border-radius: 14px; padding: 10px 12px; cursor: pointer; font: inherit; color: var(--navy); }
   .cd .n { font-size: 13px; color: var(--rose); font-weight: 800; }
@@ -1665,18 +1667,18 @@ async function loadSpotData() {
 }
 let michiData = null;
 // 名前のないドッグランに、そばの施設の名前を付ける（例：綿半スーパーセンター上田店のドッグラン）
-const NEAR_NAMED = ['["name"]["shop"]', '["name"]["tourism"]', '["name"]["leisure"~"^(park|sports_centre|resort|garden|playground)$"]', '["name"]["amenity"~"^(cafe|restaurant|parking|community_centre|townhall|marketplace|veterinary)$"]'];
-async function nameDogRuns(spots) {
-  const plain = spots.filter(x => x.name === "ドッグラン").slice(0, 15);
+const NEAR_NAMED = ['["name"]["railway"="station"]', '["name"]["shop"]', '["name"]["tourism"]', '["name"]["leisure"~"^(park|sports_centre|resort|garden|playground)$"]', '["name"]["amenity"~"^(cafe|restaurant|parking|community_centre|townhall|marketplace|veterinary)$"]'];
+async function nameDogRuns(spots, base = "ドッグラン", fmt = n => `${n}のドッグラン`) {
+  const plain = spots.filter(x => x.name === base).slice(0, 15);
   if (!plain.length) return spots;
   let els = [];
   try { els = await overpassRun(`[out:json][timeout:15];(${plain.map(x => NEAR_NAMED.map(f => `nwr${f}(around:300,${(+x.lat).toFixed(5)},${(+x.lng).toFixed(5)});`).join("")).join("")});out center 200;`); } catch { return spots; }
-  const named = els.map(e => [String(e.tags?.["name:ja"] || e.tags?.name || "").trim(), e.lat ?? e.center?.lat, e.lon ?? e.center?.lon]).filter(([n, lat]) => n && !/ドッグラン/.test(n) && Number.isFinite(lat));
+  const named = els.map(e => [String(e.tags?.["name:ja"] || e.tags?.name || "").trim(), e.lat ?? e.center?.lat, e.lon ?? e.center?.lon]).filter(([n, lat]) => n && !/ドッグラン|喫煙/.test(n) && Number.isFinite(lat));
   return spots.map(x => {
-    if (x.name !== "ドッグラン") return x;
+    if (x.name !== base) return x;
     let best = null, bd = 300;
     for (const [n, lat, lng] of named) { const d = distanceM(x, { lat, lng }); if (d < bd) { bd = d; best = n; } }
-    return best ? { ...x, name: `${best}のドッグラン` } : x;
+    return best ? { ...x, name: fmt(best) } : x;
   });
 }
 // 喫煙所はCLUB JT（JT）の喫煙所マップでも探せるようにする
@@ -1998,7 +2000,7 @@ async function findSpots({ key = "", words = "" } = {}) {
     // 何を探すか（ジャンル）と、どこで探すか（地名）を分ける
     let area = words.trim();
     if (!key) for (const [re, k] of FIND_WORDS) if (re.test(area)) { key = k; area = area.replace(re, "").replace(/(の|で|近く|周辺|あたり)/g, " ").trim(); break; }
-    let center = null, centerLabel = "", spots = [], usedHp = false, cityMode = false;
+    let center = null, centerLabel = "", spots = [], usedHp = false, cityMode = false, rangeText = "";
     // 1) 飲食店はホットペッパー（速い・写真つき）
     if (FOOD.has(key) || (!key && words)) {
       findLoading("お店を探しています…", key === "dogfood" ? "ホットペッパーでペット可のお店を探しています" : "ホットペッパーで探しています");
@@ -2042,11 +2044,13 @@ async function findSpots({ key = "", words = "" } = {}) {
         // 道の駅は全国のデータから（近い順）
         spots = michi.map(r => ({ id: "osm:" + r[0], name: r[1], lat: r[2], lng: r[3], address: r[4], hours: r[5], website: r[6], genre: "道の駅" }))
           .map(x => ({ x, d: distanceM(center, x) })).filter(o => o.d < (areaMode ? 30000 : 150000)).sort((a, b) => a.d - b.d).slice(0, 30).map(o => o.x);
+        rangeText = areaMode ? "中心から30km以内" : "150km以内・近い順";
         if (areaMode) { cityMode = true; centerLabel = findArea.city + "のまわり"; }
       } else if (ready) {
         // 長野県内は、前もってまとめたデータから（すぐ出る）
         spots = ready.filter(r => r[0] === letter && (key !== "indoor" || INDOOR.includes(r[5]))).map(r => ({ id: "osm:" + r[1], name: r[2], lat: r[3], lng: r[4], genre: r[5], address: r[6], hours: r[7], website: r[8] }))
           .map(x => ({ x, d: distanceM(center, x) })).filter(o => o.d < 40000).sort((a, b) => a.d - b.d).slice(0, 40).map(o => o.x);
+        rangeText = "40km以内・近い順";
       } else if (areaMode) {
         // 県・市町村まるごと（その市町村の中だけ）
         findLoading("お出かけ先を探しています…", `${findArea.city}の中を探しています`);
@@ -2055,15 +2059,16 @@ async function findSpots({ key = "", words = "" } = {}) {
       } else if (key) {
         const sel = FIND_CATS[key].sel;
         // 近く（2.5km）と広め（10km）を同時に聞く。近くで十分見つかればそれを、足りなければ広めを使う
-        const near = overpass(sel, center, 2500), wide = overpass(sel, center, 10000);
+        const near = overpass(sel, center, 3000), wide = overpass(sel, center, 10000);
         wide.catch(() => {});
-        spots = (await near.catch(() => [])).map(spotFromOsm).filter(Boolean);
-        if (spots.length < 8) { findLoading("もう少し広く探しています…", "10kmまで広げています"); spots = (await wide).map(spotFromOsm).filter(Boolean); }
+        spots = (await near.catch(() => [])).map(spotFromOsm).filter(Boolean); rangeText = "3km以内";
+        if (spots.length < 8) { findLoading("もう少し広く探しています…", "10kmまで広げています"); spots = (await wide).map(spotFromOsm).filter(Boolean); rangeText = "3kmで少なかったので10km以内"; }
       } else {
         spots = (await nominatim(words, center)).map(spotFromNominatim).filter(Boolean);
       }
     }
     if (key === "dog") { findLoading("ドッグランの場所を確かめています…", "そばのお店や公園の名前を調べています"); spots = await nameDogRuns(spots); }
+    if (key === "smoke") { findLoading("喫煙所の場所を確かめています…", "そばのお店や駅の名前を調べています"); spots = await nameDogRuns(spots, "喫煙所", n => `喫煙所（${n}のそば）`); }
     const from = findPlace || findHere || center;
     const seen = new Set();
     spots = spots.filter(s => !seen.has(s.id) && seen.add(s.id)).map(s => ({ ...s, dist: distanceM(from, s), catKeys: key ? FIND_CATS[key].cat : [] }))
@@ -2072,7 +2077,8 @@ async function findSpots({ key = "", words = "" } = {}) {
     if (key === "smoke" && !findCity.pref && (findHere || findPlace)) await cityOf(findPlace || findHere).catch(() => "");
     const jt = key === "smoke" ? jtBox() : "";
     if (!spots.length) { box.innerHTML = jt + mineBox(mine); bindMine(); note.textContent = key === "smoke" ? "地図データでは近くの喫煙所が見つかりませんでした。下のJTの喫煙所マップで探せます。" : mine.length ? "自分の記録で見つかりました。お店や場所は見つかりませんでした。" : "見つかりませんでした。ことばを変えるか、地名を足してみてください（例：「上田駅 カフェ」）。"; return; }
-    note.textContent = `${centerLabel}${cityMode ? "で" : "のまわりで"}${spots.length}件見つかりました${cityMode ? "（近い順）" : ""}${!findHere && centerLabel === FIND_HOME.label ? "（現在地が使えないため、上田駅を基準にしています）" : ""}。`;
+    if (usedHp && !rangeText && !cityMode) rangeText = { "3": "1km以内", "5": "3km以内" }[findRange] || "";
+    note.textContent = `${centerLabel}${cityMode ? "で" : "のまわり"}${rangeText && !cityMode ? `（${rangeText}）で` : cityMode ? "" : "で"}${spots.length}件見つかりました${cityMode ? "（近い順）" : ""}${!findHere && centerLabel === FIND_HOME.label ? "（現在地が使えないため、上田駅を基準にしています）" : ""}。`;
     box.innerHTML = jt + mineBox(mine) + spots.map((s, i) => spotCard(s, i)).join("") + (usedHp ? '<p class="note center hp-credit"><a href="https://webservice.recruit.co.jp/" target="_blank" rel="noopener">Powered by ホットペッパーグルメ Webサービス</a></p>' : "");
     bindMine();
     badgeWeather(spots);
@@ -2793,6 +2799,7 @@ function card(e) {
       <div class="tags"><span class="tag cat">${esc(catLabel(e.cat))}</span>${e.source === "line" ? `<span class="tag">LINEから</span>` : ""}${(e.who || []).map(n => `<span class="tag">${esc(n)}</span>`).join("")}</div>
       ${(e.thumbs || []).length ? `<div class="thumbs">${e.thumbs.slice(0, 4).map(s => `<img src="${s}" alt="">`).join("")}</div>` : ""}
       ${sendRows(e)}
+      <div class="card-acts"><button type="button" class="btn small sub" data-edit="${e.id}">✏️ 直す</button><button type="button" class="btn small ghost" data-detail="${e.id}">くわしく・送る</button></div>
     </div></div></div>`;
 }
 function emptyBox(ic, t, s) { return `<div class="card empty"><div class="ic">${icon(ic)}</div><p>${t}</p><small>${s}</small></div>`; }
@@ -2861,7 +2868,8 @@ function renderList() {
   $("listCount").textContent = `${items.length}件`;
   $("listBox").innerHTML = notice + (waiting && !items.length ? "" : html);
   const retry = $("listBox").querySelector("[data-retry-records]"); if (retry) retry.onclick = watchRecords;
-  $("listBox").querySelectorAll("[data-open]").forEach(el => el.onclick = (ev) => { if (ev.target.closest("[data-cancel],[data-stop]")) return; openDetail(el.dataset.open); });
+  $("listBox").querySelectorAll("[data-open]").forEach(el => el.onclick = (ev) => { if (ev.target.closest("[data-cancel],[data-stop],[data-edit]")) return; openDetail(el.dataset.open); });
+  $("listBox").querySelectorAll("[data-edit]").forEach(b => b.onclick = ev => { ev.stopPropagation(); editRecord(b.dataset.edit).catch(err => { console.error(err); toast(`直す画面を開けませんでした（${err?.code || err?.message || "error"}）`, 6000); }); });
   $("listBox").querySelectorAll("[data-cancel]").forEach(b => b.onclick = (ev) => { ev.stopPropagation(); const [a, c] = b.dataset.cancel.split("|"); cancelSend(a, c); });
   if (view === "map" && $("memMap")) drawMemMap(items);
 }
