@@ -84,12 +84,22 @@ test('photo commit failure preserves full images and retry uses the same record 
  assert.equal(a.data.get(id).thumbs[0],'small');assert.equal(a.data.get(id.replace('personalEvents/','personalPhotos/')+'_0').data,'original-full');
  }finally{a.close();}
 });
-test('missing original photo stops editing instead of overwriting it with a thumbnail',async()=>{
+test('missing original photo: the text can still be edited and the photos are kept as they are, never replaced by a thumbnail',async()=>{
  const a=app();try{
  await a.w.h.startOwner();const event={id:'old',ownerUid:'A',cat:'遊び',date:'2020-01-01',kind:'memory',title:'Old',thumbs:['small']};
  a.data.set('personalEvents/old',event);a.w.h.setEvents([event]);await a.w.h.editRecord('old');
- assert(a.d.getElementById('tab-rec').classList.contains('hidden'));
- assert.equal(a.data.get('personalEvents/old').thumbs[0],'small');assert(!a.data.has('personalPhotos/old_0'));
+ assert(!a.d.getElementById('tab-rec').classList.contains('hidden'),'the form opens');
+ assert(!a.d.querySelector('#fPhotos [data-rm]'),'photos cannot be removed');assert(!a.d.querySelector('#fPhotos .addph'));
+ a.d.getElementById('fTitle').value='New';await a.w.h.saveRecord();
+ assert.equal(a.data.get('personalEvents/old').title,'New');assert.equal(a.data.get('personalEvents/old').thumbs[0],'small');assert(!a.data.has('personalPhotos/old_0'));
+ }finally{a.close();}
+});
+test('a plan without photos opens for editing without reading photos',async()=>{
+ const a=app();try{
+ await a.w.h.startOwner();const event={id:'p',ownerUid:'A',cat:'遊び',date:'2099-01-01',kind:'plan',title:'予定'};
+ a.data.set('personalEvents/p',event);a.w.h.setEvents([event]);a.db.denyMissing=true;await a.w.h.editRecord('p');
+ assert(!a.d.getElementById('tab-rec').classList.contains('hidden'));assert.equal(a.d.getElementById('fTitle').value,'予定');
+ assert(!a.queries.some(q=>q.name==='personalPhotos'),'no photo read');
  }finally{a.close();}
 });
 
@@ -665,8 +675,10 @@ test('area: choose a prefecture and city; food and outings search inside it, and
   assert.match(evLinks[2].textContent,/長野県の遊び・体験を予約/);assert(evLinks[2].querySelector('.pr'));
   assert.equal(evLinks[2].href,'https://hb.afl.rakuten.co.jp/hgc/583df298.b5d045a3.583df299.c1b690a8/?pc='+encodeURIComponent('https://experiences.travel.rakuten.co.jp/destinations/nagano')+'&link_type=hybrid_url');
   assert.doesNotMatch(d.getElementById('eventSearch').textContent,/上田/);
-  const gifts=[...d.querySelectorAll('#giftLinks a')];assert.equal(gifts.length,2);assert.match(gifts[0].textContent,/長野のお土産/);assert.match(gifts[1].textContent,/松本市のふるさと納税/);
-  assert(decodeURIComponent(decodeURIComponent(gifts[0].href)).includes('search.rakuten.co.jp/search/mall/長野 お土産/'));assert(gifts[0].href.startsWith('https://hb.afl.rakuten.co.jp/hgc/'));
+  const gifts=[...d.querySelectorAll('#giftLinks a')].map(x=>x.textContent);
+  assert.deepEqual(gifts.map(t=>t.replace('PR','')),['🍜 松本市のご当地グルメを調べる','🛒 松本市の名物をお取り寄せ','🎁 長野のお土産','🏡 松本市のふるさと納税']);
+  assert.match(d.getElementById('giftWhere').textContent,/行く場所：長野県松本市/);
+  assert(d.querySelector('#giftLinks [data-local-food="松本市"]'));
   // outings inside the city
   d.querySelector('[data-find="park"]').click();await settle();
   assert(ovp.some(q=>q.includes('"ISO3166-2"="JP-20"')&&q.includes('"name"~"^松本市$"')&&q.includes('(area.a)')),ovp.join('\n'));
@@ -729,7 +741,7 @@ test('memory map: memories with a place are pinned on the map; the count of othe
  }finally{a.close();}
 });
 
-test('AI outing plan: uses wishes nearby and found places, shows the steps and each can become a plan with its time',async()=>{
+test('outing course: collect places, order them, let AI add times, see the route and save them all as plans',async()=>{
  const a=app();try{const {w,d}=a;await w.h.startOwner();
   let asked=null;
   w.fetch=async(url,opt)=>{url=String(url);
@@ -738,17 +750,25 @@ test('AI outing plan: uses wishes nearby and found places, shows the steps and e
    return{ok:true,json:async()=>[]};};
   const settle=async()=>{for(let i=0;i<4;i++)await new Promise(r=>setTimeout(r,20));};
   d.querySelector('.maintabs [data-tab="find"]').click();await settle();
-  await w.makePlan();assert.match(d.getElementById('aiPlan').textContent,/候補が足りません/);assert.equal(asked,null);
-  w.h.setWishes([{id:'w1',kind:'wish',status:'wished',place:'上田城跡公園',genre:'公園',lat:36.403,lng:138.244},{id:'w2',kind:'wish',status:'visited',place:'行った所',lat:36.40,lng:138.25},{id:'w3',kind:'wish',status:'wished',place:'遠い所',lat:43,lng:141}]);
+  a.data.set('personalEvents/w1',{kind:'wish'});
+  w.h.setWishes([{id:'w1',kind:'wish',status:'wished',place:'上田城跡公園',genre:'公園',lat:36.403,lng:138.244},{id:'w2',kind:'wish',status:'visited',place:'行った所',lat:36.40,lng:138.25}]);
   w.h.setShown([{name:'ソラノカフェ',genre:'カフェ',lat:36.401,lng:138.251}]);
-  await w.makePlan();
-  assert.equal(asked.mode,'plan');assert.deepEqual(asked.spots.map(x=>x.name),['上田城跡公園','ソラノカフェ']);assert.match(asked.weather,/雨/);
-  const box=d.getElementById('aiPlan');assert.match(box.textContent,/10:00上田城跡公園朝のおさんぽ。/);assert.match(box.textContent,/今日はあと19回/);
-  const course=[...box.querySelectorAll('a')].find(x=>/コースを車で/.test(x.textContent));const u=new URL(course.href);
-  assert.equal(u.searchParams.get('travelmode'),'driving');assert.equal(u.searchParams.get('destination'),'36.40100,138.25100');assert.equal(u.searchParams.get('waypoints'),'36.40300,138.24400');
-  assert.equal(new URL(box.querySelectorAll('.plan-step a')[1].href).searchParams.get('origin'),'36.40300,138.24400','from the previous place');
-  box.querySelectorAll('[data-plan-step]')[1].click();
-  assert.equal(d.getElementById('fPlace').value,'ソラノカフェ');assert.equal(d.getElementById('fTime').value,'12:00');assert.equal(d.getElementById('fKind').value,'plan');
+  d.getElementById('courseOpen').click();
+  const sheet=d.getElementById('courseSheet');assert(!sheet.classList.contains('hidden'));assert.match(sheet.textContent,/まだコースに場所がありません/);
+  const adds=[...sheet.querySelectorAll('[data-cadd]')].map(b=>b.textContent);assert.deepEqual(adds,['➕ ソラノカフェ'.replace('ソラノカフェ','上田城跡公園'),'➕ ソラノカフェ']);
+  sheet.querySelector('[data-cadd="1"]').click();sheet.querySelector('[data-cadd="0"]').click();
+  assert.deepEqual([...sheet.querySelectorAll('.course-item b')].map(b=>b.textContent),['ソラノカフェ','上田城跡公園']);
+  assert.match(sheet.textContent,/約\d+分（目安）/);
+  await d.getElementById('courseAi').onclick();await settle();
+  assert.equal(asked.mode,'plan');assert.match(asked.weather,/雨/);
+  assert.deepEqual([...sheet.querySelectorAll('.course-item b')].map(b=>b.textContent),['上田城跡公園','ソラノカフェ']);
+  assert.equal(sheet.querySelector('[data-ctime="1"]').value,'12:00');assert.match(sheet.textContent,/💬 朝のおさんぽ。/);
+  const route=[...sheet.querySelectorAll('a')].find(x=>/コース全体/.test(x.textContent));assert.equal(new URL(route.href).searchParams.get('travelmode'),'driving');
+  await d.getElementById('courseSave').onclick();
+  const plans=[...a.data].filter(([k,v])=>k.startsWith('personalEvents/')&&v.kind==='plan').map(([,v])=>v);
+  assert.equal(plans.length,2);assert.equal(plans.find(p=>p.place==='ソラノカフェ').time,'12:00');assert.equal(plans[0].ownerUid,'A');
+  assert.equal(a.data.get('personalEvents/w1').status,'scheduled','the wish knows it has a plan');
+  assert(d.getElementById('courseSheet').classList.contains('hidden'));assert(d.getElementById('courseBar').classList.contains('hidden'),'course is emptied after saving');
  }finally{a.close();}
 });
 
@@ -782,5 +802,22 @@ test('app notifications: turn on for this device, send a test, and choose 📱 �
 test('map links always open the exact position, never a name search that can jump to another city',async()=>{
  const a=app();try{const {w}=a;
   for(const name of ['喫煙所','セブン-イレブン 上田店','ソラノカフェ']){const u=new URL(w.h.spotMapLink({name,lat:36.4027936,lng:138.2463693}));assert.equal(u.searchParams.get('query'),'36.402794,138.246369');}
+ }finally{a.close();}
+});
+
+test('dog runs: unnamed ones are shown with the name of the shop next to them',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  Object.defineProperty(w.navigator,'geolocation',{value:{getCurrentPosition:(ok)=>ok({coords:{latitude:35.0,longitude:139.0}})},configurable:true});
+  const qs=[];
+  w.fetch=async(url,opt)=>{url=String(url);
+   if(/overpass|kumi|mail\.ru|private\.coffee/.test(url)){const q=decodeURIComponent(String(opt.body));qs.push(q);
+    if(q.includes('"name"]["shop"]'))return{ok:true,json:async()=>({elements:[{type:'way',id:9,center:{lat:35.0012,lon:139.0002},tags:{name:'綿半スーパーセンター上田店',shop:'doityourself'}}]})};
+    return{ok:true,json:async()=>({elements:[{type:'way',id:1,center:{lat:35.001,lon:139.0},tags:{leisure:'dog_park'}},{type:'node',id:2,lat:35.2,lon:139.2,tags:{leisure:'dog_park'}},{type:'node',id:3,lat:35.001,lon:139.001,tags:{leisure:'dog_park',name:'わんわん広場'}}]})};}
+   return{ok:true,json:async()=>[]};};
+  const settle=async()=>{for(let i=0;i<5;i++)await new Promise(r=>setTimeout(r,20));};
+  d.querySelector('.maintabs [data-tab="find"]').click();
+  d.querySelector('[data-find="dog"]').click();await settle();
+  const names=[...d.querySelectorAll('#findResults .spot h3')].map(h=>h.textContent);
+  assert(names.includes('綿半スーパーセンター上田店のドッグラン'),names.join());assert(names.includes('わんわん広場'));assert(names.includes('ドッグラン'),'still shown when nothing is nearby');
  }finally{a.close();}
 });
