@@ -899,6 +899,9 @@
   <div class="chips" id="sWho"></div>
   <p class="note" id="sWhoNote"></p>
   <button class="btn sub" type="button" id="sSelfSetup">自分のLINEを登録する</button>
+  <label class="lbl" for="sNote" style="margin-top:16px">💬 ひとこと <span style="font-weight:400">（なくてもOK）</span></label>
+  <textarea id="sNote" rows="2" maxlength="100" placeholder="例：楽しみにしてるね！ 10分前に着くよ"></textarea>
+  <p class="note" id="sNoteCount" style="text-align:right;margin-top:2px">0/100</p>
   <div style="font-weight:900;margin:16px 0 6px">いつ送る？</div>
   <div class="chips" id="sQuick" style="margin-bottom:10px"></div>
   <div class="row2">
@@ -2247,9 +2250,10 @@ function filtered() {
 function sendRows(e) {
   return (e.sends || []).slice().sort((a, b) => a.at < b.at ? -1 : 1).map(x => {
     const names = (x.friendIds || []).map(id => recipientName(id)).filter(Boolean).join("・") || "（削除された人）";
-    if (x.status === "sent") return `<div class="sendrow"><span class="tag sent">✓ ${fmtAt(x.at)} ${esc(names)}へLINE送信済み</span></div>`;
-    if (x.status === "fail") return `<div class="sendrow"><span class="tag fail">⚠️ ${fmtAt(x.at)} ${esc(names)}へ送れませんでした${x.error ? `<br>${esc(x.error)}` : ""}</span></div>`;
-    return `<div class="sendrow"><span class="tag wait">🔔 ${fmtAt(x.at)} ${esc(names)}へLINEで送る予定</span><button class="x-btn" data-cancel="${e.id}|${x.id}">取消</button></div>`;
+    const said = x.note ? `<br>💬 ${esc(x.note)}` : "";
+    if (x.status === "sent") return `<div class="sendrow"><span class="tag sent">✓ ${fmtAt(x.at)} ${esc(names)}へLINE送信済み${said}</span></div>`;
+    if (x.status === "fail") return `<div class="sendrow"><span class="tag fail">⚠️ ${fmtAt(x.at)} ${esc(names)}へ送れませんでした${x.error ? `<br>${esc(x.error)}` : ""}${said}</span></div>`;
+    return `<div class="sendrow"><span class="tag wait">🔔 ${fmtAt(x.at)} ${esc(names)}へLINEで送る予定${said}</span><button class="x-btn" data-cancel="${e.id}|${x.id}">取消</button></div>`;
   }).join("");
 }
 function card(e) {
@@ -2516,6 +2520,8 @@ let sendFor = null, sendWho = new Set();
 function openSend(id, ev) {
   const e = ev || events.find(x => x.id === id); if (!e) return;
   sendFor = { id, e }; sendWho = new Set();
+  $("sNote").value = ""; $("sNoteCount").textContent = "0/100";
+  $("sNote").oninput = () => { $("sNoteCount").textContent = `${[...$("sNote").value].length}/100`; };
   // 「誰と？」に入れたLINEの人を最初から選んでおく
   // Notification recipients are chosen explicitly; names alone never select another person.
   const meta = [e.time ? `🕐 ${esc(e.time)}` : "", e.place ? `📍 ${esc(e.place)}` : ""].filter(Boolean).join("　");
@@ -2567,6 +2573,8 @@ async function addSend(now) {
     if (at < localStr(new Date())) { toast("過ぎた時間は選べません"); return; }
   }
   const item = { id: crypto.randomUUID(), friendIds: [...sendWho], at, status: "wait", from: ownerName };
+  const note = $("sNote").value.trim().slice(0, 100);
+  if (note) item.note = note;
   sending = true;
   $("sOkBtn").disabled = $("sNowBtn").disabled = true;
   try {

@@ -7,12 +7,14 @@ function retryKey(eventId, sendId) {
   const h = createHash('sha256').update(JSON.stringify([eventId, sendId])).digest('hex');
   return `${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-a${h.slice(17,20)}-${h.slice(20,32)}`;
 }
-function buildText(ev, from) {
+function buildText(ev, from, note) {
   const [y,m,d] = ev.date.split('-').map(Number);
   const day = '日月火水木金土'[new Date(Date.UTC(y,m-1,d)).getUTCDay()];
   const lines = [`🔔 ${from || 'ヒビルカ'}さんから予定のお知らせ`, '', `📅 ${m}月${d}日(${day})${ev.time ? ' ' + ev.time : ''}`, `✏️ ${ev.title || ev.cat || '予定'}`];
   if (ev.place) lines.push(`📍 ${ev.place}`);
   if (ev.memo) lines.push(`📝 ${ev.memo}`);
+  const words = typeof note === 'string' ? note.replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, '').replace(/\n{2,}/g, '\n').trim() : '';
+  if (words) lines.push('', `💬 ${[...words].slice(0, 100).join('')}`);
   lines.push('', 'ヒビルカより');
   return lines.join('\n').slice(0, 5000);
 }
@@ -103,7 +105,7 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
       try {
         const response = await lineRequest('/v2/bot/message/multicast',token,{
           method:'POST', headers:{'X-Line-Retry-Key':retryKey(isPersonal ? `personal:${ev.ownerUid}:${doc.id}` : doc.id,item.id)},
-          body:JSON.stringify({to:userIds,messages:[{type:'text',text:buildText(ev,item.from)}]})
+          body:JSON.stringify({to:userIds,messages:[{type:'text',text:buildText(ev,item.from,item.note)}]})
         });
         if (response.ok || (response.status === 409 && response.headers.has('x-line-accepted-request-id'))) {
           await updateSend(db,doc.ref,item.id,{status:'sent',sentAt:nowJst(),leaseUntil:0,error:''}); sent++;
