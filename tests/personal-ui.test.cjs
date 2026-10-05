@@ -349,3 +349,32 @@ test('find spots: nearby category search, save to the wish list, plan it, and wi
   assert.match(decodeURIComponent(urls.filter(([u])=>u.includes('overpass')).at(-1)[1]),/cuisine"~"ramen\|noodle/);
  }finally{a.close();}
 });
+
+test('find spots: food searches use Hotpepper (photo, budget, credit) and fall back to the map when it is not set up',async()=>{
+ const a=app();try{const {w,d,data}=a;await w.h.startOwner();
+  Object.defineProperty(w.navigator,'geolocation',{value:{getCurrentPosition:(ok)=>ok({coords:{latitude:36.40,longitude:138.25}})},configurable:true});
+  const sent=[];let hp=true;
+  w.fetch=async(url,opt)=>{
+   if(url.includes('/spots/search')){sent.push(JSON.parse(opt.body));assert.equal(opt.headers.Authorization,'Bearer id-token-A');
+    if(!hp)return{ok:false,status:503,json:async()=>({error:'not_configured'})};
+    return{ok:true,status:200,json:async()=>({shops:[{id:'hp:J1',name:'ソラノカフェ',genre:'カフェ・スイーツ',catch:'手作りケーキ',budget:'～1000円',address:'上田市中央',access:'上田駅から徒歩5分',hours:'10:00～18:00',lat:36.401,lng:138.251,url:'https://www.hotpepper.jp/strJ1/',photo:'https://imgfp.hotp.jp/a.jpg'}]})};}
+   if(url.includes('overpass'))return{ok:true,json:async()=>({elements:[{type:'node',id:1,lat:36.401,lon:138.251,tags:{name:'地図のカフェ',amenity:'cafe'}}]})};
+   return{ok:true,json:async()=>[]};};
+  const settle=()=>new Promise(r=>setTimeout(r,20));
+  d.querySelector('.maintabs [data-tab="find"]').click();
+  d.querySelector('[data-find="cafe"]').click();await settle();await settle();
+  assert.deepEqual(sent[0],{kind:'cafe',lat:36.4,lng:138.25,range:5});
+  const card=d.querySelector('#findResults .spot');assert(card.classList.contains('has-photo'));assert.match(card.textContent,/ソラノカフェ.*～1000円.*手作りケーキ.*徒歩5分/s);
+  assert.match(d.getElementById('findResults').textContent,/Powered by ホットペッパーグルメ Webサービス/);
+  assert.match(card.querySelector('a[href^="https://www.hotpepper.jp"]').textContent,/ホットペッパーで見る/);
+  card.querySelector('[data-wish]').click();await settle();
+  const wish=[...data.values()].find(v=>v.kind==='wish');assert.equal(wish.imageUrl,'https://imgfp.hotp.jp/a.jpg');assert.equal(wish.placeId,'hp:J1');
+  // area + genre goes to Hotpepper as a keyword search
+  d.getElementById('findQ').value='上田駅 ランチ';d.getElementById('findForm').dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();await settle();
+  assert.deepEqual(sent.at(-1),{kind:'lunch',keyword:'上田駅'});
+  // when the key is not set up, the map is used and Hotpepper is not asked again
+  hp=false;d.querySelector('[data-find="ramen"]').click();await settle();await settle();
+  assert.match(d.getElementById('findResults').textContent,/地図のカフェ/);const n=sent.length;
+  d.querySelector('[data-find="cafe"]').click();await settle();await settle();assert.equal(sent.length,n);
+ }finally{a.close();}
+});

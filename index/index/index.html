@@ -78,6 +78,10 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
   .spot { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 10px; }
+  .spot.has-photo { display: grid; grid-template-columns: 88px 1fr; column-gap: 12px; }
+  .spot.has-photo .acts { grid-column: 1 / -1; }
+  .spot-photo { width: 88px; height: 88px; object-fit: cover; border-radius: 10px; background: var(--sand); }
+  .hp-credit a { color: var(--muted); }
   .spot h3 { margin: 0 0 2px; font-size: 16.5px; color: var(--navy); line-height: 1.45; }
   .spot .meta { font-size: 13px; color: var(--muted); line-height: 1.6; }
   .spot .meta b { color: var(--rose); font-weight: 600; }
@@ -877,6 +881,7 @@ const CONFIG = {
   liffId: "2011755874-qh0gBohK",
   lineOaId: "@626hnkgo",
   aiUrl: "https://hibiruka-line.okm-co.workers.dev/ai/memory-text",
+  spotsUrl: "https://hibiruka-line.okm-co.workers.dev/spots/search",
   defaultOwnerName: "理絵"
 };
 /* ========================================================= */
@@ -1331,7 +1336,20 @@ const FIND_WORDS = [[/カフェ|喫茶|珈琲|コーヒー/, "cafe"], [/ラン�
   [/スイーツ|ケーキ|パン|ベーカリー|和菓子|アイス|クレープ/, "sweets"], [/公園|観光|お出かけ|おでかけ|美術館|博物館|遊び/, "park"], [/温泉|銭湯|サウナ|日帰り/, "onsen"],
   [/犬|わんこ|ドッグ|ペット/, "dog"], [/焼肉|焼き肉|BBQ/i, "yakiniku"], [/寿司|すし|鮨/, "sushi"], [/居酒屋|飲み/, "izakaya"]];
 const FIND_HOME = { lat: 36.4019, lng: 138.2491, label: "上田駅" }; // 現在地が使えないときの基準
-let findHere = null, findBusy = false, findShown = [];
+let findHere = null, findBusy = false, findShown = [], hpReady = true;
+const FOOD = new Set(["cafe", "lunch", "ramen", "sweets", "yakiniku", "sushi", "izakaya"]);
+// 飲食店はホットペッパー（写真・予算つき、速い）。使えないときは地図データ（OpenStreetMap）で探す
+async function hotpepper(body) {
+  if (!hpReady) return null;
+  try {
+    const token = await auth.currentUser.getIdToken();
+    const r = await fetch(CONFIG.spotsUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify(body), signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined });
+    const out = await r.json().catch(() => ({}));
+    if (r.status === 503) { hpReady = false; return null; }
+    if (!r.ok) return null;
+    return (out.shops || []).map(h => ({ id: h.id, name: h.name, genre: h.genre, catchText: h.catch, budget: h.budget, address: h.address, access: h.access, hours: h.hours, lat: h.lat, lng: h.lng, website: h.url, photo: h.photo, source: "hp" }));
+  } catch { return null; }
+}
 
 function hereNow() {
   return new Promise(res => {
@@ -1420,27 +1438,42 @@ async function findSpots({ key = "", words = "" } = {}) {
     // 何を探すか（ジャンル）と、どこで探すか（地名）を分ける
     let area = words.trim();
     if (!key) for (const [re, k] of FIND_WORDS) if (re.test(area)) { key = k; area = area.replace(re, "").replace(/(の|で|近く|周辺|あたり)/g, " ").trim(); break; }
-    let center = null, centerLabel = "";
-    if (area) {
-      const g = (await nominatim(area, findHere || FIND_HOME, 1))[0];
-      if (g && key) { center = { lat: Number(g.lat), lng: Number(g.lon) }; centerLabel = area; }
+    let center = null, centerLabel = "", spots = [], usedHp = false;
+    // 1) 飲食店はホットペッパー（速い・写真つき）
+    if (FOOD.has(key) || (!key && words)) {
+      findLoading("お店を探しています…", "ホットペッパーで探しています");
+      if (!findHere && !(key && area)) findHere = await hereNow();
+      const base = findHere || FIND_HOME;
+      let hp;
+      if (key && area) hp = await hotpepper({ kind: key, keyword: area });                     // 「上田駅 カフェ」
+      else if (key) hp = await hotpepper({ kind: key, lat: base.lat, lng: base.lng, range: 5 }); // 近くのカフェ
+      else {                                                                                    // 「スタバ」など：まず近く、なければ全国
+        hp = await hotpepper({ keyword: words, lat: base.lat, lng: base.lng, range: 5 });
+        if (hp && !hp.length) hp = await hotpepper({ keyword: words });
+      }
+      if (hp && hp.length) { spots = hp; usedHp = true; center = base; centerLabel = key && area ? area : findHere ? "現在地" : FIND_HOME.label; }
     }
-    if (!center) {
-      if (!findHere) findLoading("現在地を確認しています…", "位置情報の確認が出たら「許可」を押してください");
-      findHere = findHere || await hereNow();
-      findLoading("お店や場所を探しています…", findHere ? "現在地のまわりを探しています" : "上田駅のまわりを探しています");
-      center = findHere || FIND_HOME; centerLabel = findHere ? "現在地" : FIND_HOME.label;
-    }
-    let spots = [];
-    if (key) {
-      const sel = FIND_CATS[key].sel;
-      // 近く（2.5km）と広め（10km）を同時に聞く。近くで十分見つかればそれを、足りなければ広めを使う
-      const near = overpass(sel, center, 2500), wide = overpass(sel, center, 10000);
-      wide.catch(() => {});
-      spots = (await near.catch(() => [])).map(spotFromOsm).filter(Boolean);
-      if (spots.length < 8) { findLoading("もう少し広く探しています…", "10kmまで広げています"); spots = (await wide).map(spotFromOsm).filter(Boolean); }
-    } else {
-      spots = (await nominatim(words, center)).map(spotFromNominatim).filter(Boolean);
+    // 2) それ以外（公園・温泉など）や、ホットペッパーで見つからないときは地図データ
+    if (!usedHp) {
+      if (area && key) {
+        const g = (await nominatim(area, findHere || FIND_HOME, 1))[0];
+        if (g) { center = { lat: Number(g.lat), lng: Number(g.lon) }; centerLabel = area; }
+      }
+      if (!center) {
+        if (!findHere) { findLoading("現在地を確認しています…", "位置情報の確認が出たら「許可」を押してください"); findHere = await hereNow(); }
+        center = findHere || FIND_HOME; centerLabel = findHere ? "現在地" : FIND_HOME.label;
+      }
+      findLoading("お店や場所を探しています…", `${centerLabel}のまわりを探しています`);
+      if (key) {
+        const sel = FIND_CATS[key].sel;
+        // 近く（2.5km）と広め（10km）を同時に聞く。近くで十分見つかればそれを、足りなければ広めを使う
+        const near = overpass(sel, center, 2500), wide = overpass(sel, center, 10000);
+        wide.catch(() => {});
+        spots = (await near.catch(() => [])).map(spotFromOsm).filter(Boolean);
+        if (spots.length < 8) { findLoading("もう少し広く探しています…", "10kmまで広げています"); spots = (await wide).map(spotFromOsm).filter(Boolean); }
+      } else {
+        spots = (await nominatim(words, center)).map(spotFromNominatim).filter(Boolean);
+      }
     }
     const from = findHere || center;
     const seen = new Set();
@@ -1449,7 +1482,7 @@ async function findSpots({ key = "", words = "" } = {}) {
     findShown = spots;
     if (!spots.length) { box.innerHTML = ""; note.textContent = "見つかりませんでした。ことばを変えるか、地名を足してみてください（例：「上田駅 カフェ」）。"; return; }
     note.textContent = `${centerLabel}のまわりで${spots.length}件見つかりました${!findHere && centerLabel === FIND_HOME.label ? "（現在地が使えないため、上田駅を基準にしています）" : ""}。`;
-    box.innerHTML = spots.map((s, i) => spotCard(s, i)).join("");
+    box.innerHTML = spots.map((s, i) => spotCard(s, i)).join("") + (usedHp ? '<p class="note center hp-credit"><a href="https://webservice.recruit.co.jp/" target="_blank" rel="noopener">Powered by ホットペッパーグルメ Webサービス</a></p>' : "");
     box.querySelectorAll("[data-wish]").forEach(b => b.onclick = () => addWish(findShown[+b.dataset.wish], b));
     box.querySelectorAll("[data-plan]").forEach(b => b.onclick = () => planFromSpot(findShown[+b.dataset.plan]));
   } catch (e) {
@@ -1464,13 +1497,13 @@ async function findSpots({ key = "", words = "" } = {}) {
 }
 function spotCard(s, i) {
   const have = wishes.some(w => w.placeId === s.id);
-  return `<div class="spot"><h3>${esc(s.name)}</h3>
-    <div class="meta">${s.genre ? `<b>${esc(s.genre)}</b>　` : ""}${Number.isFinite(s.dist) ? "📍" + fmtDist(s.dist) : ""}${s.address ? "　" + esc(s.address) : ""}${s.hours ? `<br>🕐 ${esc(s.hours.slice(0, 60))}` : ""}</div>
+  return `<div class="spot${s.photo ? " has-photo" : ""}">${s.photo ? `<img class="spot-photo" src="${esc(s.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}<div class="spot-body"><h3>${esc(s.name)}</h3>
+    <div class="meta">${s.genre ? `<b>${esc(s.genre)}</b>　` : ""}${Number.isFinite(s.dist) ? "📍" + fmtDist(s.dist) : ""}${s.budget ? "　💴" + esc(s.budget) : ""}${s.catchText ? `<br>${esc(s.catchText)}` : ""}<br>${esc(s.access || s.address || "")}${s.hours ? `<br>🕐 ${esc(s.hours.slice(0, 60))}` : ""}</div></div>
     <div class="acts">
       <button type="button" class="btn small ${have ? "sub" : "rose"}" data-wish="${i}" ${have ? "disabled" : ""}>${have ? "✓ 行きたいリストにあります" : "📌 ここ行きたい！"}</button>
       <button type="button" class="btn small sub" data-plan="${i}">📅 予定に追加</button>
       <a class="btn small ghost" href="${spotMapLink(s)}" target="_blank" rel="noopener">🗺 地図</a>
-      ${s.website && /^https?:\/\//.test(s.website) ? `<a class="btn small ghost" href="${esc(s.website)}" target="_blank" rel="noopener">🔗 お店のページ</a>` : ""}
+      ${s.website && /^https?:\/\//.test(s.website) ? `<a class="btn small ghost" href="${esc(s.website)}" target="_blank" rel="noopener">${s.source === "hp" ? "🔗 ホットペッパーで見る" : "🔗 お店のページ"}</a>` : ""}
     </div></div>`;
 }
 async function addWish(s, btn) {
@@ -1480,7 +1513,7 @@ async function addWish(s, btn) {
   try {
     const ref = recordCollection("events").doc();
     await ref.set(ownedData({
-      kind: "wish", status: "wished", placeId: s.id, title: "", place: s.name, genre: s.genre || "", memo: s.address || "", imageUrl: "",
+      kind: "wish", status: "wished", placeId: s.id, title: "", place: s.name, genre: s.genre || "", memo: s.address || "", imageUrl: /^https:\/\//.test(s.photo || "") ? s.photo : "",
       cat: catForSpot(s.catKeys), lat: s.lat, lng: s.lng, link: /^https?:\/\//.test(s.website || "") ? s.website : "",
       date: "", time: "", who: [], fav: false, thumbs: [], sends: [], nextSendAt: null, createdAt: TS(), updatedAt: TS()
     }));
@@ -1523,8 +1556,8 @@ function renderWishes() {
     const main = w.status === "visited" && plan ? `<button type="button" class="btn small rose" data-memory="${w.id}">📝 思い出を残す</button>`
       : w.status === "scheduled" && plan ? `<button type="button" class="btn small sub" data-open-plan="${w.id}">📅 予定を見る</button>`
       : `<button type="button" class="btn small rose" data-wplan="${w.id}">📅 予定に入れる</button>`;
-    return `<div class="spot"><h3>${badge}${esc(w.place || w.title)}</h3>
-      <div class="meta">${w.genre ? `<b>${esc(w.genre)}</b>　` : ""}${w.memo ? esc(w.memo) : ""}</div>
+    return `<div class="spot${w.imageUrl ? " has-photo" : ""}">${w.imageUrl ? `<img class="spot-photo" src="${esc(w.imageUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}<div class="spot-body"><h3>${badge}${esc(w.place || w.title)}</h3>
+      <div class="meta">${w.genre ? `<b>${esc(w.genre)}</b>　` : ""}${w.memo ? esc(w.memo) : ""}</div></div>
       <div class="acts">${main}
         <a class="btn small ghost" href="${spotMapLink({ name: w.place, lat: w.lat, lng: w.lng })}" target="_blank" rel="noopener">🗺 地図</a>
         <button type="button" class="btn small ghost" data-wdel="${w.id}">消す</button></div></div>`;
