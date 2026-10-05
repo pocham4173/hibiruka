@@ -711,3 +711,15 @@ test('countdown: the next plans within 60 days show as 今日 / 明日 / あと�
   w.h.setEvents([]);w.renderList();assert(d.getElementById('countdown').classList.contains('hidden'));
  }finally{a.close();}
 });
+
+test('memory map: memories with a place are pinned on the map; the count of others is shown',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  const markers=[];let fitted=null,opened=null;
+  w.L={map:()=>{const m={on:(n,f)=>{m.pop=f;},fitBounds:p=>{fitted=p;},setView:p=>{fitted=[p];},remove(){}};return m;},tileLayer:(u)=>({addTo(){assert.match(u,/cyberjapandata\.gsi\.go\.jp/);}}),marker:p=>({addTo(){return this;},bindPopup(h){markers.push([p,h]);return this;}})};
+  w.h.setEvents([{id:'m1',kind:'memory',date:'2026-09-01',title:'松本城',lat:36.238,lng:137.969,fav:true},{id:'m2',kind:'memory',date:'2026-08-01',title:'上田',lat:36.40,lng:138.25},{id:'m3',kind:'memory',date:'2026-07-01',title:'場所なし'},{id:'p1',date:'2099-01-01',title:'予定',lat:1,lng:1}]);
+  d.querySelector('[data-view="map"]').click();await new Promise(r=>setTimeout(r,20));
+  assert(d.getElementById('memMap'));assert.equal(markers.length,2);assert.equal(fitted.length,2);
+  assert.match(markers[0][1],/松本城 ♥/);assert.match(d.getElementById('listBox').textContent,/場所がわかる思い出 2件.*ほかの1件/s);
+  assert.equal(d.getElementById('listTitle').textContent,'思い出マップ');assert(!d.getElementById('memoryViews').classList.contains('hidden'));
+ }finally{a.close();}
+});
