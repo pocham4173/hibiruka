@@ -1,0 +1,59 @@
+// 探す：ホットペッパーグルメ（無料のWebサービス）でお店を探す。
+// キーはWorkerの中だけに置き、アプリ（公開ページ）には出さない。使えるのはヒビルカの利用者だけ。
+import { verifyIdToken, cors } from './ai.mjs';
+const ORIGINS = ['https://pocham4173.github.io'];
+const API = 'https://webservice.recruit.co.jp/hotpepper/gourmet/v1/';
+// ジャンル（ホットペッパーのジャンルコード）
+export const GENRES = { cafe: 'G014', sweets: 'G014', ramen: 'G013', yakiniku: 'G008', izakaya: 'G001', sushi: 'G004', lunch: '' };
+const json = (body, status, origin) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...cors(origin) } });
+const clean = (s, n) => String(s ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, n);
+const num = v => (typeof v === 'number' || (typeof v === 'string' && v.trim() !== '')) && Number.isFinite(Number(v)) ? Number(v) : NaN;
+
+export function buildQuery(body, key) {
+  const p = new URLSearchParams({ key, format: 'json', count: '30' });
+  const kind = GENRES[body.kind] !== undefined ? body.kind : '';
+  const keyword = clean(body.keyword, 40);
+  const lat = num(body.lat), lng = num(body.lng);
+  if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+    p.set('lat', lat.toFixed(5)); p.set('lng', lng.toFixed(5));
+    p.set('range', String(Math.min(5, Math.max(1, Math.round(num(body.range)) || 5))));
+    p.set('order', '4');
+  }
+  if (!p.has('lat') && !keyword) return null;
+  if (GENRES[kind]) p.set('genre', GENRES[kind]);
+  if (kind === 'lunch') p.set('lunch', '1');
+  if (kind === 'sweets') p.set('keyword', [keyword, 'スイーツ'].filter(Boolean).join(' '));
+  else if (kind === 'sushi') p.set('keyword', [keyword, '寿司'].filter(Boolean).join(' '));
+  else if (keyword) p.set('keyword', keyword);
+  return p;
+}
+export function shopOut(s) {
+  const lat = num(s.lat), lng = num(s.lng);
+  if (!s?.name || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  const url = s.urls?.pc && /^https:\/\//.test(s.urls.pc) ? s.urls.pc : '';
+  const photo = s.photo?.mobile?.l || s.photo?.pc?.l || '';
+  return {
+    id: 'hp:' + clean(s.id, 20), name: clean(s.name, 60), genre: clean(s.genre?.name, 30), catch: clean(s.genre?.catch || s.catch, 60),
+    budget: clean(s.budget?.name, 30), address: clean(s.address, 80), access: clean(s.mobile_access || s.access, 60), hours: clean(s.open, 80),
+    lat, lng, url, photo: /^https:\/\//.test(photo) ? photo : '',
+  };
+}
+export async function handleSpots(request, env, { fetcher = fetch, now = Date.now } = {}) {
+  const origin = request.headers.get('origin') || '';
+  if (request.method === 'OPTIONS') return new Response(null, { status: ORIGINS.includes(origin) ? 204 : 403, headers: cors(origin) });
+  if (!ORIGINS.includes(origin)) return json({ error: 'origin' }, 403, origin);
+  if (!env.HOTPEPPER_API_KEY) return json({ error: 'not_configured' }, 503, origin);
+  const uid = await verifyIdToken((request.headers.get('authorization') || '').replace(/^Bearer\s+/i, ''), { fetcher, now: now() }).catch(() => null);
+  if (!uid) return json({ error: 'auth' }, 401, origin);
+  let body;
+  try { body = JSON.parse((await request.text()).slice(0, 2000)); } catch { return json({ error: 'input' }, 400, origin); }
+  const q = buildQuery(body || {}, env.HOTPEPPER_API_KEY);
+  if (!q) return json({ error: 'input' }, 400, origin);
+  let r;
+  try { r = await fetcher(API + '?' + q.toString(), { signal: AbortSignal.timeout(10000) }); } catch { return json({ error: 'upstream' }, 502, origin); }
+  if (!r.ok) { console.error('Hotpepper HTTP ' + r.status); return json({ error: 'upstream' }, 502, origin); }
+  const data = await r.json().catch(() => ({}));
+  if (data.results?.error) { console.error('Hotpepper error ' + String(data.results.error?.[0]?.code || '')); return json({ error: 'upstream' }, 502, origin); }
+  const shops = (data.results?.shop || []).map(shopOut).filter(Boolean);
+  return json({ shops, credit: 'ホットペッパーグルメ Webサービス' }, 200, origin);
+}

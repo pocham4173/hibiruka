@@ -2,6 +2,7 @@ import engine from '../scripts/line-engine.cjs';
 import {firestore} from './firestore.mjs';
 import {handleWebhook} from './webhook.mjs';
 import {handleAi} from './ai.mjs';
+import {handleSpots} from './spots.mjs';
 let cached;
 const base64url=bytes=>Buffer.from(bytes).toString('base64url');
 export async function googleToken(secret,fetcher=fetch){
@@ -38,6 +39,10 @@ export default {
   // There is deliberately no public HTTP send endpoint. Only LINE-signed webhooks and the signed-in AI writer are accepted.
   async fetch(request,env,ctx){
     const url=new URL(request.url);
+    if(url.pathname==='/spots/search'&&['POST','OPTIONS'].includes(request.method)){
+      try{return await handleSpots(request,env);}
+      catch{console.error('Hibiruka spot search failed.');return new Response(JSON.stringify({error:'upstream'}),{status:502,headers:{'content-type':'application/json','access-control-allow-origin':'https://pocham4173.github.io',vary:'origin'}});}
+    }
     if(url.pathname==='/ai/memory-text'&&['POST','OPTIONS'].includes(request.method)){
       try{return await handleAi(request,env,{db:async()=>firestore(await googleToken(env.FIREBASE_SERVICE_ACCOUNT),fetch,4)});}
       catch{console.error('Hibiruka AI writer failed; check credentials and service status.');return new Response(JSON.stringify({error:'ai'}),{status:503,headers:{'content-type':'application/json','access-control-allow-origin':'https://pocham4173.github.io',vary:'origin'}});}
