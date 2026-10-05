@@ -423,3 +423,32 @@ test('find spots: the range switch searches 1km, 3km or the whole city and repea
   assert(d.querySelector('[data-range="city"]').classList.contains('on-range'));
  }finally{a.close();}
 });
+test('find extras: conditions and budget go to Hotpepper, my own records match first, weather suggests places',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  Object.defineProperty(w.navigator,'geolocation',{value:{getCurrentPosition:(ok)=>ok({coords:{latitude:36.40,longitude:138.25}})},configurable:true});
+  const sent=[];let weather={daily:{weather_code:[63],temperature_2m_max:[18.4],precipitation_probability_max:[80]}};
+  w.fetch=async(url,opt)=>{url=String(url);
+   if(url.includes('open-meteo'))return{ok:true,json:async()=>weather};
+   if(url.includes('/spots/search')){sent.push(JSON.parse(opt.body));return{ok:true,status:200,json:async()=>({shops:[{id:'hp:1',name:'中華 はなこ',genre:'中華',lat:36.401,lng:138.251,url:'',photo:''}]})};}
+   if(url.includes('spots-nagano'))return{ok:true,json:async()=>({rows:[['p','n1','上田市立博物館',36.401,138.244,'博物館・美術館','','',''],['p','n2','常田公園',36.402,138.25,'公園','','',''],['o','n3','千古温泉',36.42,138.2,'温泉','','','']]})};
+   return{ok:true,json:async()=>[]};};
+  const settle=()=>new Promise(r=>setTimeout(r,25));
+  w.h.setEvents([{id:'m1',kind:'memory',date:'2026-09-01',title:'ラーメン',place:'中華 はなこ',memo:'餃子がおいしい',cat:'食事'}]);
+  d.querySelector('.maintabs [data-tab="find"]').click();await settle();
+  // weather: rainy day suggests indoor places
+  const wb=d.getElementById('findWeather');assert(!wb.classList.contains('hidden'));assert.match(wb.textContent,/雨.*最高18℃.*雨80%/s);assert(wb.classList.contains('rain'));
+  wb.querySelector('[data-wfind="indoor"]').click();await settle();await settle();
+  assert.deepEqual([...d.querySelectorAll('#findResults .spot h3')].map(x=>x.textContent),['上田市立博物館'],'indoor = museums only');
+  // conditions and budget
+  d.querySelector('[data-filter="parking"]').click();d.querySelector('[data-filter="private_room"]').click();d.querySelector('[data-budget="B011,B001"]').click();
+  assert.equal(d.getElementById('findMoreCount').textContent,'3');
+  d.getElementById('findQ').value='餃子';d.getElementById('findForm').dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();await settle();
+  const b=sent.at(-1);assert.deepEqual(b.filters,['parking','private_room']);assert.deepEqual(b.budget,['B011','B001']);
+  // my own record appears first, and opens the detail
+  const mine=d.querySelector('#findResults .mine');assert(mine);assert.match(mine.textContent,/自分の記録から（1件）.*ラーメン/s);
+  mine.querySelector('[data-mine]').click();assert(!d.getElementById('detailSheet').classList.contains('hidden'));
+  // budget toggles off
+  d.querySelector('[data-budget="B011,B001"]').click();assert.equal(d.getElementById('findMoreCount').textContent,'2');
+  for(let i=0;i<6;i++)await settle();
+ }finally{a.close();}
+});
