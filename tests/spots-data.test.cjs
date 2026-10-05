@@ -17,3 +17,12 @@ test('places are sorted into parks, hot springs and dog-friendly spots with comp
   assert.deepEqual(r[0], ['o', 'n1', '別所温泉 大湯', 36.36123, 138.18235, '温泉・銭湯', '上田市', '06:00-22:00', 'https://example.jp']);
   assert.deepEqual(r.map(x => x[0] + ':' + x[2]), ['o:別所温泉 大湯', 'p:上田城跡公園', 'd:ドッグラン'], 'duplicates, unnamed parks and missing positions are skipped');
 });
+test('closed places are dropped, near duplicates merged, and ; becomes ・', () => {
+  const r = rows([
+    {type: 'node', id: 1, lat: 36.4, lon: 138.2, tags: {name: 'ひな詩の湯（閉業）', amenity: 'public_bath'}},
+    {type: 'node', id: 2, lat: 36.4001, lon: 138.2001, tags: {leisure: 'dog_park'}},
+    {type: 'node', id: 3, lat: 36.4002, lon: 138.2002, tags: {leisure: 'dog_park'}},
+    {type: 'node', id: 4, lat: 36.5, lon: 138.3, tags: {name: '真田温泉健康ランド;ふれあいさなだ館', amenity: 'public_bath'}},
+  ]);
+  assert.deepEqual(r.map(x => x[2]), ['ドッグラン', '真田温泉健康ランド・ふれあいさなだ館']);
+});

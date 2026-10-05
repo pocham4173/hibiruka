@@ -26,10 +26,14 @@ function rows(elements) {
   const out = [], seen = new Set();
   for (const e of elements || []) {
     const t = e.tags || {}, lat = e.lat ?? e.center?.lat, lng = e.lon ?? e.center?.lon;
-    const name = t['name:ja'] || t.name || (t.leisure === 'dog_park' ? 'ドッグラン' : '');
+    const name = String(t['name:ja'] || t.name || (t.leisure === 'dog_park' ? 'ドッグラン' : '')).replace(/\s*;\s*/g, '・');
     if (!name || !Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    if (/閉業|閉店|廃業|閉館|休業中/.test(name) || t['disused:amenity'] || t.disused === 'yes') continue; // もう無い場所は出さない
     const id = `${e.type[0]}${e.id}`;
     if (seen.has(id)) continue; seen.add(id);
+    // 同じ名前でほぼ同じ場所（約100m以内）は1つにまとめる
+    const near = `${name}|${lat.toFixed(3)}|${lng.toFixed(3)}`;
+    if (seen.has(near)) continue; seen.add(near);
     const genre = GENRE[t.natural === 'hot_spring' ? 'hot_spring' : t.amenity] || GENRE[t.leisure] || GENRE[t.tourism] || '';
     const web = /^https?:\/\//.test(t.website || '') ? t.website.slice(0, 120) : '';
     for (const k of kinds(t)) out.push([k, id, name.slice(0, 60), r5(lat), r5(lng), genre, addr(t).slice(0, 40), (t.opening_hours || '').slice(0, 50), web]);
