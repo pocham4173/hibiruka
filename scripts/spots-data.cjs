@@ -63,6 +63,7 @@ if (require.main === module) (async () => {
   const counts = list.reduce((c, r) => (c[r[0]] = (c[r[0]] || 0) + 1, c), {});
   if ((counts.p || 0) < 100) throw Error('Too few parks (' + (counts.p || 0) + '); keeping the old file');
   const body = { area: '長野県', updated: new Date().toISOString().slice(0, 10), source: 'OpenStreetMap', fields: ['kind', 'id', 'name', 'lat', 'lng', 'genre', 'address', 'hours', 'website'], rows: list };
+  fs.mkdirSync('data', { recursive: true });
   fs.writeFileSync('data/spots-nagano.json', JSON.stringify(body));
   console.log('spots', counts, 'bytes', fs.statSync('data/spots-nagano.json').size);
 })().catch(e => { note('error', e.message); process.exitCode = 1; });
