@@ -73,7 +73,11 @@ async function fetchAll() {
   return all;
 }
 if (require.main === module) (async () => {
-  const list = rows(await fetchAll());
+  let list = rows(await fetchAll());
+  // サーバーによって返ってくる量がちがうことがあるので、種類ごとに前回より大きく減ったら前回の分を使う
+  let old = [];
+  try { old = JSON.parse(fs.readFileSync('data/spots-nagano.json', 'utf8')).rows || []; } catch {}
+  list = keepRicher(list, old, k => note('warning', `kind ${k}: fewer places than last time; keeping the previous data`));
   const counts = list.reduce((c, r) => (c[r[0]] = (c[r[0]] || 0) + 1, c), {});
   if ((counts.p || 0) < 100) throw Error('Too few parks (' + (counts.p || 0) + '); keeping the old file');
   const body = { area: '長野県', updated: new Date().toISOString().slice(0, 10), source: 'OpenStreetMap', fields: ['kind', 'id', 'name', 'lat', 'lng', 'genre', 'address', 'hours', 'website'], rows: list };
@@ -81,4 +85,12 @@ if (require.main === module) (async () => {
   fs.writeFileSync('data/spots-nagano.json', JSON.stringify(body));
   console.log('spots', counts, 'bytes', fs.statSync('data/spots-nagano.json').size);
 })().catch(e => { note('error', e.message); process.exitCode = 1; });
-module.exports = { rows, kinds };
+function keepRicher(list, old, warn = () => {}) {
+  const count = (rs, k) => rs.filter(r => r[0] === k).length;
+  return ['p', 'o', 'd'].flatMap(k => {
+    const n = count(list, k), o = count(old, k);
+    if (o && n < o * 0.85) { warn(k); return old.filter(r => r[0] === k); }
+    return list.filter(r => r[0] === k);
+  });
+}
+module.exports = { rows, kinds, keepRicher };

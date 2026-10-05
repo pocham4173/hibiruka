@@ -1,6 +1,6 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {rows, kinds} = require('../scripts/spots-data.cjs');
+const {rows, kinds, keepRicher} = require('../scripts/spots-data.cjs');
 test('places are sorted into parks, hot springs and dog-friendly spots with compact rows', () => {
   assert.deepEqual(kinds({leisure: 'park'}), ['p']);
   assert.deepEqual(kinds({amenity: 'public_bath', name: '別所温泉 大湯'}), ['o']);
@@ -25,4 +25,13 @@ test('closed places are dropped, near duplicates merged, and ; becomes ・', () 
     {type: 'node', id: 4, lat: 36.5, lon: 138.3, tags: {name: '真田温泉健康ランド;ふれあいさなだ館', amenity: 'public_bath'}},
   ]);
   assert.deepEqual(r.map(x => x[2]), ['ドッグラン', '真田温泉健康ランド・ふれあいさなだ館']);
+});
+
+test('a kind that shrank a lot keeps last week\'s places', () => {
+  const old = [...Array(10)].map((_, i) => ['p', 'o' + i]).concat([['o', 'x']]);
+  const fresh = [['p', 'n1'], ['o', 'y'], ['d', 'z']];
+  const warned = [];
+  const out = keepRicher(fresh, old, k => warned.push(k));
+  assert.equal(out.filter(r => r[0] === 'p').length, 10); assert.deepEqual(warned, ['p']);
+  assert.deepEqual(out.filter(r => r[0] !== 'p'), [['o', 'y'], ['d', 'z']]);
 });
