@@ -91,6 +91,16 @@
   .find-res-head { display: flex; align-items: flex-start; gap: 8px; }
   .find-res-head .note { flex: 1; }
   .find-res-head .btn { flex: 0 0 auto; margin-top: 2px; }
+  .find-in { font-weight: 500; color: var(--muted); font-size: 12px; margin-left: 8px; }
+  .find-in a { color: var(--navy); font-weight: 700; }
+  #findAreaBox { flex-wrap: wrap; }
+  #findAreaBox select { flex: 1; min-width: 0; }
+  .event-card { display: flex; gap: 10px; align-items: flex-start; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+  .event-card .ic { font-size: 24px; line-height: 1.2; }
+  .event-card b { display: block; color: var(--navy); }
+  .event-card small { color: var(--muted); display: block; }
+  .event-card .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .event-card .acts .btn { width: auto; text-decoration: none; }
   .find-sub { background: #faf7f2; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 10px 0 16px; }
   .find-subh { font-size: 14px; font-weight: 800; color: var(--navy); margin: 0 0 6px; }
   .find-subh small { font-size: 11.5px; color: var(--muted); font-weight: 500; margin-left: 6px; }
@@ -669,7 +679,13 @@
       <h3 class="find-h"><span class="find-n">1</span>どこに行く？</h3>
       <div class="find-where" role="group" aria-label="探す場所">
         <button type="button" class="chip on-where" data-where="here">📍 今いる場所</button>
+        <button type="button" class="chip" data-where="area" id="whereArea">🗾 県・市町村で選ぶ</button>
         <button type="button" class="chip" data-where="pick" id="wherePick">🗺 場所を指定</button>
+      </div>
+      <div class="find-place hidden" id="findAreaBox">
+        <select id="areaPref" aria-label="都道府県"><option value="">都道府県</option></select>
+        <select id="areaCity" aria-label="市区町村" disabled><option value="">市区町村</option></select>
+        <p class="note" style="width:100%;margin:2px 0 0;font-size:11px">市町村の一覧：<a href="https://github.com/geolonia/japanese-addresses" target="_blank" rel="noopener">Geolonia 住所データ</a>（CC BY 4.0）</p>
       </div>
       <form id="findPlaceForm" class="find-place hidden">
         <input type="search" id="findPlaceQ" placeholder="例：軽井沢駅、松本城、長野市" enterkeyhint="done" aria-label="行く場所">
@@ -730,13 +746,18 @@
         <div id="localCoupons"></div>
         <button type="button" class="find-deal-btn" data-find="coupon"><span>🍽</span><b>クーポンのあるお店を探す</b><small>ホットペッパーのクーポンが使えるお店を、行く場所のまわりで</small></button>
       </div>
-      <div class="find-gt">🚗 お出かけ</div>
+      <div class="find-gt">🚗 お出かけ<small class="find-in" id="outIn"></small></div>
       <div class="find-tiles">
         <button type="button" class="find-tile" data-find="park"><span>🌳</span>公園<br>観光</button>
         <button type="button" class="find-tile" data-find="indoor"><span>🏛</span>屋内<br>（雨の日）</button>
         <button type="button" class="find-tile" data-find="onsen"><span>♨️</span>温泉</button>
         <button type="button" class="find-tile" data-find="michi"><span>🛣</span>道の駅</button>
         <button type="button" class="find-tile" data-find="dog"><span>🐕</span>ドッグラン</button>
+      </div>
+      <div class="find-sub find-event" aria-labelledby="findEventTitle">
+        <p class="find-subh" id="findEventTitle">🎪 イベント<small id="eventWhen"></small></p>
+        <div id="localEvents"></div>
+        <div class="find-deal-links" id="eventSearch"></div>
       </div>
       <div class="find-sub find-deal" aria-labelledby="findTripTitle">
         <p class="find-subh" id="findTripTitle">🏨 旅のクーポン<small>楽天トラベル</small></p>
@@ -1333,7 +1354,7 @@ function setupFirstRecordGuide() {
 function setupTabs() {
   document.querySelectorAll(".maintabs button").forEach(b => b.onclick = () => {
     if (b.dataset.tab === "set") return goTab("set");
-    if (b.dataset.tab === "find") { renderWishes(); showWeather(); renderLocalCoupons(); return goTab("find"); }
+    if (b.dataset.tab === "find") { renderWishes(); showWeather(); renderLocalCoupons(); renderEvents(); return goTab("find"); }
     selectView(b.dataset.tab === "mem" ? "mem" : "cal"); goTab("list");
   });
   $("backToPlans").onclick = () => { selectView("cal"); goTab("list"); };
@@ -1513,7 +1534,7 @@ const FIND_WORDS = [[/カフェ|喫茶|珈琲|コーヒー/, "cafe"], [/ラン�
   [/スイーツ|ケーキ|パン|ベーカリー|和菓子|アイス|クレープ/, "sweets"], [/公園|観光|お出かけ|おでかけ|美術館|博物館|遊び/, "park"], [/温泉|銭湯|サウナ|日帰り/, "onsen"],
   [/道の駅/, "michi"], [/ドッグラン/, "dog"], [/犬|わんこ|ペット/, "dogfood"], [/焼肉|焼き肉|BBQ/i, "yakiniku"], [/寿司|すし|鮨/, "sushi"], [/居酒屋|飲み/, "izakaya"]];
 const FIND_HOME = { lat: 36.4019, lng: 138.2491, label: "上田駅" }; // 現在地が使えないときの基準
-let findFilters = new Set(), findBudget = "", findPlace = null;
+let findFilters = new Set(), findBudget = "", findPlace = null, findArea = null; // findArea = { pref, city, iso }：県・市町村まるごと
 let findHere = null, findBusy = false, findShown = [], hpReady = true, findRange = "5", findCity = { key: "", name: "" };
 // 「市内まるごと」用に、いる場所の市町村名を調べる（一度調べたら覚えておく）
 async function cityOf(c) {
@@ -1582,6 +1603,53 @@ async function loadSpotData() {
   } catch { return null; }
 }
 let michiData = null;
+/* ---------- 県・市町村 と イベント ---------- */
+let municipalities = null;
+async function loadMunicipalities() {
+  if (municipalities) return municipalities;
+  try { const r = await fetch("../../data/municipalities.json"); const j = r.ok ? await r.json() : {}; return (municipalities = Array.isArray(j.prefs) && j.prefs.length === 47 ? j.prefs : null); } catch { return null; }
+}
+const placeWord = () => findArea ? findArea.pref + findArea.city : findPlace ? findPlace.label : findCity.name || (findHere ? "" : "上田市");
+function renderOutIn() {
+  const el = $("outIn"); if (!el) return;
+  el.innerHTML = `${findArea ? `${esc(findArea.pref + findArea.city)}の中で探します` : findPlace ? `${esc(findPlace.label)}のまわりで探します` : "今いる場所のまわりで探します"}・<a href="#" id="outChange">場所を変える</a>`;
+  $("outChange").onclick = ev => { ev.preventDefault(); document.querySelector(".find-go").scrollIntoView({ block: "start", behavior: "smooth" }); };
+}
+let localEvents = null;
+async function loadEvents() {
+  if (localEvents) return localEvents;
+  try { const r = await fetch("../../data/events.json", { cache: "no-cache" }); const j = r.ok ? await r.json() : {}; localEvents = Array.isArray(j.events) ? j.events : []; }
+  catch { localEvents = []; }
+  return localEvents;
+}
+const isDay = d => /^\d{4}-\d{2}-\d{2}$/.test(d || "");
+const dayLabel = d => { const [, m, dd] = d.split("-").map(Number); return `${m}/${dd}(${"日月火水木金土"[new Date(d + "T12:00").getDay()]})`; };
+function renderEvents() { return drawEvents().catch(e => console.warn(e)); }
+async function drawEvents() {
+  const box = $("localEvents"); if (!box) return;
+  const day = findDay || todayStr(), last = addDays(day, 13);
+  $("eventWhen").textContent = `${dayWord(day)}から2週間`;
+  const here = findPlace || findHere || FIND_HOME;
+  const all = await loadEvents(); if (!globalThis.document?.body || !$("localEvents")) return;
+  const list = all.filter(e => e && e.title && isDay(e.from) && e.from <= last && (isDay(e.to) ? e.to : e.from) >= day)
+    .filter(e => findArea ? (e.city ? e.city === findArea.city : e.pref === findArea.pref) : !(Number.isFinite(e.lat) && Number.isFinite(e.lng)) || distanceM(here, e) < 60000)
+    .sort((a, b) => a.from < b.from ? -1 : 1).slice(0, 10);
+  box.innerHTML = list.map((e, i) => {
+    const to = isDay(e.to) && e.to !== e.from ? e.to : "";
+    return `<div class="event-card"><span class="ic">${esc(e.icon || "🎪")}</span><div><b>${esc(e.title)}</b><small>📅 ${dayLabel(e.from)}${to ? "〜" + dayLabel(to) : ""}${e.time ? " " + esc(e.time) : ""}${e.place ? `　📍 ${esc(e.place)}` : ""}</small>${e.memo ? `<small>${esc(e.memo)}</small>` : ""}
+      <div class="acts"><button type="button" class="btn small sub" data-event="${i}">📅 予定に追加</button>${/^https:\/\//.test(e.url || "") ? `<a class="btn small ghost" href="${esc(e.url)}" target="_blank" rel="noopener">🔗 くわしく</a>` : ""}</div></div></div>`;
+  }).join("");
+  box.querySelectorAll("[data-event]").forEach(b => b.onclick = () => {
+    const e = list[+b.dataset.event];
+    planFromSpot({ name: e.place || e.title, lat: e.lat, lng: e.lng, catKeys: ["遊び"] });
+    $("fTitle").value = e.title; $("fDate").value = e.from > day ? e.from : day; updateSaveNote();
+  });
+  const word = placeWord(), [, m, d] = day.split("-").map(Number);
+  const google = q => `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+  $("eventSearch").innerHTML = (list.length ? "" : `<p class="note" style="margin:0 0 6px;width:100%">ヒビルカに入っているイベントは、まだありません。下のボタンで探せます。</p>`)
+    + `<a class="btn small sub" href="${google(`${word} イベント ${m}月${d}日`)}" target="_blank" rel="noopener">🔍 ${esc(word || "近く")}の${esc(dayWord(day))}のイベント</a>`
+    + `<a class="btn small sub" href="${google(`${word} イベント ${m}月`)}" target="_blank" rel="noopener">🗓 ${m}月のイベント</a>`;
+}
 /* ---------- お得・クーポン ---------- */
 // アフィリエイトのリンクに変える（IDが空なら元のリンクのまま）。変えたときは「PR」を付ける
 function affLink(url, kind) {
@@ -1652,7 +1720,15 @@ async function loadMichi() {
   try { const r = await fetch("../../data/michinoeki.json"); if (!r.ok) return null; const j = await r.json(); return (michiData = Array.isArray(j.rows) ? j.rows : null); } catch { return null; }
 }
 async function overpass(sel, c, radius) {
-  const q = `[out:json][timeout:15];(${sel.map(x => `nwr${x}(around:${radius},${c.lat.toFixed(4)},${c.lng.toFixed(4)});`).join("")});out center 150;`;
+  return overpassRun(`[out:json][timeout:15];(${sel.map(x => `nwr${x}(around:${radius},${c.lat.toFixed(4)},${c.lng.toFixed(4)});`).join("")});out center 150;`);
+}
+// 県・市町村まるごと：その市町村の境界の中を探す
+const osmName = s => String(s).replace(/[.*+?^${}()|[\]\\"]/g, "").replace(/[ヶケ]/g, "[ヶケ]");
+function overpassArea(sel, a) {
+  const ward = a.city.match(/^.+?市(.+区)$/), name = ward ? ward[1] : a.city;
+  return overpassRun(`[out:json][timeout:25];area["ISO3166-2"="JP-${a.iso}"]->.p;rel["boundary"="administrative"]["name"~"^${osmName(name)}$"](area.p);map_to_area->.a;(${sel.map(x => `nwr${x}(area.a);`).join("")});out center 200;`);
+}
+async function overpassRun(q) {
   const cacheKey = q, hit = findCache.get(cacheKey);
   if (hit && Date.now() - hit.at < 600000) return hit.list;
   const stop = new AbortController(), timer = setTimeout(() => stop.abort(), 18000);
@@ -1721,7 +1797,9 @@ async function findSpots({ key = "", words = "" } = {}) {
       if (!findPlace && !findHere && !(key && area)) findHere = await hereNow();
       const base = findPlace || findHere || FIND_HOME;
       let hp;
-      if (key && area) hp = await hotpepper({ kind: key, keyword: area });                     // 「上田駅 カフェ」
+      if (findArea && key && !area) hp = await hotpepper({ kind: key, keyword: findArea.pref + findArea.city, count: 100 }); // 県・市町村まるごと
+      else if (findArea && !key) hp = await hotpepper({ keyword: `${words} ${findArea.pref}${findArea.city}`, count: 100 });
+      else if (key && area) hp = await hotpepper({ kind: key, keyword: area });                     // 「上田駅 カフェ」
       else if (key && findRange === "city") {                                                  // 市内まるごと
         const city = await cityOf(base) || (findHere ? "" : "上田市");
         hp = city ? await hotpepper({ kind: key, keyword: city, count: 100 }) : await hotpepper({ kind: key, lat: base.lat, lng: base.lng, range: 5 });
@@ -1731,7 +1809,7 @@ async function findSpots({ key = "", words = "" } = {}) {
         hp = await hotpepper({ keyword: words, lat: base.lat, lng: base.lng, range: findRange === "city" ? 5 : Number(findRange) });
         if (hp && !hp.length) hp = await hotpepper({ keyword: words });
       }
-      if (hp && hp.length) { spots = hp; usedHp = true; center = base; cityMode = !!(key && !area && findRange === "city" && findCity.name); centerLabel = key && area ? area : cityMode ? findCity.name : findPlace ? findPlace.label : findHere ? "現在地" : FIND_HOME.label; }
+      if (hp && hp.length) { spots = hp; usedHp = true; center = base; cityMode = !!findArea || !!(key && !area && findRange === "city" && findCity.name); centerLabel = key && area ? area : findArea ? findArea.city : cityMode ? findCity.name : findPlace ? findPlace.label : findHere ? "現在地" : FIND_HOME.label; }
     }
     // 2) それ以外（公園・温泉・道の駅など）や、ホットペッパーで見つからないときは地図データ
     // クーポンはホットペッパーのお店だけ（地図データにはクーポンがない）
@@ -1750,15 +1828,22 @@ async function findSpots({ key = "", words = "" } = {}) {
       const letter = { park: "p", onsen: "o", dog: "d", indoor: "p" }[key];
       const michi = key === "michi" ? await loadMichi() : null;
       const INDOOR = ["博物館・美術館", "ギャラリー", "水族館"];
-      const ready = letter && inNagano(center) ? await loadSpotData() : null;
+      const areaMode = !!(findArea && key && !area);
+      const ready = letter && !areaMode && inNagano(center) ? await loadSpotData() : null;
       if (michi) {
         // 道の駅は全国のデータから（近い順）
         spots = michi.map(r => ({ id: "osm:" + r[0], name: r[1], lat: r[2], lng: r[3], address: r[4], hours: r[5], website: r[6], genre: "道の駅" }))
-          .map(x => ({ x, d: distanceM(center, x) })).filter(o => o.d < 150000).sort((a, b) => a.d - b.d).slice(0, 30).map(o => o.x);
+          .map(x => ({ x, d: distanceM(center, x) })).filter(o => o.d < (areaMode ? 30000 : 150000)).sort((a, b) => a.d - b.d).slice(0, 30).map(o => o.x);
+        if (areaMode) { cityMode = true; centerLabel = findArea.city + "のまわり"; }
       } else if (ready) {
         // 長野県内は、前もってまとめたデータから（すぐ出る）
         spots = ready.filter(r => r[0] === letter && (key !== "indoor" || INDOOR.includes(r[5]))).map(r => ({ id: "osm:" + r[1], name: r[2], lat: r[3], lng: r[4], genre: r[5], address: r[6], hours: r[7], website: r[8] }))
           .map(x => ({ x, d: distanceM(center, x) })).filter(o => o.d < 40000).sort((a, b) => a.d - b.d).slice(0, 40).map(o => o.x);
+      } else if (areaMode) {
+        // 県・市町村まるごと（その市町村の中だけ）
+        findLoading("お出かけ先を探しています…", `${findArea.city}の中を探しています`);
+        spots = (await overpassArea(FIND_CATS[key].sel, findArea)).map(spotFromOsm).filter(Boolean);
+        cityMode = true; centerLabel = findArea.city;
       } else if (key) {
         const sel = FIND_CATS[key].sel;
         // 近く（2.5km）と広め（10km）を同時に聞く。近くで十分見つかればそれを、足りなければ広めを使う
@@ -1850,7 +1935,7 @@ function renderWhen() {
   $("findDayPick").onchange = () => { const v = $("findDayPick").value, t2 = todayStr(); if (!v) return; if (v < t2 || v > addDays(t2, WX_DAYS)) { toast(`天気が分かるのは今日から${WX_DAYS}日先までです`); return; } $("findDayBox").classList.add("hidden"); setFindDay(v === t2 ? "" : v); };
 }
 function setFindDay(day) {
-  findDay = day; renderWhen(); weatherAt = 0; showWeather();
+  findDay = day; renderWhen(); weatherAt = 0; showWeather(); renderEvents();
   if (findShown.length) badgeWeather(findShown);
 }
 async function showWeather() {
@@ -1977,14 +2062,15 @@ function setupFind() {
   renderTravelDeals();
   $("findForm").onsubmit = e => { e.preventDefault(); const q = $("findQ").value.trim(); if (!q) { $("findQ").focus(); return; } $("findQ").blur(); lastFind = { words: q }; findSpots(lastFind); };
   document.querySelectorAll("[data-find]").forEach(b => b.onclick = () => { lastFind = { key: b.dataset.find }; findSpots(lastFind); });
-  const markWhere = () => document.querySelectorAll("[data-where]").forEach(b => b.classList.toggle("on-where", (b.dataset.where === "pick") === !!findPlace));
-  const placeChanged = () => { markWhere(); weatherAt = 0; showWeather(); renderLocalCoupons(); renderTravelDeals(); if (lastFind && !findBusy) findSpots(lastFind); };
+  const markWhere = () => document.querySelectorAll("[data-where]").forEach(b => b.classList.toggle("on-where", b.dataset.where === (findArea ? "area" : findPlace ? "pick" : "here")));
+  const resetArea = () => { findArea = null; $("whereArea").textContent = "🗾 県・市町村で選ぶ"; $("findAreaBox").classList.add("hidden"); };
+  const placeChanged = () => { markWhere(); renderOutIn(); weatherAt = 0; showWeather(); renderLocalCoupons(); renderTravelDeals(); renderEvents(); if (lastFind && !findBusy) findSpots(lastFind); };
   document.querySelector('[data-where="here"]').onclick = async () => {
-    findPlace = null; $("wherePick").textContent = "🗺 場所を指定"; $("findPlaceForm").classList.add("hidden");
+    findPlace = null; resetArea(); $("wherePick").textContent = "🗺 場所を指定"; $("findPlaceForm").classList.add("hidden");
     if (!findHere) { markWhere(); $("findWeather").innerHTML = '<div class="t">📍 今いる場所を確認しています…</div>'; findHere = await hereNow(); if (!findHere) toast("位置情報が使えませんでした。設定で位置情報を許可してください。"); }
     placeChanged();
   };
-  $("wherePick").onclick = () => { $("findPlaceForm").classList.toggle("hidden"); if (!$("findPlaceForm").classList.contains("hidden")) $("findPlaceQ").focus(); };
+  $("wherePick").onclick = () => { $("findAreaBox").classList.add("hidden"); $("findPlaceForm").classList.toggle("hidden"); if (!$("findPlaceForm").classList.contains("hidden")) $("findPlaceQ").focus(); };
   $("findPlaceForm").onsubmit = async e => {
     e.preventDefault();
     const q = $("findPlaceQ").value.trim(); if (!q) { $("findPlaceQ").focus(); return; }
@@ -1992,13 +2078,39 @@ function setupFind() {
     try {
       const g = (await nominatim(q, findHere || FIND_HOME, 1))[0];
       if (!g) { toast(`「${q}」が見つかりませんでした。駅や市の名前で入れてみてください`, 4500); return; }
-      findPlace = { lat: Number(g.lat), lng: Number(g.lon), label: q.slice(0, 20) };
+      findPlace = { lat: Number(g.lat), lng: Number(g.lon), label: q.slice(0, 20) }; resetArea();
       $("wherePick").textContent = "🗺 " + findPlace.label; $("findPlaceForm").classList.add("hidden"); $("findPlaceQ").blur();
       toast(`「${findPlace.label}」のまわりで探します`);
       placeChanged();
     } catch { toast("場所を調べられませんでした。少し待ってもう一度お試しください"); }
     finally { btn.disabled = false; btn.textContent = "決定"; }
   };
+  // 🗾 県・市町村で選ぶ
+  $("whereArea").onclick = async () => {
+    $("findPlaceForm").classList.add("hidden");
+    const box = $("findAreaBox"); box.classList.toggle("hidden"); if (box.classList.contains("hidden")) return;
+    const prefs = await loadMunicipalities(); if (!prefs) { toast("市町村の一覧を読めませんでした。少し待ってもう一度お試しください"); return; }
+    if ($("areaPref").options.length <= 1) $("areaPref").innerHTML = '<option value="">都道府県</option>' + prefs.map(([p], i) => `<option value="${i}">${esc(p)}</option>`).join("");
+  };
+  $("areaPref").onchange = async () => {
+    const prefs = await loadMunicipalities(), i = $("areaPref").value, c = $("areaCity");
+    c.disabled = i === ""; c.innerHTML = '<option value="">市区町村</option>' + (i === "" ? "" : prefs[+i][1].map(n => `<option>${esc(n)}</option>`).join(""));
+    if (i !== "") c.focus();
+  };
+  $("areaCity").onchange = async () => {
+    const prefs = await loadMunicipalities(), i = +$("areaPref").value, city = $("areaCity").value; if (!city || !prefs) return;
+    const pref = prefs[i][0];
+    $("whereArea").textContent = "🗾 確認中…";
+    try {
+      const g = (await nominatim(`${pref}${city}`, null, 1))[0];
+      if (!g) { toast("場所を見つけられませんでした。別の市町村で試してください"); $("whereArea").textContent = "🗾 県・市町村で選ぶ"; return; }
+      findPlace = { lat: Number(g.lat), lng: Number(g.lon), label: city }; findArea = { pref, city, iso: String(i + 1).padStart(2, "0") };
+      $("wherePick").textContent = "🗺 場所を指定"; $("whereArea").textContent = "🗾 " + city; $("findAreaBox").classList.add("hidden");
+      toast(`${pref}${city}の中で探します`);
+      placeChanged();
+    } catch { toast("場所を調べられませんでした。少し待ってもう一度お試しください"); $("whereArea").textContent = "🗾 県・市町村で選ぶ"; }
+  };
+  renderOutIn();
   const optsChanged = () => {
     if (lastFind && !findBusy) findSpots(lastFind);
   };
