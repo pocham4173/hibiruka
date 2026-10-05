@@ -335,7 +335,7 @@ test('find spots: nearby category search, save to the wish list, plan it, and wi
   const settle=()=>new Promise(r=>setTimeout(r,15));
   d.querySelector('.maintabs [data-tab="find"]').click();assert(!d.getElementById('tab-find').classList.contains('hidden'));
   d.querySelector('[data-find="cafe"]').click();await settle();await settle();
-  const ov=urls.find(([u])=>u.includes('overpass'));assert(urls.some(([u,b])=>u.includes('overpass')&&/around:2500,36\.4000,138\.2500/.test(decodeURIComponent(b))));assert(urls.some(([u,b])=>u.includes('overpass')&&/nwr\["amenity"="cafe"\]\(around:10000,36\.4000,138\.2500\)/.test(decodeURIComponent(b))));
+  const ov=urls.find(([u])=>u.includes('overpass'));assert(urls.some(([u,b])=>u.includes('overpass')&&/around:3000,36\.4000,138\.2500/.test(decodeURIComponent(b))));assert(urls.some(([u,b])=>u.includes('overpass')&&/nwr\["amenity"="cafe"\]\(around:10000,36\.4000,138\.2500\)/.test(decodeURIComponent(b))));
   const cards=d.querySelectorAll('#findResults .spot');assert.equal(cards.length,7,'unnamed places are skipped');
   assert.match(cards[0].textContent,/ソラノカフェ/);assert.match(cards[0].textContent,/カフェ/);assert.match(cards[0].textContent,/上田市/);
   // save a wish
@@ -505,7 +505,7 @@ test('search place: here by default, or a named place that moves the search, wea
   assert.match(d.getElementById('findWeather').textContent,/軽井沢駅あたり・今日の天気/);assert.equal(JSON.parse(wx.at(-1)).points[0].lat,36.343);
   d.querySelector('[data-find="cafe"]').click();for(let i=0;i<3;i++)await settle();
   assert.deepEqual(sent.at(-1),{kind:'cafe',lat:36.3428,lng:138.6353,range:5});assert.equal(geo,0,'no location needed for a named place');
-  assert.match(d.getElementById('findNote').textContent,/^軽井沢駅のまわりで1件/);assert.match(d.querySelector('#findResults .spot').textContent,/📍(2\d0|3\d0)m/);
+  assert.match(d.getElementById('findNote').textContent,/^軽井沢駅のまわり（3km以内）で1件/);assert.match(d.querySelector('#findResults .spot').textContent,/📍(2\d0|3\d0)m/);
   // back to here: re-runs the last search around the current location
   d.querySelector('[data-where="here"]').click();for(let i=0;i<4;i++)await settle();
   assert.deepEqual(sent.at(-1),{kind:'cafe',lat:36.4,lng:138.25,range:5});assert.equal(geo,1);
@@ -701,7 +701,9 @@ test('smoking: the 喫煙OK condition goes to Hotpepper, cards show the smoking 
   const sent=[],ovp=[];
   w.fetch=async(url,opt)=>{url=String(url);
    if(url.includes('/spots/search')){sent.push(JSON.parse(opt.body));return{ok:true,status:200,json:async()=>({shops:[{id:'hp:1',name:'けむりの店',lat:36.401,lng:138.251,smoking:'一部禁煙'}]})};}
-   if(/overpass|kumi|mail\.ru|private\.coffee/.test(url)){ovp.push(decodeURIComponent(String(opt.body)));return{ok:true,json:async()=>({elements:[{type:'node',id:5,lat:36.401,lon:138.251,tags:{amenity:'smoking_area'}},{type:'node',id:6,lat:36.402,lon:138.252,tags:{amenity:'smoking_area',operator:'上田市'}}]})};}
+   if(/overpass|kumi|mail\.ru|private\.coffee/.test(url)){const q=decodeURIComponent(String(opt.body));ovp.push(q);
+    if(q.includes('"railway"="station"'))return{ok:true,json:async()=>({elements:[{type:'node',id:7,lat:36.4012,lon:138.2512,tags:{name:'上田駅',railway:'station'}}]})};
+    return{ok:true,json:async()=>({elements:[{type:'node',id:5,lat:36.401,lon:138.251,tags:{amenity:'smoking_area'}},{type:'node',id:6,lat:36.402,lon:138.252,tags:{amenity:'smoking_area',operator:'上田市'}}]})};}
    return{ok:true,json:async()=>[]};};
   const settle=async()=>{for(let i=0;i<4;i++)await new Promise(r=>setTimeout(r,20));};
   d.querySelector('.maintabs [data-tab="find"]').click();
@@ -710,8 +712,9 @@ test('smoking: the 喫煙OK condition goes to Hotpepper, cards show the smoking 
   assert.deepEqual(sent.at(-1).filters,['smoking']);assert.match(d.querySelector('#findResults .spot').textContent,/🚬 一部禁煙/);
   d.querySelector('[data-find="smoke"]').click();await settle();
   assert(ovp.some(q=>q.includes('"amenity"="smoking_area"')));
-  const names=[...d.querySelectorAll('#findResults .spot h3')].map(h=>h.textContent);assert.deepEqual(names.sort(),['喫煙所','喫煙所（上田市）']);
-  const unnamed=[...d.querySelectorAll('#findResults .spot')].find(c=>c.querySelector('h3').textContent==='喫煙所');
+  const names=[...d.querySelectorAll('#findResults .spot h3')].map(h=>h.textContent);assert.deepEqual(names.sort(),['喫煙所（上田市）','喫煙所（上田駅のそば）']);
+  assert.match(d.getElementById('findNote').textContent,/km以内/);
+  const unnamed=[...d.querySelectorAll('#findResults .spot')].find(c=>c.querySelector('h3').textContent==='喫煙所（上田駅のそば）');
   const map=[...unnamed.querySelectorAll('a')].find(x=>/地図/.test(x.textContent));assert.equal(new URL(map.href).searchParams.get('query'),'36.401000,138.251000','no name search that jumps to another city');
   const jt=[...d.querySelectorAll('#findResults a')].filter(x=>x.href.includes('clubjt.jp'));assert(jt.length>=1);assert.equal(jt[0].href,'https://www.clubjt.jp/map/');
  }finally{a.close();}
@@ -819,5 +822,14 @@ test('dog runs: unnamed ones are shown with the name of the shop next to them',a
   d.querySelector('[data-find="dog"]').click();await settle();
   const names=[...d.querySelectorAll('#findResults .spot h3')].map(h=>h.textContent);
   assert(names.includes('綿半スーパーセンター上田店のドッグラン'),names.join());assert(names.includes('わんわん広場'));assert(names.includes('ドッグラン'),'still shown when nothing is nearby');
+ }finally{a.close();}
+});
+
+test('each plan card has its own ✏️ 直す button that opens the edit form directly',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  const e={id:'p',ownerUid:'A',cat:'遊び',date:'2099-01-01',kind:'plan',title:'信州医療センター',time:'09:00'};a.data.set('personalEvents/p',e);w.h.setEvents([e]);w.renderList();
+  const b=d.querySelector('#listBox [data-edit="p"]');assert(b);assert.match(b.textContent,/直す/);
+  b.click();await new Promise(r=>setTimeout(r,20));
+  assert(!d.getElementById('tab-rec').classList.contains('hidden'));assert.equal(d.getElementById('fTitle').value,'信州医療センター');assert(d.getElementById('detailSheet').classList.contains('hidden'));
  }finally{a.close();}
 });
