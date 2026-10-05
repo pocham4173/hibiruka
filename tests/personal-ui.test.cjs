@@ -751,3 +751,30 @@ test('AI outing plan: uses wishes nearby and found places, shows the steps and e
   assert.equal(d.getElementById('fPlace').value,'ソラノカフェ');assert.equal(d.getElementById('fTime').value,'12:00');assert.equal(d.getElementById('fKind').value,'plan');
  }finally{a.close();}
 });
+
+test('app notifications: turn on for this device, send a test, and choose 📱 アプリ通知 without using LINE sends',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  let sub=null;const calls=[];
+  const reg={pushManager:{getSubscription:async()=>sub,subscribe:async o=>{calls.push(['subscribe',o.applicationServerKey.length]);sub={toJSON:()=>({endpoint:'https://push.example/1',keys:{p256dh:'p',auth:'a'}}),unsubscribe:async()=>{sub=null;}};return sub;}}};
+  Object.defineProperty(w.navigator,'serviceWorker',{value:{register:async()=>reg,ready:Promise.resolve(reg),getRegistration:async()=>reg},configurable:true});
+  Object.defineProperty(w,'isSecureContext',{value:true,configurable:true});w.PushManager=function(){};w.Notification={permission:'default',requestPermission:async()=>(w.Notification.permission='granted')};
+  w.fetch=async(url,opt)=>{url=String(url);calls.push([url.split('/').slice(-2).join('/'),opt?.body&&JSON.parse(opt.body)]);
+   if(url.endsWith('/push/key'))return{ok:true,json:async()=>({key:Buffer.alloc(65,4).toString('base64url')})};
+   return{ok:true,status:200,json:async()=>({ok:true,sent:1})};};
+  const settle=async()=>{for(let i=0;i<4;i++)await new Promise(r=>setTimeout(r,20));};
+  d.querySelector('.maintabs [data-tab="set"]').click();await settle();
+  assert(!d.getElementById('pushOn').classList.contains('hidden'));
+  await w.pushEnable();await settle();
+  assert(calls.some(c=>c[0]==='subscribe'&&c[1]===65));const saved=calls.find(c=>c[0]==='push/subscribe');assert.equal(saved[1].subscription.endpoint,'https://push.example/1');
+  assert.match(d.getElementById('pushStatus').textContent,/この端末で通知を受け取れます/);assert(!d.getElementById('pushTest').classList.contains('hidden'));
+  await w.pushTest();assert(calls.some(c=>c[0]==='push/test'));
+  // the send sheet offers 📱 アプリ通知, and it does not count toward the LINE allowance
+  const plan={id:'p1',date:'2099-10-06',title:'遊び'};a.data.set('personalEvents/p1',{...plan});a.w.h.setEvents([plan]);a.w.h.setFriends([],'');
+  w.openSend('p1');await settle();
+  const chip=d.querySelector('#sWho [data-id="push:self"]');assert(chip);assert.match(chip.textContent,/アプリ通知/);
+  chip.click();assert.equal(d.getElementById('sNowBtn').disabled,false);
+  await w.addSend(true);assert.equal(a.data.get('personalEvents/p1').sends[0].friendIds.join(),'push:self');
+  assert.match(d.getElementById('sQuota').textContent,/今月あと30通/);
+  await w.pushDisable();await settle();assert.equal(sub,null);assert(calls.some(c=>c[0]==='push/subscribe'&&c[1].action==='remove'));
+ }finally{a.close();}
+});

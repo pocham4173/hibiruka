@@ -4,6 +4,7 @@ import {handleWebhook} from './webhook.mjs';
 import {handleAi} from './ai.mjs';
 import {handleSpots} from './spots.mjs';
 import {handleWeather} from './weather.mjs';
+import {handlePush, pushToOwner} from './push.mjs';
 let cached;
 const base64url=bytes=>Buffer.from(bytes).toString('base64url');
 export async function googleToken(secret,fetcher=fetch){
@@ -26,7 +27,7 @@ export async function tick(env,controller){
   try{
     const token=await googleToken(env.FIREBASE_SERVICE_ACCOUNT);
     db=firestore(token);
-    const result=await engine.runSender({db,token:env.LINE_CHANNEL_ACCESS_TOKEN,validateOnly:!enabled,maxSends:2});
+    const result=await engine.runSender({db,token:env.LINE_CHANNEL_ACCESS_TOKEN,validateOnly:!enabled,maxSends:2,push:(uid,msg)=>pushToOwner(db,uid,msg)});
     await db.heartbeat({checkedAt:new Date(),scheduledAt:new Date(controller.scheduledTime),enabled,ok:true,version:env.WORKER_VERSION||'unknown',sent:result?.sent||0,failed:result?.failed||0});
   }catch{
     // Never log credentials, names, message bodies, or Firebase response bodies.
@@ -43,6 +44,10 @@ export default {
     if(url.pathname==='/spots/search'&&['POST','OPTIONS'].includes(request.method)){
       try{return await handleSpots(request,env);}
       catch{console.error('Hibiruka spot search failed.');return new Response(JSON.stringify({error:'upstream'}),{status:502,headers:{'content-type':'application/json','access-control-allow-origin':'https://pocham4173.github.io',vary:'origin'}});}
+    }
+    if(url.pathname.startsWith('/push/')&&['GET','POST','OPTIONS'].includes(request.method)){
+      try{return await handlePush(request,env,{db:async()=>firestore(await googleToken(env.FIREBASE_SERVICE_ACCOUNT),fetch,5)});}
+      catch{console.error('Hibiruka push failed.');return new Response(JSON.stringify({error:'busy'}),{status:502,headers:{'content-type':'application/json','access-control-allow-origin':'https://pocham4173.github.io',vary:'origin'}});}
     }
     if(url.pathname==='/weather'&&['POST','OPTIONS'].includes(request.method)){
       try{return await handleWeather(request,env);}
