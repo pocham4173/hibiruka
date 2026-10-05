@@ -1868,8 +1868,8 @@ function spotFromNominatim(n) {
   const area = [a.province || a.state, a.city || a.town || a.village, a.suburb || a.quarter || a.neighbourhood].filter(Boolean).join("");
   return { id: `osm:${n.osm_type}/${n.osm_id}`, name, genre: GENRE[n.type] || GENRE[n.category] || "", address: area, lat, lng, hours: "", website: "" };
 }
-// 名前のない場所（喫煙所など）は名前で探すと遠くの別の場所が出るので、位置だけで開く
-const spotMapLink = s => "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(s.generic ? `${(+s.lat).toFixed(6)},${(+s.lng).toFixed(6)}` : `${s.name} ${s.lat},${s.lng}`);
+// 地図はいつも位置（緯度・経度）だけで開く。名前を付けると、Googleマップが同じ名前の遠くの場所（名古屋の喫煙所、別の店のチェーンなど）を出してしまうため
+const spotMapLink = s => Number.isFinite(+s.lat) && Number.isFinite(+s.lng) ? "https://www.google.com/maps/search/?api=1&query=" + `${(+s.lat).toFixed(6)},${(+s.lng).toFixed(6)}` : mapUrl(s.name || "");
 function catForSpot(keys) {
   for (const k of keys || []) { const c = cats.find(x => x.name === k); if (c) return c.name; }
   return cats[0]?.name || "";
