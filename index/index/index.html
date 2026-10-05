@@ -1586,10 +1586,19 @@ function affButton(url, kind, label, cls) {
 const TRAVEL_DEALS = [
   ["🎟 楽天トラベルのクーポン", "https://travel.rakuten.co.jp/coupon/"],
   ["🏨 宿のクーポン", "https://travel.rakuten.co.jp/coupon/yado/"],
-  ["🍎 長野県の宿", "https://travel.rakuten.co.jp/yado/nagano/"],
 ];
-function renderTravelDeals() {
-  $("travelDeals").innerHTML = TRAVEL_DEALS.map(([l, u]) => affButton(u, "rakuten", l, "btn small sub")).join("");
+// 3つ目は「行く場所」の宿：場所を指定していればその名前、今いる場所なら市町村名で楽天トラベルを検索
+const travelSearch = q => `https://kw.travel.rakuten.co.jp/keyword/Search.do?charset=utf-8&f_query=${encodeURIComponent(q)}`;
+let travelSeq = 0;
+async function renderTravelDeals() {
+  const seq = ++travelSeq, draw = (name) => {
+    if (seq !== travelSeq || !$("travelDeals")) return;
+    const stay = name ? [`🔍 ${name}の宿を探す`, travelSearch(name)] : ["🔍 宿を探す（全国）", "https://travel.rakuten.co.jp/"];
+    $("travelDeals").innerHTML = [...TRAVEL_DEALS, stay].map(([l, u]) => affButton(u, "rakuten", esc(l), "btn small sub")).join("");
+  };
+  if (findPlace) return draw(findPlace.label);
+  draw(findCity.name || "");
+  if (findHere) { const city = await cityOf(findHere).catch(() => ""); if (city) draw(city); }
 }
 // 地元のお店の「見せるだけクーポン」：data/coupons.json に書いたものを出す（Firestoreを読まないので無料枠を使わない）
 let localCoupons = null, couponClock = 0;
@@ -1948,7 +1957,7 @@ function setupFind() {
   $("findForm").onsubmit = e => { e.preventDefault(); const q = $("findQ").value.trim(); if (!q) { $("findQ").focus(); return; } $("findQ").blur(); lastFind = { words: q }; findSpots(lastFind); };
   document.querySelectorAll("[data-find]").forEach(b => b.onclick = () => { lastFind = { key: b.dataset.find }; findSpots(lastFind); });
   const markWhere = () => document.querySelectorAll("[data-where]").forEach(b => b.classList.toggle("on-where", (b.dataset.where === "pick") === !!findPlace));
-  const placeChanged = () => { markWhere(); weatherAt = 0; showWeather(); renderLocalCoupons(); if (lastFind && !findBusy) findSpots(lastFind); };
+  const placeChanged = () => { markWhere(); weatherAt = 0; showWeather(); renderLocalCoupons(); renderTravelDeals(); if (lastFind && !findBusy) findSpots(lastFind); };
   document.querySelector('[data-where="here"]').onclick = async () => {
     findPlace = null; $("wherePick").textContent = "🗺 場所を指定"; $("findPlaceForm").classList.add("hidden");
     if (!findHere) { markWhere(); $("findWeather").innerHTML = '<div class="t">📍 今いる場所を確認しています…</div>'; findHere = await hereNow(); if (!findHere) toast("位置情報が使えませんでした。設定で位置情報を許可してください。"); }

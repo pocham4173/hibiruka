@@ -576,6 +576,14 @@ test('deals: local show-only coupons, Hotpepper coupon shops and travel coupons,
   d.getElementById('couponClose').click();assert(sheet.classList.contains('hidden'));
   // travel links: plain while no ID
   let links=[...d.querySelectorAll('#travelDeals a')];assert.equal(links[0].href,'https://travel.rakuten.co.jp/coupon/');assert(!d.querySelector('#travelDeals .pr'));
+  assert.equal(links.at(-1).textContent,'🔍 宿を探す（全国）');
+  d.getElementById('wherePick').click();d.getElementById('findPlaceQ').value='軽井沢駅';
+  const f0=w.fetch;w.fetch=async(url,opt)=>String(url).includes('nominatim')?{ok:true,json:async()=>[{lat:'36.3428',lon:'138.6353'}]}:f0(url,opt);
+  d.getElementById('findPlaceForm').dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();w.fetch=f0;
+  links=[...d.querySelectorAll('#travelDeals a')];assert.equal(links.at(-1).textContent,'🔍 軽井沢駅の宿を探す');
+  assert.equal(links.at(-1).href,'https://kw.travel.rakuten.co.jp/keyword/Search.do?charset=utf-8&f_query='+encodeURIComponent('軽井沢駅'));
+  assert(!links.some(x=>/長野県の宿/.test(x.textContent)));
+  d.querySelector('[data-where="here"]').click();await settle();
   // Hotpepper coupon shops
   d.querySelector('[data-find="coupon"]').click();await settle();
   assert.deepEqual(sent.at(-1),{kind:'coupon',lat:36.4,lng:138.25,range:5});
