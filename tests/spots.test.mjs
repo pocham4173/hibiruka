@@ -58,3 +58,17 @@ test('coupons: coupon search and filter ask Hotpepper for shops with coupons; co
   const n = shopOut({id: 'J2', name: '林', lat: 36.4, lng: 138.2, ktai_coupon: 1, coupon_urls: {sp: 'javascript:alert(1)'}});
   assert.equal(n.coupon, false); assert.equal(n.couponUrl, '');
 });
+
+test('smoking OK: shops with full no-smoking are dropped, more are asked for, and the smoking info comes back', async () => {
+  const {smokingOk} = await import('../line-worker/spots.mjs');
+  assert.equal(smokingOk('一部禁煙'), true); assert.equal(smokingOk('禁煙席なし'), true); assert.equal(smokingOk('全面禁煙'), false); assert.equal(smokingOk(''), false);
+  const q = buildQuery({kind: 'cafe', lat: 36.4, lng: 138.25, filters: ['smoking'], count: 10}, 'K');
+  assert.equal(q.get('count'), '100'); assert.equal(q.get('smoking'), null);
+  assert.equal(shopOut({id: 'J', name: 'a', lat: 1, lng: 2, non_smoking: '一部禁煙'}).smoking, '一部禁煙');
+});
+
+test('smoking OK search returns only shops where smoking is allowed', async () => {
+  const s = setup({results: {shop: [{...shop, id: 'A', non_smoking: '全面禁煙'}, {...shop, id: 'B', non_smoking: '一部禁煙'}, {...shop, id: 'C', non_smoking: '禁煙席なし'}, {...shop, id: 'D'}]}});
+  const out = await (await handleSpots(req({kind: 'cafe', lat: 36.4, lng: 138.25, filters: ['smoking']}), env, s.deps)).json();
+  assert.deepEqual(out.shops.map(x => x.id), ['hp:B', 'hp:C']);
+});

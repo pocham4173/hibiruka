@@ -144,6 +144,7 @@
   .coupon-ticket dl { text-align: left; font-size: 13px; margin: 10px 0 0; }
   .coupon-ticket dt { font-weight: 700; color: var(--navy); margin-top: 6px; }
   .coupon-ticket dd { margin: 0; color: var(--ink, #2b2b2b); white-space: pre-wrap; }
+  .spot .smoke-tag { display: inline-block; background: #eef1f5; color: #3b4a5e; border-radius: 6px; font-size: 12px; font-weight: 700; padding: 1px 6px; margin-right: 4px; }
   .spot .coupon-tag { display: inline-block; background: #fff1de; color: #a3560a; border-radius: 6px; font-size: 12px; font-weight: 700; padding: 1px 6px; margin-right: 4px; }
   .find-weather .w { font-size: 30px; line-height: 1; }
   .find-weather .wx-where { font-size: 12.5px; font-weight: 700; color: var(--sage-t); }
@@ -728,6 +729,7 @@
           <button type="button" class="chip" data-filter="private_room">🚪 個室</button>
           <button type="button" class="chip" data-filter="child">👶 子ども連れOK</button>
           <button type="button" class="chip" data-filter="non_smoking">🚭 禁煙</button>
+        <button type="button" class="chip" data-filter="smoking">🚬 喫煙OK</button>
           <button type="button" class="chip" data-filter="free_food">🍽 食べ放題</button>
           <button type="button" class="chip" data-filter="free_drink">🍻 飲み放題</button>
           <button type="button" class="chip" data-filter="card">💳 カードOK</button>
@@ -755,6 +757,7 @@
         <button type="button" class="find-tile" data-find="onsen"><span>♨️</span>温泉</button>
         <button type="button" class="find-tile" data-find="michi"><span>🛣</span>道の駅</button>
         <button type="button" class="find-tile" data-find="dog"><span>🐕</span>ドッグラン</button>
+        <button type="button" class="find-tile" data-find="smoke"><span>🚬</span>喫煙所</button>
       </div>
       <div class="find-sub find-event" aria-labelledby="findEventTitle">
         <p class="find-subh" id="findEventTitle">🎪 イベント<small id="eventWhen"></small></p>
@@ -1526,6 +1529,7 @@ const FIND_CATS = {
   indoor: { label: "屋内のお出かけ", sel: ['["tourism"~"museum|gallery|aquarium"]["name"]', '["amenity"="cinema"]["name"]', '["shop"="mall"]["name"]'], cat: ["遊び"] },
   dog:    { label: "ドッグラン", sel: ['["leisure"="dog_park"]', '["dog"~"yes|leashed"]["name"]'], cat: ["遊び"] },
   dogfood: { label: "わんこと入れるお店", sel: ['["amenity"~"cafe|restaurant"]["dog"~"yes|leashed"]'], cat: ["カフェ", "食事"] },
+  smoke:  { label: "喫煙所", sel: ['["amenity"="smoking_area"]', '["smoking"="designated"]["amenity"!~"restaurant|cafe|bar|pub|fast_food"]'], cat: ["遊び"] },
   coupon: { label: "クーポンのあるお店", sel: ['["amenity"="restaurant"]'], cat: ["食事"] },
   michi:  { label: "道の駅", sel: ['["name"~"^道の駅"]'], cat: ["旅行", "遊び"] },
   yakiniku: { label: "焼肉", sel: ['["amenity"="restaurant"]["cuisine"~"yakiniku|barbecue|bbq"]'], cat: ["食事"] },
@@ -1563,7 +1567,7 @@ async function hotpepper(body) {
     const out = await r.json().catch(() => ({}));
     if (r.status === 503) { hpReady = false; return null; }
     if (!r.ok) return null;
-    return (out.shops || []).map(h => ({ id: h.id, name: h.name, genre: h.genre, catchText: h.catch, budget: h.budget, address: h.address, access: h.access, hours: h.hours, lat: h.lat, lng: h.lng, website: h.url, photo: h.photo, coupon: !!h.coupon, couponUrl: h.couponUrl || "", source: "hp" }));
+    return (out.shops || []).map(h => ({ id: h.id, name: h.name, genre: h.genre, catchText: h.catch, budget: h.budget, address: h.address, access: h.access, hours: h.hours, lat: h.lat, lng: h.lng, website: h.url, photo: h.photo, smoking: h.smoking || "", coupon: !!h.coupon, couponUrl: h.couponUrl || "", source: "hp" }));
   } catch { return null; }
 }
 
@@ -1579,7 +1583,7 @@ function distanceM(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 const fmtDist = m => m < 1000 ? `${Math.round(m / 10) * 10}m` : `${(m / 1000).toFixed(m < 10000 ? 1 : 0)}km`;
-const GENRE = { cafe: "カフェ", restaurant: "レストラン", fast_food: "ファストフード", ice_cream: "アイス", public_bath: "温泉・銭湯", pub: "居酒屋", bar: "バー",
+const GENRE = { smoking_area: "喫煙所", cafe: "カフェ", restaurant: "レストラン", fast_food: "ファストフード", ice_cream: "アイス", public_bath: "温泉・銭湯", pub: "居酒屋", bar: "バー",
   park: "公園", dog_park: "ドッグラン", attraction: "観光スポット", museum: "博物館・美術館", viewpoint: "景色のいい場所", zoo: "動物園", aquarium: "水族館", theme_park: "テーマパーク", gallery: "ギャラリー",
   bakery: "パン屋", confectionery: "お菓子屋", pastry: "ケーキ屋", spa: "スパ", sauna: "サウナ", hot_spring: "温泉",
   ramen: "ラーメン", noodle: "麺類", soba: "そば", udon: "うどん", sushi: "寿司", yakiniku: "焼肉", japanese: "和食", italian: "イタリアン", chinese: "中華", french: "フレンチ", curry: "カレー", cake: "ケーキ", coffee_shop: "コーヒー" };
@@ -1767,7 +1771,9 @@ async function nominatim(q, c, limit = 15) {
 }
 function spotFromOsm(e) {
   const t = e.tags || {}, lat = e.lat ?? e.center?.lat, lng = e.lon ?? e.center?.lon;
-  const name = t["name:ja"] || t.name;
+  // 喫煙所は名前がないことが多いので「喫煙所」と出す
+  const smoke = t.amenity === "smoking_area" || t.smoking === "designated";
+  const name = t["name:ja"] || t.name || (smoke ? `喫煙所${t.operator ? `（${t.operator}）` : ""}` : "");
   if (!name || !Number.isFinite(lat)) return null;
   return { id: `osm:${e.type}/${e.id}`, name, genre: genreOf(t), address: addrOf(t), lat, lng, hours: t.opening_hours || "", website: t.website || t["contact:website"] || "" };
 }
@@ -1987,7 +1993,7 @@ async function badgeWeather(spots) {
 function spotCard(s, i) {
   const have = wishes.some(w => w.placeId === s.id);
   return `<div class="spot${s.photo ? " has-photo" : ""}">${s.photo ? `<img class="spot-photo" src="${esc(s.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}<div class="spot-body"><h3>${esc(s.name)}</h3>
-    <div class="meta">${s.genre ? `<b>${esc(s.genre)}</b>　` : ""}${Number.isFinite(s.dist) ? "📍" + fmtDist(s.dist) : ""}${s.budget ? "　💴" + esc(s.budget) : ""}<span class="wx" data-wx="${i}"></span>${s.coupon ? `<br><span class="coupon-tag">🎟 クーポンあり</span>` : ""}${s.catchText ? `<br>${esc(s.catchText)}` : ""}<br>${esc(s.access || s.address || "")}${s.hours ? `<br>🕐 ${esc(s.hours.slice(0, 60))}` : ""}</div></div>
+    <div class="meta">${s.genre ? `<b>${esc(s.genre)}</b>　` : ""}${Number.isFinite(s.dist) ? "📍" + fmtDist(s.dist) : ""}${s.budget ? "　💴" + esc(s.budget) : ""}<span class="wx" data-wx="${i}"></span>${s.coupon || s.smoking ? "<br>" : ""}${s.coupon ? `<span class="coupon-tag">🎟 クーポンあり</span>` : ""}${s.smoking ? `<span class="smoke-tag">${/全面禁煙|全席禁煙/.test(s.smoking) ? "🚭" : "🚬"} ${esc(s.smoking)}</span>` : ""}${s.catchText ? `<br>${esc(s.catchText)}` : ""}<br>${esc(s.access || s.address || "")}${s.hours ? `<br>🕐 ${esc(s.hours.slice(0, 60))}` : ""}</div></div>
     <div class="acts">
       <button type="button" class="btn small ${have ? "sub" : "rose"}" data-wish="${i}" ${have ? "disabled" : ""}>${have ? "✓ 行きたいリストにあります" : "📌 ここ行きたい！"}</button>
       <button type="button" class="btn small sub" data-plan="${i}">📅 予定に追加</button>
