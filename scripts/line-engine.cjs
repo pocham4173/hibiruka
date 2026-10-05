@@ -110,6 +110,11 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
         if (response.ok || (response.status === 409 && response.headers.has('x-line-accepted-request-id'))) {
           await updateSend(db,doc.ref,item.id,{status:'sent',sentAt:nowJst(),leaseUntil:0,error:''}); sent++;
         } else {
+          const reason = response.status === 429 ? await Promise.resolve().then(() => response.json()).then(j => String(j?.message || ''), () => '') : '';
+          if (/monthly limit/i.test(reason)) {
+            // The free plan's monthly allowance is used up: nothing is charged, and retrying cannot help until next month.
+            await updateSend(db,doc.ref,item.id,{status:'fail',leaseUntil:0,error:'今月のLINE無料送信の上限に達したため送れませんでした。来月1日からまた送れます。'}); failed++; continue;
+          }
           const temporary = response.status === 429 || response.status >= 500;
           await updateSend(db,doc.ref,item.id,{status:temporary && item.attempts < 5 ? 'wait':'fail',leaseUntil:0,error:`LINEが送信を受け付けませんでした（${response.status}）。登録・ブロック・配信上限を確認してください。`});
           failed++;

@@ -199,6 +199,11 @@
   .row2 { display: grid; grid-template-columns: minmax(0,1.3fr) minmax(0,1fr); gap: 10px; }
   .row2 > * { min-width: 0; }
   .note { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
+  .disclaimer { text-align: left; font-size: 12.5px; line-height: 1.7; color: var(--muted); background: var(--bg, #f7f4ef); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-top: 16px; }
+  #noticeCard .disclaimer { margin-top: 0; }
+  .disclaimer b { color: var(--navy); font-size: 13px; }
+  .disclaimer p { margin: 4px 0; }
+  .disclaimer ul { margin: 4px 0 0; padding-left: 1.2em; }
   .form-head { display: flex; align-items: center; gap: 12px; }
   .form-head .ic { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
   .form-head .ic svg { width: 22px; height: 22px; }
@@ -483,6 +488,7 @@
     <a class="btn sub" href="?signin=1">ログイン</a>
     <a class="back-link" href="../../guide/">使い方を見る</a>
     <p class="note">登録なしではじめられます。メールの登録はあとから設定でできます。</p>
+    <div class="disclaimer"><b>ご利用上の注意（免責事項）</b><p>本サービス（ヒビルカ）は、個人が非営利・無料で提供している試作開発アプリです。</p><ul><li>無料枠の範囲内で運用しているため、利用状況によっては通知の遅延・未達、一時的なアクセス制限、または予告のない機能変更・サービス停止が発生する場合があります。</li><li>本サービスのご利用により生じた損害等について、開発者は一切の責任を負いかねますのであらかじめご了承ください。</li></ul></div>
     <details id="pinDetails" class="hidden"><summary>以前の記録を復元</summary>
     <h2 style="margin-top:0" id="pinTitle">暗証番号を入れてください</h2>
     <p id="pinText" style="text-align:left;font-size:15px">このブラウザに記録を引き継ぐため、設定済みの6けたの番号を入れてください。</p>
@@ -580,6 +586,7 @@
       <p>日付と内容があればOK。写真やLINEの設定は、あとからでも。</p>
       <div class="start-actions"><button class="btn" id="firstPlan" type="button">＋ 予定を入れる</button><button class="btn sub" id="firstMemory" type="button">思い出を残す</button></div>
       <button class="back-link" id="skipFirstRecord" type="button">あとで</button>
+      <div class="disclaimer"><b>ご利用上の注意（免責事項）</b><p>本サービス（ヒビルカ）は、個人が非営利・無料で提供している試作開発アプリです。</p><ul><li>無料枠の範囲内で運用しているため、利用状況によっては通知の遅延・未達、一時的なアクセス制限、または予告のない機能変更・サービス停止が発生する場合があります。</li><li>本サービスのご利用により生じた損害等について、開発者は一切の責任を負いかねますのであらかじめご了承ください。</li></ul></div>
     </aside>
     <aside id="savedNextSteps" class="card hidden" aria-labelledby="savedNextTitle">
       <h2 id="savedNextTitle">最初の記録を保存しました</h2><p>次もすぐ開けるように、ホームにアイコンを置けます。</p>
@@ -643,6 +650,7 @@
       <div class="find-place hidden" id="findDayBox"><input type="date" id="findDayPick" aria-label="行く日を選ぶ"></div>
       <h3 class="find-h" style="margin-top:14px"><span class="find-n">3</span>その日の天気とおすすめ</h3>
       <div id="findWeather" class="find-weather" aria-live="polite"><div class="t">天気を調べています…</div></div>
+      <p class="note" style="text-align:right;margin-top:4px;font-size:11px">天気予報：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a></p>
     </section>
     <form id="findForm" class="find-bar" role="search">
       <input type="search" id="findQ" placeholder="例：カフェ、ラーメン、上田駅 ランチ" enterkeyhint="search" autocomplete="off" aria-label="探したい場所やジャンル">
@@ -792,6 +800,7 @@
       <p id="accountError" class="err" role="alert"></p>
       <button class="btn sub hidden" id="accountLogout" type="button">ログアウト</button>
     </div>
+    <div class="card" id="noticeCard"><div class="disclaimer"><b>ご利用上の注意（免責事項）</b><p>本サービス（ヒビルカ）は、個人が非営利・無料で提供している試作開発アプリです。</p><ul><li>無料枠の範囲内で運用しているため、利用状況によっては通知の遅延・未達、一時的なアクセス制限、または予告のない機能変更・サービス停止が発生する場合があります。</li><li>本サービスのご利用により生じた損害等について、開発者は一切の責任を負いかねますのであらかじめご了承ください。</li></ul></div></div>
   </section>
 </div>
 
@@ -915,7 +924,8 @@
     <div><label class="lbl" style="margin-top:4px">送る日</label><input type="date" id="sDate"></div>
     <div><label class="lbl" style="margin-top:4px">送る時間</label><input type="time" id="sTime"></div>
   </div>
-  <p class="note" style="margin-bottom:16px">⏱ 定期的に送信します。混雑時は10分以上遅れることがあります。</p>
+  <p class="note" style="margin-bottom:4px">⏱ 定期的に送信します。混雑時は10分以上遅れることがあります。</p>
+  <p class="note" id="sQuota" style="margin-bottom:16px"></p>
   <button class="btn line" id="sOkBtn">この日時に送る</button>
   <button class="btn sub" id="sNowBtn">次の送信で届ける</button>
   <button class="btn ghost" id="sNoBtn">送らない</button>
@@ -999,7 +1009,7 @@ const DEFAULT_CATS = [
   { name: "遊び", icon: "smile" }, { name: "食事", icon: "food" }, { name: "カフェ", icon: "coffee" },
   { name: "旅行", icon: "plane" }, { name: "買い物", icon: "bag" }, { name: "病院", icon: "steth" }, { name: "美容院", icon: "scissors" }
 ];
-const MAX_PHOTOS = 4;
+const MAX_PHOTOS = 2; // 無料の保存容量を守るため、1件あたり2枚まで
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -1027,6 +1037,8 @@ document.querySelectorAll("[data-icon]").forEach(el => el.innerHTML = icon(el.da
 firebase.initializeApp(CONFIG.firebase);
 const auth = firebase.auth();
 const db = firebase.firestore();
+// 端末に記録を保存しておく（開き直したときやオフラインで、サーバーからの読み込みを減らす＝無料枠の節約）
+try { db.enablePersistence?.({ synchronizeTabs: true }).catch(() => {}); } catch {}
 const TS = () => firebase.firestore.FieldValue.serverTimestamp();
 
 const FEATURES = [
@@ -1400,14 +1412,18 @@ function shrink(file, max, q) {
       const r = Math.min(1, max / Math.max(img.width, img.height));
       const c = document.createElement("canvas"); c.width = Math.round(img.width * r); c.height = Math.round(img.height * r);
       c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-      URL.revokeObjectURL(url); res(c.toDataURL("image/jpeg", q));
+      URL.revokeObjectURL(url);
+      // WebP（小さい）が作れる端末はWebP、作れない端末（古いiPhoneなど）はJPEG
+      const webp = c.toDataURL("image/webp", q);
+      res(webp.startsWith("data:image/webp") ? webp : c.toDataURL("image/jpeg", q));
     };
     img.onerror = rej; img.src = url;
   });
 }
 async function addPhotos(ev) {
   const targetForm = form;
-  const files = [...ev.target.files].slice(0, MAX_PHOTOS - targetForm.photos.length);
+  const picked = [...ev.target.files], files = picked.slice(0, MAX_PHOTOS - targetForm.photos.length);
+  if (picked.length > files.length) toast(`写真は1件に${MAX_PHOTOS}枚までです（無料で続けるため）`, 4000);
   ev.target.value = "";
   targetForm.photoPending = (targetForm.photoPending || 0) + 1;
   renderPhotos();
@@ -1415,7 +1431,7 @@ async function addPhotos(ev) {
     if (files[0]) fillFromPhoto(files[0], targetForm);
     for (const f of files) {
       try {
-        const photo = { thumb: await shrink(f, 220, 0.7), full: await shrink(f, 1000, 0.72) };
+        const photo = { thumb: await shrink(f, 220, 0.7), full: await shrink(f, 1024, 0.72) };
         if (form === targetForm && targetForm.photos.length < MAX_PHOTOS) targetForm.photos.push(photo);
       } catch { if (form === targetForm) toast("この写真は読み込めませんでした"); }
     }
@@ -2586,6 +2602,12 @@ function openSend(id, ev) {
   $("sendSheet").onclick = (x) => { if (x.target.id === "sendSheet") closeSheets(); };
   $("sendSheet").classList.remove("hidden");
 }
+// LINEの無料枠（公式アカウント全体で月200通）をみんなで分けるため、1人あたり月の上限を決める。1人に送る＝1通。
+const LINE_MONTHLY = 30;
+function lineUsedThisMonth() {
+  const ym = todayStr().slice(0, 7);
+  return events.reduce((n, e) => n + (e.sends || []).filter(x => String(x.at || "").startsWith(ym) && x.status !== "fail").reduce((m, x) => m + (x.friendIds || []).length, 0), 0);
+}
 function recipientName(id) { return id === selfFriendId ? '自分' : friends.find(f => f.id === id)?.name; }
 function renderSendWho() {
   const joined = friends.filter(f => f.status === "joined" && f.lineUserId);
@@ -2597,12 +2619,15 @@ function renderSendWho() {
   $("sWhoNote").textContent = joined.length ? "選んだ人にだけ届きます。自分と友だちを一緒に選べます。" : "自分のLINEを登録するか、設定から相手を招待してください。";
   $("sSelfSetup").classList.toggle("hidden", joined.some(f => f.id === selfFriendId));
   $("sSelfSetup").onclick = () => { closeSheets(); goTab("set"); $("selfLineCard").scrollIntoView({behavior:"smooth"}); };
-  $("sOkBtn").disabled = $("sNowBtn").disabled = sendWho.size === 0 || sending;
+  const left = Math.max(0, LINE_MONTHLY - lineUsedThisMonth());
+  $("sQuota").textContent = `📮 今月あと${left}通送れます（1人に送ると1通・無料で続けるため月${LINE_MONTHLY}通まで）`;
+  $("sOkBtn").disabled = $("sNowBtn").disabled = sendWho.size === 0 || sending || left < sendWho.size;
 }
 let sending = false;
 async function addSend(now) {
   if (sending) return;
   if (!sendFor || !sendWho.size) { toast("送る人を選んでください"); return; }
+  if (lineUsedThisMonth() + sendWho.size > LINE_MONTHLY) { toast(`今月のLINE送信は${LINE_MONTHLY}通までです。来月1日からまた送れます`, 5000); return; }
   let at;
   if (now) at = localStr(new Date());
   else {

@@ -13,10 +13,10 @@ const NOW=Date.parse('2026-10-03T03:00:00Z'); // 12:00 JST
 // In-memory stand-in with the same small interface the webhook uses.
 function memoryDb(seed={}){
   const data=JSON.parse(JSON.stringify(seed),(k,v)=>typeof v==='string'&&/^\d{4}-\d{2}-\d{2}T.*Z$/.test(v)?new Date(v):v);
-  const col=c=>(data[c]??={});
+  const col=c=>(data[c]??={}),queries=[];
   const ref=(c,id)=>({id,path:c+'/'+id,get:async()=>({id,exists:id in col(c),ref:ref(c,id),data:()=>col(c)[id]})});
-  const query=(c,filters=[])=>({select:()=>query(c,filters),limit:()=>query(c,filters),where:(f,op,v)=>{assert.equal(op,'==');return query(c,[...filters,[f,v]]);},get:async()=>({docs:Object.entries(col(c)).filter(([,d])=>filters.every(([f,v])=>d[f]===v)).map(([id,d])=>({id,data:()=>d}))}),doc:id=>ref(c,id)});
-  return {data,collection:c=>query(c),
+  const query=(c,filters=[])=>({select:()=>query(c,filters),limit:()=>query(c,filters),where:(f,op,v)=>{assert.ok(op==='=='||op==='in');queries.push([c,f,op,v]);return query(c,[...filters,[f,op,v]]);},get:async()=>({docs:Object.entries(col(c)).filter(([,d])=>filters.every(([f,op,v])=>op==='in'?v.includes(d[f]):d[f]===v)).map(([id,d])=>({id,data:()=>d}))}),doc:id=>ref(c,id)});
+  return {data,queries,collection:c=>query(c),
     create:async(r,v)=>{const [c,id]=r.path.split('/');if(id in col(c)){const e=Error('exists');e.status=409;throw e;}col(c)[id]=v;},
     set:async(r,v)=>{const [c,id]=r.path.split('/');col(c)[id]=v;},
     patch:async(r,v)=>{const [c,id]=r.path.split('/');Object.assign(col(c)[id],v);},
@@ -186,6 +186,17 @@ test('ふりかえり: summarises only this owner\'s memories of the month', asy
   const [last] = await handleEvent(db, env, msg({type:'text', text:'先月'}), NOW);
   assert.match(last.text, /2026年9月のふりかえり（1件）/);
   assert.match((await handleEvent(memoryDb(linked()), env, msg({type:'text', text:'今月のふりかえり'}), NOW))[0].text, /まだありません/);
+  const months = db.queries.filter(q => q[1] === 'date' && q[2] === 'in');
+  assert.ok(months.length >= 2, 'reads only the days of that month');
+  assert.ok(months.every(q => q[3].length <= 30 && q[3].every(d => /^2026-(09|10)-\d\d$/.test(d))));
+  assert.deepEqual(months.slice(0, 2).flatMap(q => q[3]).length, 31, 'all of October');
+});
+
+test('ふりかえり still works if the month-only read is refused', async () => {
+  const db = memoryDb({...linked(), personalEvents:{a:{ownerUid:'alice', kind:'memory', date:'2026-10-01', title:'ヨガ'}}});
+  const inner = db.collection; db.collection = c => { const q = inner(c), w = q.where; return {...q, where:(f, op, v) => { if (op === 'in') throw Error('index'); const n = w(f, op, v); return {...n, where:(a, b, c2) => { if (b === 'in') throw Error('index'); return n.where(a, b, c2); }}; }}; };
+  const [r] = await handleEvent(db, aiEnv('ヨガの10月。'), msg({type:'text', text:'ふりかえり'}), NOW);
+  assert.match(r.text, /ふりかえり（1件）/);
 });
 
 test('LINE gets OK at once; the reply is sent afterwards, with the typing dots shown first for AI', async () => {

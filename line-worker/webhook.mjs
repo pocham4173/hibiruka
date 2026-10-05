@@ -230,9 +230,14 @@ async function lookBack(db, env, owner, monthsAgo, now) {
   const j = new Date(now + 9 * 3600000); j.setUTCDate(1); j.setUTCMonth(j.getUTCMonth() - monthsAgo);
   const ym = `${j.getUTCFullYear()}-${pad(j.getUTCMonth() + 1)}`, label = `${j.getUTCFullYear()}年${j.getUTCMonth() + 1}月`;
   const {date: today} = jstNow(now);
-  let q = db.collection(eventsOf(owner.scope));
-  if (owner.scope === 'personal') q = q.where('ownerUid', '==', owner.uid);
-  const rows = (await q.select('date', 'title', 'place', 'cat', 'memo', 'fav', 'kind').limit(400).get()).docs.map(d => d.data())
+  const base = () => { let q = db.collection(eventsOf(owner.scope)); if (owner.scope === 'personal') q = q.where('ownerUid', '==', owner.uid); return q; };
+  const fieldsOf = q => q.select('date', 'title', 'place', 'cat', 'memo', 'fav', 'kind');
+  // Read only that month (two "in" queries of up to 16 days) so a look-back costs a few reads, not every record.
+  const days = Array.from({length: new Date(Date.UTC(j.getUTCFullYear(), j.getUTCMonth() + 1, 0)).getUTCDate()}, (_, i) => `${ym}-${pad(i + 1)}`);
+  let found;
+  try { found = (await Promise.all([days.slice(0, 16), days.slice(16)].map(part => fieldsOf(base().where('date', 'in', part)).limit(200).get()))).flatMap(r => r.docs); }
+  catch (e) { console.error('Hibiruka look-back month query failed, reading recent records instead: ' + String(e?.message || '').slice(0, 80)); found = (await fieldsOf(base()).limit(400).get()).docs; }
+  const rows = found.map(d => d.data())
     .filter(e => String(e.date || '').startsWith(ym) && (e.kind === 'memory' || e.date < today) && (e.title || e.place))
     .sort((a, b) => a.date < b.date ? -1 : 1).slice(0, 40)
     .map(e => ({date:e.date, title:clip(e.title, 40), place:clip(shortAddress(e.place), 40), cat:clip(e.cat, 20), memo:clip(e.memo, 60), fav:!!e.fav}));

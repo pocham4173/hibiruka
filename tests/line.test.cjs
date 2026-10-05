@@ -24,7 +24,7 @@ test('retry key is stable for a reservation and different for another', () => {
   assert.ok(buildText({date:'2026-09-28',title:'予定',memo:'a'.repeat(6000)},'テスト').length<=5000);
 });
 
-function fixture({validate=false,status=200,accepted=false,expired=false,revoked=false,recovery=false,personal=false,foreign=false}={}) {
+function fixture({lineMessage='',validate=false,status=200,accepted=false,expired=false,revoked=false,recovery=false,personal=false,foreign=false}={}) {
   const records={config:{app:{selfFriendId:'self'}},events:{event:{date:expired?'2020-01-01':'2099-01-01',time:'12:00',kind:'plan',title:'テストの予定',sends:[{id:'send',friendIds:['self'],at:'2020-01-01T10:00',status:'wait'}],nextSendAt:'2020-01-01T10:00'}},friends:{self:{status:revoked?'pending':'joined',lineUserId:'U'+'a'.repeat(32)},other:{status:'joined',lineUserId:'U'+'b'.repeat(32)}}};
   records.personalEvents={}; records.personalFriends={};
   if(personal){records.personalEvents.event={...records.events.event,ownerUid:'owner-A'};records.events={};records.personalFriends.self={...records.friends.self,ownerUid:foreign?'owner-B':'owner-A'};}
@@ -44,7 +44,7 @@ function fixture({validate=false,status=200,accepted=false,expired=false,revoked
   };
   const exports={};
   const context={exports,module:{exports},require:name=>name==='firebase-admin'?{initializeApp:()=>{},credential:{cert:x=>x},firestore:()=>db}:name==='./service-account.cjs'?{parseServiceAccount}:require(name),Date,AbortSignal,console:{log:()=>{},error:()=>{}},process:{env:{FIREBASE_SERVICE_ACCOUNT:json,LINE_CHANNEL_ACCESS_TOKEN:'fake-test-token',VALIDATE_ONLY:String(validate),...(recovery?{RECOVER_SELF_AT:'2020-01-01T10:00'}:{})}},fetch:async(url,options)=>{
-    calls.push({url,options});return url.endsWith('/info')?{ok:true,json:async()=>({basicId:'@626hnkgo'})}:{ok:status===200,status,headers:new Headers(accepted?{'x-line-accepted-request-id':'accepted'}:{})};
+    calls.push({url,options});return url.endsWith('/info')?{ok:true,json:async()=>({basicId:'@626hnkgo'})}:{ok:status===200,status,json:async()=>({message:lineMessage}),headers:new Headers(accepted?{'x-line-accepted-request-id':'accepted'}:{})};
   }};
   vm.createContext(context);vm.runInContext(fs.readFileSync(require.resolve('../scripts/line-engine.cjs'),'utf8'),context);
   const engine=context.module.exports, originalRequire=context.require;context.require=name=>name==='./line-engine.cjs'?engine:originalRequire(name);
@@ -68,6 +68,11 @@ test('revoked and expired recipients are not sent messages',async()=>{
 test('temporary error keeps reservation; accepted retry conflict is completed',async()=>{
   const f=fixture({status:503});await f.main();assert.equal(f.records.events.event.sends[0].status,'wait');
   const g=fixture({status:409,accepted:true});await g.main();assert.equal(g.records.events.event.sends[0].status,'sent');
+});
+test('monthly free allowance used up: the plan is marked with a clear message and not retried; other 429s retry',async()=>{
+  const f=fixture({status:429,lineMessage:'You have reached your monthly limit.'});await f.main();
+  const s=f.records.events.event.sends[0];assert.equal(s.status,'fail');assert.match(s.error,/今月のLINE無料送信の上限/);
+  const g=fixture({status:429,lineMessage:'Too Many Requests'});await g.main();assert.equal(g.records.events.event.sends[0].status,'wait');
 });
 test('all app scripts parse and install manifest is scoped to the GitHub app',()=>{
   const html=fs.readFileSync('index/index/index.html','utf8');
