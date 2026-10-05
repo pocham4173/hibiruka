@@ -439,7 +439,7 @@ test('find extras: conditions and budget go to Hotpepper, my own records match f
   w.h.setEvents([{id:'m1',kind:'memory',date:'2026-09-01',title:'ラーメン',place:'中華 はなこ',memo:'餃子がおいしい',cat:'食事'}]);
   d.querySelector('.maintabs [data-tab="find"]').click();await settle();
   // weather: rainy day suggests indoor places
-  const wb=d.getElementById('findWeather');assert(!wb.classList.contains('hidden'));assert.match(wb.textContent,/上田駅あたりの今日の天気.*雨.*最高18℃.*雨80%/s);assert(wb.querySelector('#wxHere'),'offers to use the current location');assert(wb.classList.contains('rain'));
+  const wb=d.getElementById('findWeather');assert(!wb.classList.contains('hidden'));assert.match(wb.textContent,/上田駅あたり・今日の天気.*雨.*最高18℃.*雨80%/s);assert.match(wb.textContent,/今いる場所」を押すと/,'offers to use the current location');assert(wb.classList.contains('rain'));
   wb.querySelector('[data-wfind="indoor"]').click();await settle();await settle();
   assert.deepEqual([...d.querySelectorAll('#findResults .spot h3')].map(x=>x.textContent),['上田市立博物館'],'indoor = museums only');
   // conditions and budget
@@ -469,7 +469,7 @@ test('道の駅 come from the nationwide list; spot cards and plan details show 
   const cards=[...d.querySelectorAll('#findResults .spot')];assert.equal(cards.length,1);assert.match(cards[0].textContent,/道の駅 雷電くるみの里/);
   assert.match(cards[0].querySelector('.wx').textContent,/今日 ☀️ 晴れ 24℃ 雨0%/);
   // the weather card now says it is for the current location
-  assert.match(d.getElementById('findWeather').textContent,/現在地の今日の天気/);
+  assert.match(d.getElementById('findWeather').textContent,/今いる場所・今日の天気/);
   // plan detail: forecast for that place and day
   const t=new Date();t.setDate(t.getDate()+3);const day=`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
   w.h.setEvents([{id:'p1',kind:'plan',date:day,title:'ドライブ',place:'道の駅 雷電くるみの里',lat:36.36,lng:138.36,cat:'旅行'}]);
@@ -492,7 +492,7 @@ test('search place: here by default, or a named place that moves the search, wea
   d.getElementById('wherePick').click();assert(!d.getElementById('findPlaceForm').classList.contains('hidden'));
   d.getElementById('findPlaceQ').value='軽井沢駅';d.getElementById('findPlaceForm').dispatchEvent(new w.Event('submit',{cancelable:true}));for(let i=0;i<3;i++)await settle();
   assert.equal(d.getElementById('wherePick').textContent,'🗺 軽井沢駅');assert(d.getElementById('wherePick').classList.contains('on-where'));
-  assert.match(d.getElementById('findWeather').textContent,/軽井沢駅あたりの今日の天気/);assert.match(wx.at(-1),/latitude=36\.343/);
+  assert.match(d.getElementById('findWeather').textContent,/軽井沢駅あたり・今日の天気/);assert.match(wx.at(-1),/latitude=36\.343/);
   d.querySelector('[data-find="cafe"]').click();for(let i=0;i<3;i++)await settle();
   assert.deepEqual(sent.at(-1),{kind:'cafe',lat:36.3428,lng:138.6353,range:5});assert.equal(geo,0,'no location needed for a named place');
   assert.match(d.getElementById('findNote').textContent,/^軽井沢駅のまわりで1件/);assert.match(d.querySelector('#findResults .spot').textContent,/📍(2\d0|3\d0)m/);
@@ -514,5 +514,31 @@ test('plan sending: an optional ひとこと is counted, saved with the reservat
  assert.match(a.w.sendRows({id:'p1',sends:[sent]}),/💬 楽しみにしてるね！/);
  a.w.openSend('p1');assert.equal(d.getElementById('sNote').value,'','a new send starts empty');
  d.querySelector('#sWho [data-id="self"]').click();await a.w.addSend(true);assert.equal('note' in a.data.get(id).sends[1],false);
+ }finally{a.close();}
+});
+
+test('going out: choose where and which day first, then the weather of that day there suggests what to look for',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  const wx=[];let code=0,max=24;
+  w.fetch=async(url)=>{url=String(url);
+   if(url.includes('nominatim'))return{ok:true,json:async()=>[{lat:'36.3428',lon:'138.6353',name:'軽井沢駅'}]};
+   if(url.includes('open-meteo')){wx.push(url);return{ok:true,json:async()=>({daily:{weather_code:[code],temperature_2m_max:[max],temperature_2m_min:[10],precipitation_probability_max:[code?80:0]}})};}
+   return{ok:true,json:async()=>[]};};
+  const settle=async()=>{for(let i=0;i<3;i++)await new Promise(r=>setTimeout(r,20));};
+  d.querySelector('.maintabs [data-tab="find"]').click();await settle();
+  const go=d.querySelector('.find-go');assert(go.contains(d.getElementById('wherePick'))&&go.contains(d.getElementById('findWeather')),'where, when and weather are together at the top');
+  assert(go.compareDocumentPosition(d.getElementById('findForm'))&w.Node.DOCUMENT_POSITION_FOLLOWING);
+  const chips=[...d.querySelectorAll('#findWhen .chip')].map(b=>b.textContent);assert.deepEqual(chips.slice(0,2),['今日','明日']);assert(chips.at(-1).includes('日にちを選ぶ'));
+  d.getElementById('wherePick').click();d.getElementById('findPlaceQ').value='軽井沢駅';d.getElementById('findPlaceForm').dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();
+  code=61;d.querySelector('#findWhen [data-day]:not([data-day=""])').click();await settle();
+  const t=new Date(),tm=new Date(t.getFullYear(),t.getMonth(),t.getDate()+1),day=`${tm.getFullYear()}-${String(tm.getMonth()+1).padStart(2,'0')}-${String(tm.getDate()).padStart(2,'0')}`;
+  assert.match(wx.at(-1),new RegExp('start_date='+day));assert.match(wx.at(-1),/latitude=36\.343/);
+  const wb=d.getElementById('findWeather');assert.match(wb.textContent,/軽井沢駅あたり・明日の天気/);assert.match(wb.textContent,/屋内で楽しめる/);
+  assert.equal(wb.querySelector('[data-wfind]').dataset.wfind,'indoor');
+  code=0;max=33;d.getElementById('findDayOther').click();assert(!d.getElementById('findDayBox').classList.contains('hidden'));
+  const p=d.getElementById('findDayPick');const far=new Date(t.getFullYear(),t.getMonth(),t.getDate()+12);p.value=`${far.getFullYear()}-${String(far.getMonth()+1).padStart(2,'0')}-${String(far.getDate()).padStart(2,'0')}`;p.onchange();await settle();
+  assert.match(wb.textContent,new RegExp(`${far.getMonth()+1}月${far.getDate()}日\\(.\\)の天気`));assert.match(wb.textContent,/暑くなりそう/);
+  assert.match(d.getElementById('findDayOther').textContent,new RegExp(`${far.getMonth()+1}月${far.getDate()}日`));
+  const before=wx.length;p.value='2000-01-01';p.onchange();await settle();assert.equal(wx.length,before,'past days are refused');
  }finally{a.close();}
 });

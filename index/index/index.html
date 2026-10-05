@@ -102,7 +102,8 @@
   .find-opts .chip { padding: 4px 11px; font-size: 13px; }
   .find-opts .chip.on-opt { background: var(--lav-t); color: #fff; border-color: var(--lav-t); }
   .find-opt-label { font-size: 12.5px; color: var(--muted); font-weight: 600; margin-right: 2px; }
-  .find-weather { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--sage); border: 1px solid var(--sage-b); border-radius: 14px; padding: 12px 14px; margin: 4px 0 10px; }
+  .find-weather { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--sage); border: 1px solid var(--sage-b); border-radius: 14px; padding: 12px 14px; margin: 4px 0 2px; }
+  .find-n { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 12px; margin-right: 6px; vertical-align: 1px; }
   .find-weather.rain { background: var(--lav); border-color: var(--lav-b); }
   .find-weather .w { font-size: 30px; line-height: 1; }
   .find-weather .wx-where { font-size: 12.5px; font-weight: 700; color: var(--sage-t); }
@@ -627,22 +628,28 @@
   <section id="tab-find" class="wrap hidden">
     <div class="eyebrow">ここ行きたい！</div>
     <h2 style="margin-top:4px">スポットを探す</h2>
-    <div id="findWeather" class="find-weather hidden" aria-live="polite"></div>
-    <form id="findForm" class="find-bar" role="search">
-      <input type="search" id="findQ" placeholder="例：カフェ、ラーメン、上田駅 ランチ" enterkeyhint="search" autocomplete="off" aria-label="探したい場所やジャンル">
-      <button class="btn small" type="submit">探す</button>
-    </form>
-    <section class="find-sec" aria-labelledby="findWhatTitle">
-      <h3 class="find-h">どこで探す？</h3>
+    <section class="find-sec find-go" aria-label="行く場所と日">
+      <h3 class="find-h"><span class="find-n">1</span>どこに行く？</h3>
       <div class="find-where" role="group" aria-label="探す場所">
         <button type="button" class="chip on-where" data-where="here">📍 今いる場所</button>
         <button type="button" class="chip" data-where="pick" id="wherePick">🗺 場所を指定</button>
       </div>
       <form id="findPlaceForm" class="find-place hidden">
-        <input type="search" id="findPlaceQ" placeholder="例：軽井沢駅、松本城、長野市" enterkeyhint="done" aria-label="探す場所">
+        <input type="search" id="findPlaceQ" placeholder="例：軽井沢駅、松本城、長野市" enterkeyhint="done" aria-label="行く場所">
         <button type="submit" class="btn small">決定</button>
       </form>
-      <h3 class="find-h" id="findWhatTitle" style="margin-top:14px">何を探す？<small>押すとすぐ探します</small></h3>
+      <h3 class="find-h" style="margin-top:14px"><span class="find-n">2</span>いつ行く？</h3>
+      <div class="find-where" id="findWhen" role="group" aria-label="行く日"></div>
+      <div class="find-place hidden" id="findDayBox"><input type="date" id="findDayPick" aria-label="行く日を選ぶ"></div>
+      <h3 class="find-h" style="margin-top:14px"><span class="find-n">3</span>その日の天気とおすすめ</h3>
+      <div id="findWeather" class="find-weather" aria-live="polite"><div class="t">天気を調べています…</div></div>
+    </section>
+    <form id="findForm" class="find-bar" role="search">
+      <input type="search" id="findQ" placeholder="例：カフェ、ラーメン、上田駅 ランチ" enterkeyhint="search" autocomplete="off" aria-label="探したい場所やジャンル">
+      <button class="btn small" type="submit">探す</button>
+    </form>
+    <section class="find-sec" aria-labelledby="findWhatTitle">
+      <h3 class="find-h" id="findWhatTitle">何を探す？<small>押すとすぐ探します</small></h3>
       <div class="find-gt">🍽 食べる</div>
       <div class="find-tiles">
         <button type="button" class="find-tile" data-find="cafe"><span>☕</span>カフェ</button>
@@ -1693,21 +1700,46 @@ async function forecast(points, date) {
   return list.map(x => { const d = x.daily || {}, code = Number(d.weather_code?.[0]); return Number.isFinite(code) ? { code, max: d.temperature_2m_max?.[0], min: d.temperature_2m_min?.[0], rain: d.precipitation_probability_max?.[0] } : null; });
 }
 const wxText = w => { const k = weatherKind(w.code); return `${k.icon} ${k.text}${Number.isFinite(w.max) ? ` ${Math.round(w.max)}℃` : ""}${Number.isFinite(w.rain) ? ` 雨${w.rain}%` : ""}`; };
+// 行く日：""=今日、それ以外は "YYYY-MM-DD"（天気予報が出る15日先まで）
+let findDay = "";
+const dayWord = day => { if (!day || day === todayStr()) return "今日"; if (day === addDays(todayStr(), 1)) return "明日"; const [, m, d] = day.split("-").map(Number); return `${m}月${d}日(${"日月火水木金土"[new Date(day + "T12:00").getDay()]})`; };
+function renderWhen() {
+  const t = todayStr(), opts = [["", "今日"], [addDays(t, 1), "明日"]];
+  const wd = new Date(t + "T12:00").getDay();
+  const sat = addDays(t, (6 - wd + 7) % 7), sun = addDays(t, (7 - wd) % 7);
+  if (sat > addDays(t, 1)) opts.push([sat, "今度の土曜"]);
+  if (sun > addDays(t, 1)) opts.push([sun, "今度の日曜"]);
+  const preset = opts.some(o => o[0] === findDay);
+  $("findWhen").innerHTML = opts.map(([d, l]) => `<button type="button" class="chip ${d === findDay ? "on-where" : ""}" data-day="${d}">${l}</button>`).join("")
+    + `<button type="button" class="chip ${preset ? "" : "on-where"}" id="findDayOther">📅 ${preset ? "日にちを選ぶ" : esc(dayWord(findDay))}</button>`;
+  $("findWhen").querySelectorAll("[data-day]").forEach(b => b.onclick = () => { $("findDayBox").classList.add("hidden"); setFindDay(b.dataset.day); });
+  $("findDayOther").onclick = () => { const p = $("findDayPick"); p.min = t; p.max = addDays(t, 15); p.value = findDay || t; $("findDayBox").classList.toggle("hidden"); if (!$("findDayBox").classList.contains("hidden")) p.focus(); };
+  $("findDayPick").onchange = () => { const v = $("findDayPick").value, t2 = todayStr(); if (!v) return; if (v < t2 || v > addDays(t2, 15)) { toast("天気が分かるのは今日から15日先までです"); return; } $("findDayBox").classList.add("hidden"); setFindDay(v === t2 ? "" : v); };
+}
+function setFindDay(day) {
+  findDay = day; renderWhen(); weatherAt = 0; showWeather();
+  if (findShown.length) badgeWeather(findShown);
+}
 async function showWeather() {
   const box = $("findWeather"); if (!box || Date.now() - weatherAt < 30 * 60000) return;
+  if (findDay && findDay <= todayStr()) findDay = "";
+  if ($("findWhen") && !$("findWhen").children.length) renderWhen();
   weatherAt = Date.now(); weatherHere = !!(findHere || findPlace);
-  const c = findPlace || findHere || FIND_HOME;
+  const c = findPlace || findHere || FIND_HOME, day = findDay, when = dayWord(day);
+  const where = findPlace ? "🗺 " + esc(findPlace.label) + "あたり" : findHere ? "📍 今いる場所" : "📍 上田駅あたり";
   try {
-    const [w] = await forecast([c]);
-    if (!w) return;
-    const k = weatherKind(w.code), wet = k.rain || w.rain >= 60;
-    const picks = wet ? [["onsen", "♨️ 温泉"], ["indoor", "🏛 屋内"], ["cafe", "☕ カフェ"]] : [["park", "🌳 公園・観光"], ["michi", "🛣 道の駅"], ["sweets", "🍰 スイーツ"]];
+    const [w] = await forecast([c], day || undefined);
+    if (!w || day !== findDay) return;
+    const k = weatherKind(w.code), wet = k.rain || w.rain >= 60, hot = !wet && w.max >= 30, cold = !wet && w.max <= 8;
+    const [say, picks] = wet ? ["雨の予報。屋内で楽しめるところはどう？", [["indoor", "🏛 屋内"], ["onsen", "♨️ 温泉"], ["cafe", "☕ カフェ"]]]
+      : hot ? ["暑くなりそう。涼しい屋内や甘いものでひと休み", [["indoor", "🏛 屋内"], ["cafe", "☕ カフェ"], ["sweets", "🍰 スイーツ"]]]
+      : cold ? ["寒くなりそう。あったまるところへ", [["onsen", "♨️ 温泉"], ["ramen", "🍜 ラーメン"], ["cafe", "☕ カフェ"]]]
+      : ["お出かけ日和です！外で楽しもう", [["park", "🌳 公園・観光"], ["michi", "🛣 道の駅"], ["sweets", "🍰 スイーツ"]]];
     box.className = "find-weather" + (wet ? " rain" : "");
-    box.innerHTML = `<div class="w" aria-hidden="true">${k.icon}</div><div class="t"><span class="wx-where">${findPlace ? "🗺 " + esc(findPlace.label) + "あたり" : findHere ? "📍 現在地" : "📍 上田駅あたり"}の今日の天気</span><br><b>${k.text}</b>${Number.isFinite(w.max) ? `・最高${Math.round(w.max)}℃` : ""}${Number.isFinite(w.min) ? `・最低${Math.round(w.min)}℃` : ""}${Number.isFinite(w.rain) ? `・雨${w.rain}%` : ""}<br>${wet ? "屋内で楽しめるところはどう？" : "お出かけ日和です"}</div>
-      <div class="find-opts" style="margin:0">${picks.map(([key, l]) => `<button type="button" class="chip" data-wfind="${key}">${l}</button>`).join("")}${findHere || findPlace ? "" : '<button type="button" class="chip" id="wxHere">📍 現在地の天気にする</button>'}</div>`;
+    box.innerHTML = `<div class="w" aria-hidden="true">${k.icon}</div><div class="t"><span class="wx-where">${where}・${esc(when)}の天気</span><br><b>${k.text}</b>${Number.isFinite(w.max) ? `・最高${Math.round(w.max)}℃` : ""}${Number.isFinite(w.min) ? `・最低${Math.round(w.min)}℃` : ""}${Number.isFinite(w.rain) ? `・雨${w.rain}%` : ""}<br>${say}</div>
+      <div class="find-opts" style="margin:0">${picks.map(([key, l]) => `<button type="button" class="chip" data-wfind="${key}">${l}</button>`).join("")}</div>${findHere || findPlace ? "" : '<div class="note" style="margin:0;width:100%">「📍 今いる場所」を押すと、今いる場所の天気になります</div>'}`;
     box.querySelectorAll("[data-wfind]").forEach(b => b.onclick = () => { lastFind = { key: b.dataset.wfind }; findSpots(lastFind); });
-    if ($("wxHere")) $("wxHere").onclick = async () => { $("wxHere").textContent = "📍 確認しています…"; findHere = await hereNow(); weatherAt = 0; if (!findHere) toast("位置情報が使えませんでした。設定で位置情報を許可してください。"); showWeather(); };
-  } catch { weatherAt = 0; }
+  } catch { weatherAt = 0; if (day === findDay) box.innerHTML = '<div class="t">天気を調べられませんでした。少し待ってもう一度開いてください</div>'; }
 }
 // 探した場所それぞれの今日の天気（近い場所はまとめて1回で聞く）
 async function badgeWeather(spots) {
@@ -1715,8 +1747,9 @@ async function badgeWeather(spots) {
   spots.forEach((s, i) => { const k = `${(Math.round(s.lat * 20) / 20).toFixed(2)},${(Math.round(s.lng * 20) / 20).toFixed(2)}`; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(i); });
   const keys = [...groups.keys()].slice(0, 25);
   try {
-    const res = await forecast(keys.map(k => { const [lat, lng] = k.split(",").map(Number); return { lat, lng }; }));
-    keys.forEach((k, j) => { const w = res[j]; if (!w) return; for (const i of groups.get(k)) { const el = document.querySelector(`[data-wx="${i}"]`); if (el && findShown[i] === spots[i]) el.textContent = "今日 " + wxText(w); } });
+    const day = findDay, res = await forecast(keys.map(k => { const [lat, lng] = k.split(",").map(Number); return { lat, lng }; }), day || undefined);
+    if (day !== findDay) return;
+    keys.forEach((k, j) => { const w = res[j]; if (!w) return; for (const i of groups.get(k)) { const el = document.querySelector(`[data-wx="${i}"]`); if (el && findShown[i] === spots[i]) el.textContent = dayWord(day) + " " + wxText(w); } });
   } catch {}
 }
 function spotCard(s, i) {
@@ -1756,9 +1789,10 @@ function planFromSpot(s, wishId) {
   form.cat = catForSpot(s.catKeys || (wishId ? [wishes.find(w => w.id === wishId)?.cat] : []));
   $("fPlace").value = s.name; form.geo = { lat: s.lat, lng: s.lng, place: s.name };
   if (s.address) $("fMemo").value = s.address;
+  if (findDay && !wishId) $("fDate").value = findDay;
   renderCats(); updateSaveNote(); updateMapLink();
   goTab("rec");
-  toast("日付と時間を選んで「予定を保存する」を押してください", 4500);
+  toast(findDay && !wishId ? `${dayWord(findDay)}で入れました。時間を選んで「予定を保存する」を押してください` : "日付と時間を選んで「予定を保存する」を押してください", 4500);
   setTimeout(() => $("fDate").focus(), 300);
 }
 function renderWishes() {
@@ -1800,7 +1834,11 @@ function setupFind() {
   document.querySelectorAll("[data-find]").forEach(b => b.onclick = () => { lastFind = { key: b.dataset.find }; findSpots(lastFind); });
   const markWhere = () => document.querySelectorAll("[data-where]").forEach(b => b.classList.toggle("on-where", (b.dataset.where === "pick") === !!findPlace));
   const placeChanged = () => { markWhere(); weatherAt = 0; showWeather(); if (lastFind && !findBusy) findSpots(lastFind); };
-  document.querySelector('[data-where="here"]').onclick = () => { findPlace = null; $("wherePick").textContent = "🗺 場所を指定"; $("findPlaceForm").classList.add("hidden"); placeChanged(); };
+  document.querySelector('[data-where="here"]').onclick = async () => {
+    findPlace = null; $("wherePick").textContent = "🗺 場所を指定"; $("findPlaceForm").classList.add("hidden");
+    if (!findHere) { markWhere(); $("findWeather").innerHTML = '<div class="t">📍 今いる場所を確認しています…</div>'; findHere = await hereNow(); if (!findHere) toast("位置情報が使えませんでした。設定で位置情報を許可してください。"); }
+    placeChanged();
+  };
   $("wherePick").onclick = () => { $("findPlaceForm").classList.toggle("hidden"); if (!$("findPlaceForm").classList.contains("hidden")) $("findPlaceQ").focus(); };
   $("findPlaceForm").onsubmit = async e => {
     e.preventDefault();
