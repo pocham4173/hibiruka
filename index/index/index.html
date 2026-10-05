@@ -1535,18 +1535,19 @@ const FIND_WORDS = [[/カフェ|喫茶|珈琲|コーヒー/, "cafe"], [/ラン�
   [/道の駅/, "michi"], [/ドッグラン/, "dog"], [/犬|わんこ|ペット/, "dogfood"], [/焼肉|焼き肉|BBQ/i, "yakiniku"], [/寿司|すし|鮨/, "sushi"], [/居酒屋|飲み/, "izakaya"]];
 const FIND_HOME = { lat: 36.4019, lng: 138.2491, label: "上田駅" }; // 現在地が使えないときの基準
 let findFilters = new Set(), findBudget = "", findPlace = null, findArea = null; // findArea = { pref, city, iso }：県・市町村まるごと
-let findHere = null, findBusy = false, findShown = [], hpReady = true, findRange = "5", findCity = { key: "", name: "" };
+let findHere = null, findBusy = false, findShown = [], hpReady = true, findRange = "5", findCity = { key: "", name: "", pref: "" };
 // 「市内まるごと」用に、いる場所の市町村名を調べる（一度調べたら覚えておく）
 async function cityOf(c) {
   const key = `${c.lat.toFixed(2)},${c.lng.toFixed(2)}`;
   if (findCity.key === key) return findCity.name;
-  let name = "";
+  let name = "", pref = "";
   try {
     const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${c.lat}&lon=${c.lng}&zoom=10&accept-language=ja`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
     const a = (await r.json()).address || {};
     name = a.city || a.town || a.village || a.county || "";
+    pref = a.province || a.state || "";
   } catch {}
-  findCity = { key, name };
+  findCity = { key, name, pref };
   return name;
 }
 const FOOD = new Set(["cafe", "lunch", "ramen", "sweets", "yakiniku", "sushi", "izakaya", "dogfood", "coupon"]);
@@ -1604,12 +1605,12 @@ async function loadSpotData() {
 }
 let michiData = null;
 /* ---------- 県・市町村 と イベント ---------- */
+const PREF_SLUG = Object.fromEntries("北海道 hokkaido 青森県 aomori 岩手県 iwate 宮城県 miyagi 秋田県 akita 山形県 yamagata 福島県 fukushima 茨城県 ibaraki 栃木県 tochigi 群馬県 gunma 埼玉県 saitama 千葉県 chiba 東京都 tokyo 神奈川県 kanagawa 新潟県 niigata 富山県 toyama 石川県 ishikawa 福井県 fukui 山梨県 yamanashi 長野県 nagano 岐阜県 gifu 静岡県 shizuoka 愛知県 aichi 三重県 mie 滋賀県 shiga 京都府 kyoto 大阪府 osaka 兵庫県 hyogo 奈良県 nara 和歌山県 wakayama 鳥取県 tottori 島根県 shimane 岡山県 okayama 広島県 hiroshima 山口県 yamaguchi 徳島県 tokushima 香川県 kagawa 愛媛県 ehime 高知県 kochi 福岡県 fukuoka 佐賀県 saga 長崎県 nagasaki 熊本県 kumamoto 大分県 oita 宮崎県 miyazaki 鹿児島県 kagoshima 沖縄県 okinawa".split(" ").reduce((a, x, i, all) => (i % 2 ? a : [...a, [x, all[i + 1]]]), []));
 let municipalities = null;
 async function loadMunicipalities() {
   if (municipalities) return municipalities;
   try { const r = await fetch("../../data/municipalities.json"); const j = r.ok ? await r.json() : {}; return (municipalities = Array.isArray(j.prefs) && j.prefs.length === 47 ? j.prefs : null); } catch { return null; }
 }
-const placeWord = () => findArea ? findArea.pref + findArea.city : findPlace ? findPlace.label : findCity.name || (findHere ? "" : "上田市");
 function renderOutIn() {
   const el = $("outIn"); if (!el) return;
   el.innerHTML = `${findArea ? `${esc(findArea.pref + findArea.city)}の中で探します` : findPlace ? `${esc(findPlace.label)}のまわりで探します` : "今いる場所のまわりで探します"}・<a href="#" id="outChange">場所を変える</a>`;
@@ -1644,11 +1645,19 @@ async function drawEvents() {
     planFromSpot({ name: e.place || e.title, lat: e.lat, lng: e.lng, catKeys: ["遊び"] });
     $("fTitle").value = e.title; $("fDate").value = e.from > day ? e.from : day; updateSaveNote();
   });
-  const word = placeWord(), [, m, d] = day.split("-").map(Number);
-  const google = q => `https://www.google.com/search?q=${encodeURIComponent(q)}`;
-  $("eventSearch").innerHTML = (list.length ? "" : `<p class="note" style="margin:0 0 6px;width:100%">ヒビルカに入っているイベントは、まだありません。下のボタンで探せます。</p>`)
-    + `<a class="btn small sub" href="${google(`${word} イベント ${m}月${d}日`)}" target="_blank" rel="noopener">🔍 ${esc(word || "近く")}の${esc(dayWord(day))}のイベント</a>`
-    + `<a class="btn small sub" href="${google(`${word} イベント ${m}月`)}" target="_blank" rel="noopener">🗓 ${m}月のイベント</a>`;
+  const [, m, d] = day.split("-").map(Number), google = q => `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+  const draw = (word, pref) => {
+    if (!$("eventSearch")) return;
+    const slug = PREF_SLUG[pref], exp = `https://experiences.travel.rakuten.co.jp/${slug ? "destinations/" + slug : ""}`;
+    $("eventSearch").innerHTML = `<a class="btn small sub" href="${google(`${word || "近く"} イベント ${m}月${d}日`)}" target="_blank" rel="noopener">🔍 ${esc(word || "近く")}の${esc(dayWord(day))}のイベント</a>`
+      + `<a class="btn small sub" href="${google(`${word || "近く"} イベント ${m}月`)}" target="_blank" rel="noopener">🗓 ${esc(word || "近く")}の${m}月のイベント</a>`
+      + affButton(exp, "rakuten", `🎟 ${esc(slug ? pref : "全国")}の遊び・体験を予約`, "btn small sub");
+  };
+  // 探している場所（県・市町村／指定した場所／今いる市町村）のイベント
+  if (findArea) return draw(findArea.pref + findArea.city, findArea.pref);
+  const at = findPlace || findHere;
+  draw(findPlace ? findPlace.label : "", "");
+  if (at) { const city = await cityOf(at).catch(() => ""); if (day === (findDay || todayStr())) draw(findPlace ? findPlace.label : city, findCity.pref); }
 }
 /* ---------- お得・クーポン ---------- */
 // アフィリエイトのリンクに変える（IDが空なら元のリンクのまま）。変えたときは「PR」を付ける

@@ -661,6 +661,10 @@ test('area: choose a prefecture and city; food and outings search inside it, and
   // events: only Matsumoto, upcoming
   const ev=d.getElementById('localEvents').textContent;assert.match(ev,/松本の秋まつり/);assert.doesNotMatch(ev,/上田のまつり|終わった/);
   assert(decodeURIComponent(d.querySelector('#eventSearch a').href).includes('長野県松本市 イベント'));
+  const evLinks=[...d.querySelectorAll('#eventSearch a')];assert.equal(evLinks.length,3);
+  assert.match(evLinks[2].textContent,/長野県の遊び・体験を予約/);assert(evLinks[2].querySelector('.pr'));
+  assert.equal(evLinks[2].href,'https://hb.afl.rakuten.co.jp/hgc/583df298.b5d045a3.583df299.c1b690a8/?pc='+encodeURIComponent('https://experiences.travel.rakuten.co.jp/destinations/nagano')+'&link_type=hybrid_url');
+  assert.doesNotMatch(d.getElementById('eventSearch').textContent,/上田/);
   // outings inside the city
   d.querySelector('[data-find="park"]').click();await settle();
   assert(ovp.some(q=>q.includes('"ISO3166-2"="JP-20"')&&q.includes('"name"~"^松本市$"')&&q.includes('(area.a)')),ovp.join('\n'));
