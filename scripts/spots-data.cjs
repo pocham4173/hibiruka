@@ -10,6 +10,8 @@ const PARTS = [
   'nwr["leisure"="dog_park"](area.a);nwr["dog"~"^(yes|leashed)$"]["name"](area.a);',
 ];
 const query = part => `[out:json][timeout:180];area["ISO3166-2"="JP-20"]["admin_level"="4"]->.a;(${part});out center tags;`;
+// 道の駅は全国（約1,200か所）
+const MICHI_QUERY = `[out:json][timeout:300];area["ISO3166-1"="JP"]["admin_level"="2"]->.a;(nwr["name"~"^道の駅"](area.a););out center tags;`;
 const GENRE = { park: '公園', attraction: '観光スポット', museum: '博物館・美術館', viewpoint: '景色のいい場所', zoo: '動物園', aquarium: '水族館', theme_park: 'テーマパーク', gallery: 'ギャラリー',
   public_bath: '温泉・銭湯', spa: 'スパ', sauna: 'サウナ', hot_spring: '温泉', dog_park: 'ドッグラン' };
 const r5 = n => Math.round(n * 1e5) / 1e5;
@@ -43,20 +45,20 @@ function rows(elements) {
 // GitHub の画面に理由が出るように（::warning:: / ::error::）
 const note = (level, msg) => console.log(`::${level}::${String(msg).replace(/[\r\n]+/g, ' ').slice(0, 300)}`);
 const wait = ms => new Promise(r => setTimeout(r, ms));
-async function fetchPart(part) {
+async function fetchPart(part, q = query(part)) {
   let last;
   // 地図サーバーが混んでいるときは、少し待って最大3回までやり直す
   for (let round = 0; round < 3; round++) {
     if (round) { note('warning', `busy; retrying in ${round * 60}s`); await wait(round * 60000); }
-    try { return await fetchOnce(part); } catch (e) { last = e; }
+    try { return await fetchOnce(q); } catch (e) { last = e; }
   }
   throw last;
 }
-async function fetchOnce(part) {
+async function fetchOnce(q) {
   let last;
   for (const url of MIRRORS) {
     try {
-      const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(query(part)), headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'hibiruka-spots/1.0 (github.com/pocham4173/hibiruka)' }, signal: AbortSignal.timeout(240000) });
+      const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'hibiruka-spots/1.0 (github.com/pocham4173/hibiruka)' }, signal: AbortSignal.timeout(240000) });
       const text = await r.text();
       if (!r.ok) throw Error(`${new URL(url).host} HTTP ${r.status}: ${text.slice(0, 120)}`);
       const j = JSON.parse(text);
@@ -84,6 +86,13 @@ if (require.main === module) (async () => {
   fs.mkdirSync('data', { recursive: true });
   fs.writeFileSync('data/spots-nagano.json', JSON.stringify(body));
   console.log('spots', counts, 'bytes', fs.statSync('data/spots-nagano.json').size);
+  // 道の駅（全国）。失敗したり少なすぎたりしたら、前のファイルのまま
+  try {
+    const michi = michiRows(await fetchPart('', MICHI_QUERY));
+    let oldCount = 0; try { oldCount = (JSON.parse(fs.readFileSync('data/michinoeki.json', 'utf8')).rows || []).length; } catch {}
+    if (michi.length < 500 || michi.length < oldCount * 0.85) note('warning', `michi: only ${michi.length} (before ${oldCount}); keeping the previous file`);
+    else { fs.writeFileSync('data/michinoeki.json', JSON.stringify({ area: '全国', updated: new Date().toISOString().slice(0, 10), source: 'OpenStreetMap', fields: ['id', 'name', 'lat', 'lng', 'city', 'hours', 'website'], rows: michi })); console.log('michi', michi.length); }
+  } catch (e) { note('warning', 'michi: ' + e.message); }
 })().catch(e => { note('error', e.message); process.exitCode = 1; });
 function keepRicher(list, old, warn = () => {}) {
   const count = (rs, k) => rs.filter(r => r[0] === k).length;
@@ -93,4 +102,18 @@ function keepRicher(list, old, warn = () => {}) {
     return list.filter(r => r[0] === k);
   });
 }
-module.exports = { rows, kinds, keepRicher };
+// 道の駅：[id, 名前, 緯度, 経度, 住所, 営業時間, ウェブ]。同じ名前は1つに（店・駐車場などが別々に登録されていることがある）
+function michiRows(elements) {
+  const out = [], seen = new Set();
+  for (const e of elements || []) {
+    const t = e.tags || {}, lat = e.lat ?? e.center?.lat, lng = e.lon ?? e.center?.lon;
+    const name = String(t['name:ja'] || t.name || '').trim();
+    if (!/^道の駅/.test(name) || !Number.isFinite(lat) || !Number.isFinite(lng) || /閉業|閉館|廃止/.test(name)) continue;
+    const key = name.replace(/\s+/g, '');
+    if (seen.has(key)) continue; seen.add(key);
+    const city = [t['addr:province'], t['addr:city']].filter(Boolean).join('');
+    out.push([`${e.type[0]}${e.id}`, name.slice(0, 60), r5(lat), r5(lng), city.slice(0, 30), (t.opening_hours || '').slice(0, 50), /^https?:\/\//.test(t.website || '') ? t.website.slice(0, 120) : '']);
+  }
+  return out;
+}
+module.exports = { rows, kinds, keepRicher, michiRows };
