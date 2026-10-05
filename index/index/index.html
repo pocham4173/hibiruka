@@ -88,6 +88,13 @@
   .find-tile.busy { background: var(--navy); color: #fff; border-color: var(--navy); }
   .find-tile:disabled { opacity: .55; }
   .find-tile.busy:disabled { opacity: 1; }
+  .find-res-head { display: flex; align-items: flex-start; gap: 8px; }
+  .find-res-head .note { flex: 1; }
+  .find-res-head .btn { flex: 0 0 auto; margin-top: 2px; }
+  .find-sub { background: #faf7f2; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 10px 0 16px; }
+  .find-subh { font-size: 14px; font-weight: 800; color: var(--navy); margin: 0 0 6px; }
+  .find-subh small { font-size: 11.5px; color: var(--muted); font-weight: 500; margin-left: 6px; }
+  .find-sub .find-deal-btn { background: #fff4e8; }
   .find-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 0; border-top: 1px dashed var(--line); }
   .find-row:first-of-type { border-top: none; }
   .find-row .find-opt-label { width: 60px; white-space: nowrap; font-size: 12.5px; color: var(--navy); font-weight: 700; line-height: 1.3; }
@@ -675,12 +682,12 @@
       <div id="findWeather" class="find-weather" aria-live="polite"><div class="t">天気を調べています…</div></div>
       <p class="note" style="text-align:right;margin-top:4px;font-size:11px">天気予報：<a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a></p>
     </section>
-    <form id="findForm" class="find-bar" role="search">
-      <input type="search" id="findQ" placeholder="例：カフェ、ラーメン、上田駅 ランチ" enterkeyhint="search" autocomplete="off" aria-label="探したい場所やジャンル">
-      <button class="btn small" type="submit">探す</button>
-    </form>
     <section class="find-sec" aria-labelledby="findWhatTitle">
-      <h3 class="find-h" id="findWhatTitle">何を探す？<small>押すとすぐ探します</small></h3>
+      <h3 class="find-h" id="findWhatTitle"><span class="find-n">4</span>何を探す？<small>押すとすぐ探します</small></h3>
+      <form id="findForm" class="find-bar" style="margin:0 0 10px" role="search">
+        <input type="search" id="findQ" placeholder="例：カフェ、ラーメン、上田駅 ランチ" enterkeyhint="search" autocomplete="off" aria-label="探したい場所やジャンル">
+        <button class="btn small" type="submit">探す</button>
+      </form>
       <div class="find-gt">🍽 食べる</div>
       <div class="find-tiles">
         <button type="button" class="find-tile" data-find="cafe"><span>☕</span>カフェ</button>
@@ -692,6 +699,37 @@
         <button type="button" class="find-tile" data-find="izakaya"><span>🍺</span>居酒屋</button>
         <button type="button" class="find-tile" data-find="dogfood"><span>🐶</span>わんこと<br>入れるお店</button>
       </div>
+      <div class="find-sub find-cond" aria-labelledby="findCondTitle">
+        <p class="find-subh" id="findCondTitle">🔧 お店の条件<small>食べるお店に使えます</small></p>
+        <div class="find-row"><span class="find-opt-label">範囲</span>
+          <button type="button" class="chip" data-range="3">1km</button>
+          <button type="button" class="chip on-range" data-range="5">3km</button>
+          <button type="button" class="chip" data-range="city">市内まるごと</button>
+        </div>
+        <div class="find-row"><span class="find-opt-label">こだわり</span>
+          <button type="button" class="chip" data-filter="parking">🅿️ 駐車場あり</button>
+          <button type="button" class="chip" data-filter="private_room">🚪 個室</button>
+          <button type="button" class="chip" data-filter="child">👶 子ども連れOK</button>
+          <button type="button" class="chip" data-filter="non_smoking">🚭 禁煙</button>
+          <button type="button" class="chip" data-filter="free_food">🍽 食べ放題</button>
+          <button type="button" class="chip" data-filter="free_drink">🍻 飲み放題</button>
+          <button type="button" class="chip" data-filter="card">💳 カードOK</button>
+          <button type="button" class="chip" data-filter="coupon">🎟 クーポンあり</button>
+        </div>
+        <div class="find-row"><span class="find-opt-label">予算<br><small>夜の目安</small></span>
+          <button type="button" class="chip" data-budget="B009,B010">〜1,000円</button>
+          <button type="button" class="chip" data-budget="B011,B001">〜2,000円</button>
+          <button type="button" class="chip" data-budget="B002,B003">〜4,000円</button>
+          <button type="button" class="chip" data-budget="B008,B004">〜7,000円</button>
+          <button type="button" class="chip" data-budget="B005,B006">7,000円〜</button>
+        </div>
+        <p class="note" id="findCondNote" style="margin:6px 0 0">条件を変えると、いま出ている結果を探し直します。</p>
+      </div>
+      <div class="find-sub find-deal" aria-labelledby="findDealTitle">
+        <p class="find-subh" id="findDealTitle">🎟 食べるお得・クーポン</p>
+        <div id="localCoupons"></div>
+        <button type="button" class="find-deal-btn" data-find="coupon"><span>🍽</span><b>クーポンのあるお店を探す</b><small>ホットペッパーのクーポンが使えるお店を、行く場所のまわりで</small></button>
+      </div>
       <div class="find-gt">🚗 お出かけ</div>
       <div class="find-tiles">
         <button type="button" class="find-tile" data-find="park"><span>🌳</span>公園<br>観光</button>
@@ -700,42 +738,15 @@
         <button type="button" class="find-tile" data-find="michi"><span>🛣</span>道の駅</button>
         <button type="button" class="find-tile" data-find="dog"><span>🐕</span>ドッグラン</button>
       </div>
-    </section>
-    <section class="find-sec find-deal" aria-labelledby="findDealTitle">
-      <h3 class="find-h" id="findDealTitle">🎟 お得・クーポン</h3>
-      <div id="localCoupons"></div>
-      <button type="button" class="find-deal-btn" data-find="coupon"><span>🍽</span><b>クーポンのあるお店を探す</b><small>ホットペッパーのクーポンが使えるお店を、行く場所のまわりで</small></button>
-      <div class="find-gt" style="margin-top:12px">🏨 旅行のクーポン（楽天トラベル）</div>
-      <div class="find-deal-links" id="travelDeals"></div>
-    </section>
-    <section class="find-sec find-cond" aria-labelledby="findCondTitle">
-      <h3 class="find-h" id="findCondTitle">お店の条件<small>食べるお店を探すときに使えます</small></h3>
-      <div class="find-row"><span class="find-opt-label">範囲</span>
-        <button type="button" class="chip" data-range="3">1km</button>
-        <button type="button" class="chip on-range" data-range="5">3km</button>
-        <button type="button" class="chip" data-range="city">市内まるごと</button>
+      <div class="find-sub find-deal" aria-labelledby="findTripTitle">
+        <p class="find-subh" id="findTripTitle">🏨 旅のクーポン<small>楽天トラベル</small></p>
+        <div class="find-deal-links" id="travelDeals"></div>
       </div>
-      <div class="find-row"><span class="find-opt-label">こだわり</span>
-        <button type="button" class="chip" data-filter="parking">🅿️ 駐車場あり</button>
-        <button type="button" class="chip" data-filter="private_room">🚪 個室</button>
-        <button type="button" class="chip" data-filter="child">👶 子ども連れOK</button>
-        <button type="button" class="chip" data-filter="non_smoking">🚭 禁煙</button>
-        <button type="button" class="chip" data-filter="free_food">🍽 食べ放題</button>
-        <button type="button" class="chip" data-filter="free_drink">🍻 飲み放題</button>
-        <button type="button" class="chip" data-filter="card">💳 カードOK</button>
-        <button type="button" class="chip" data-filter="coupon">🎟 クーポンあり</button>
-      </div>
-      <div class="find-row"><span class="find-opt-label">予算<br><small>夜の目安</small></span>
-        <button type="button" class="chip" data-budget="B009,B010">〜1,000円</button>
-        <button type="button" class="chip" data-budget="B011,B001">〜2,000円</button>
-        <button type="button" class="chip" data-budget="B002,B003">〜4,000円</button>
-        <button type="button" class="chip" data-budget="B008,B004">〜7,000円</button>
-        <button type="button" class="chip" data-budget="B005,B006">7,000円〜</button>
-      </div>
-      <p class="note" id="findCondNote" style="margin:6px 0 0">条件を変えると、いま出ている結果を探し直します。</p>
     </section>
-    <p class="note" id="findNote" aria-live="polite">現在地の近くを探します。最初に位置情報の確認が出たら「許可」を押してください。</p>
+    <div class="find-res-head"><p class="note" id="findNote" aria-live="polite">現在地の近くを探します。最初に位置情報の確認が出たら「許可」を押してください。</p>
+      <button type="button" class="btn small sub hidden" id="findCloseTop">✕ 閉じる</button></div>
     <div id="findResults"></div>
+    <button type="button" class="btn sub hidden" id="findCloseBottom" style="margin-top:4px">✕ 探した一覧を閉じる</button>
 
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:26px">
       <h2 style="margin:0 0 10px">📌 行きたいリスト</h2><span id="wishCount" style="color:var(--muted);font-weight:700"></span>
@@ -1777,6 +1788,7 @@ async function findSpots({ key = "", words = "" } = {}) {
     note.textContent = e && e.name === "TimeoutError" ? "地図のサービスが混んでいて時間がかかっています。少し待ってからもう一度お試しください。" : "うまく探せませんでした。電波のよい所で、少し待ってからもう一度お試しください。";
   } finally {
     findBusy = false;
+    showFindClose();
     if ((findHere || findPlace) && !weatherHere) { weatherAt = 0; showWeather(); } // 現在地が分かったら、その場所の天気に
     if (pendingFind) { const next = pendingFind; pendingFind = null; setTimeout(() => findSpots(next), 0); }
     document.querySelectorAll("[data-find], #findForm .btn").forEach(b => { b.disabled = false; b.classList.remove("busy"); });
@@ -1952,7 +1964,16 @@ function renderWishes() {
   });
 }
 let lastFind = null;
+// 探した一覧を閉じる（上と下にボタン）
+function showFindClose() { const on = !!$("findResults").innerHTML.trim(); ["findCloseTop", "findCloseBottom"].forEach(id => $(id).classList.toggle("hidden", !on)); }
+function closeFind() {
+  pendingFind = null; findShown = []; lastFind = null;
+  $("findResults").innerHTML = ""; $("findNote").textContent = "上から探したいものを選んでください。";
+  showFindClose();
+  $("findWhatTitle").scrollIntoView({ block: "start", behavior: "smooth" });
+}
 function setupFind() {
+  $("findCloseTop").onclick = closeFind; $("findCloseBottom").onclick = closeFind;
   renderTravelDeals();
   $("findForm").onsubmit = e => { e.preventDefault(); const q = $("findQ").value.trim(); if (!q) { $("findQ").focus(); return; } $("findQ").blur(); lastFind = { words: q }; findSpots(lastFind); };
   document.querySelectorAll("[data-find]").forEach(b => b.onclick = () => { lastFind = { key: b.dataset.find }; findSpots(lastFind); });
