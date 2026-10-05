@@ -569,6 +569,7 @@ test('deals: local show-only coupons, Hotpepper coupon shops and travel coupons,
    return{ok:true,json:async()=>[]};};
   const settle=async()=>{for(let i=0;i<3;i++)await new Promise(r=>setTimeout(r,20));};
   d.querySelector('.maintabs [data-tab="find"]').click();await settle();
+  w.h.config.affiliate.rakuten='';w.renderTravelDeals();
   const cards=d.querySelectorAll('#localCoupons .coupon-card');assert.equal(cards.length,1,'expired, hidden and broken ones are left out');
   assert.match(cards[0].textContent,/おやつ1個サービス.*わんこカフェ/s);
   cards[0].click();const sheet=d.getElementById('couponSheet');assert(!sheet.classList.contains('hidden'));
@@ -592,7 +593,7 @@ test('deals: local show-only coupons, Hotpepper coupon shops and travel coupons,
   shops=[];d.querySelector('[data-find="coupon"]').click();await settle();assert.match(d.getElementById('findNote').textContent,/クーポンのあるお店が見つかりませんでした/);
   // affiliate set up: links go through it and carry PR
   Object.assign(w.h.config.affiliate,{vcSid:'111',vcPid:'222',rakuten:'aa.bb'});w.renderTravelDeals();
-  links=[...d.querySelectorAll('#travelDeals a')];assert(links[0].href.startsWith('https://hb.afl.rakuten.co.jp/hgc/aa.bb/?pc=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F'));assert.equal(d.querySelectorAll('#travelDeals .pr').length,links.length);assert.match(links[0].rel,/sponsored/);
+  links=[...d.querySelectorAll('#travelDeals a')];assert.equal(links[0].href,'https://hb.afl.rakuten.co.jp/hgc/aa.bb/?pc=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&link_type=hybrid_url');assert.equal(d.querySelectorAll('#travelDeals .pr').length,links.length);assert.match(links[0].rel,/sponsored/);
   shops=[{id:'hp:J1',name:'森のごはん',lat:36.401,lng:138.251,url:'https://www.hotpepper.jp/strJ1/',coupon:true,couponUrl:'https://www.hotpepper.jp/strJ1/scoupon/'}];
   d.querySelector('[data-find="coupon"]').click();await settle();
   const c2=[...d.querySelectorAll('#findResults .spot a')].find(x=>x.textContent.includes('クーポンを見る'));
@@ -627,5 +628,12 @@ test('a search result list can be closed from the top or the bottom',async()=>{
    d.getElementById(id).click();assert.equal(d.getElementById('findResults').innerHTML,'');
    assert(d.getElementById('findCloseTop').classList.contains('hidden')&&d.getElementById('findCloseBottom').classList.contains('hidden'));
   }
+ }finally{a.close();}
+});
+
+test('the real Rakuten affiliate ID is set, so travel links carry it and PR',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();d.querySelector('.maintabs [data-tab="find"]').click();
+  const l=d.querySelector('#travelDeals a');assert.equal(l.href,'https://hb.afl.rakuten.co.jp/hgc/583df298.b5d045a3.583df299.c1b690a8/?pc=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&link_type=hybrid_url');
+  assert(l.querySelector('.pr'));assert.match(l.rel,/sponsored/);
  }finally{a.close();}
 });

@@ -1047,7 +1047,7 @@ const CONFIG = {
   // アフィリエイト（登録ができたら値を入れるだけ。空のあいだは普通のリンクで開く）
   //   valuecommerce: バリューコマースの MyLink の sid と pid（ホットペッパーグルメのプログラム）
   //   rakuten: 楽天アフィリエイトID（例 "1a2b3c4d.5e6f7a8b.1a2b3c4e.5f6a7b8c"）
-  affiliate: { vcSid: "", vcPid: "", rakuten: "" },
+  affiliate: { vcSid: "", vcPid: "", rakuten: "583df298.b5d045a3.583df299.c1b690a8" },
   defaultOwnerName: "理絵"
 };
 /* ========================================================= */
@@ -1587,7 +1587,7 @@ function affLink(url, kind) {
   const a = CONFIG.affiliate || {};
   if (!/^https:\/\//.test(url || "")) return { href: "", pr: false };
   if (kind === "hp" && a.vcSid && a.vcPid) return { href: `https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=${encodeURIComponent(a.vcSid)}&pid=${encodeURIComponent(a.vcPid)}&vc_url=${encodeURIComponent(url)}`, pr: true };
-  if (kind === "rakuten" && a.rakuten) return { href: `https://hb.afl.rakuten.co.jp/hgc/${encodeURIComponent(a.rakuten)}/?pc=${encodeURIComponent(url)}&m=${encodeURIComponent(url)}`, pr: true };
+  if (kind === "rakuten" && a.rakuten) return { href: `https://hb.afl.rakuten.co.jp/hgc/${encodeURIComponent(a.rakuten)}/?pc=${encodeURIComponent(url)}&link_type=hybrid_url`, pr: true };
   return { href: url, pr: false };
 }
 function affButton(url, kind, label, cls) {
