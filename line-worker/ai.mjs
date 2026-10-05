@@ -133,16 +133,22 @@ export function aiDiag(out, err) {
   const ch = out?.choices?.[0];
   return 'E:' + [ch?.finish_reason || '-', Object.keys(ch?.message || out || {}).slice(0, 4).join('.')].join(':').slice(0, 40);
 }
-// 1回目が空や失敗なら、長さに余裕をもたせてもう1回だけ聞く
+// このモデルは答える前に「考える」ことがあり、長い仕事だと考えるだけで終わって答えが空になる。
+// まず「考えずに答えて」と頼み、それでも空なら、考えない別の無料モデルで答えを作る。
+export const FALLBACK_MODEL = '@cf/meta/llama-3.3-70b-instruct-fp8-fast';
 export async function runText(env, messages, maxTokens, temperature) {
+  const tries = [
+    [MODEL, { messages, max_completion_tokens: maxTokens, temperature, chat_template_kwargs: { enable_thinking: false } }],
+    [FALLBACK_MODEL, { messages, max_tokens: Math.max(maxTokens, 600), temperature }],
+  ];
   let last = '';
-  for (const tokens of [maxTokens, Math.max(maxTokens * 2, 1500)]) {
+  for (const [model, input] of tries) {
     let out, err;
-    try { out = await env.AI.run(MODEL, { messages, max_completion_tokens: tokens, temperature }); } catch (e) { err = e; }
+    try { out = await env.AI.run(model, input); } catch (e) { err = e; }
     const text = err ? '' : answerText(out);
     if (text.replace(/<think>[\s\S]*?<\/think>/g, '').trim()) return { text };
     last = aiDiag(out, err);
-    if (err && /neuron|quota|limit|capacity/i.test(String(err?.message))) break;
+    if (last === 'busy') break;
   }
   return { text: '', diag: last };
 }

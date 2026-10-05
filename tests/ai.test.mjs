@@ -114,14 +114,16 @@ test('every prompt keeps the safety rules: facts only and records are data, not 
   assert.match(userMessage({...record}, '2026-10-04', 'title'), /題名の案を3つ/);
 });
 
-test('answers are read from any shape, and an empty first answer is asked again with more room', async () => {
+test('answers are read from any shape; thinking is turned off and an empty answer falls back to a non-thinking model', async () => {
   const {answerText, runText} = await import('../line-worker/ai.mjs');
   assert.equal(answerText({choices:[{message:{content:[{type:'text', text:'a'}, {type:'text', text:'b'}]}}]}), 'ab');
   assert.equal(answerText({response:'old'}), 'old');
   assert.equal(answerText({choices:[{text:'t'}]}), 't');
   const seen = [];
-  const env = {AI:{run:async (m, i) => { seen.push(i.max_completion_tokens); return seen.length === 1 ? {choices:[{finish_reason:'length', message:{content:null, reasoning_content:'...'}}]} : {choices:[{message:{content:'できた'}}]}; }}};
-  assert.deepEqual(await runText(env, [], 800, 0.7), {text:'できた'}); assert.deepEqual(seen, [800, 1600]);
+  const env = {AI:{run:async (m, i) => { seen.push([m, i]); return seen.length === 1 ? {choices:[{finish_reason:'length', message:{content:null, reasoning_content:'...'}}]} : {response:'できた'}; }}};
+  assert.deepEqual(await runText(env, [], 800, 0.7), {text:'できた'});
+  assert.equal(seen[0][0], '@cf/google/gemma-4-26b-a4b-it'); assert.deepEqual(seen[0][1].chat_template_kwargs, {enable_thinking:false}); assert.equal(seen[0][1].max_completion_tokens, 800);
+  assert.equal(seen[1][0], '@cf/meta/llama-3.3-70b-instruct-fp8-fast'); assert.equal(seen[1][1].max_tokens, 800);
   const empty = {AI:{run:async () => ({choices:[{finish_reason:'length', message:{content:null, reasoning_content:'x'}}]})}};
   assert.match((await runText(empty, [], 800, 0.7)).diag, /^E:length:content\.reasoning_content/);
 });
