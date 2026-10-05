@@ -637,3 +637,42 @@ test('the real Rakuten affiliate ID is set, so travel links carry it and PR',asy
   assert(l.querySelector('.pr'));assert.match(l.rel,/sponsored/);
  }finally{a.close();}
 });
+
+test('area: choose a prefecture and city; food and outings search inside it, and its events are listed',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  const t=new Date(),iso=k=>{const x=new Date(t.getFullYear(),t.getMonth(),t.getDate()+k);return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;};
+  const prefs=Array.from({length:47},(_,i)=>[`県${i+1}`,[`市${i+1}`]]);prefs[19]=['長野県',['長野市','松本市','上田市']];
+  const sent=[],ovp=[];
+  w.fetch=async(url,opt)=>{url=String(url);
+   if(url.includes('municipalities.json'))return{ok:true,json:async()=>({prefs})};
+   if(url.includes('events.json'))return{ok:true,json:async()=>({events:[{title:'松本の秋まつり',from:iso(1),to:iso(2),city:'松本市',pref:'長野県',place:'松本城',lat:36.238,lng:137.969},{title:'上田のまつり',from:iso(1),city:'上田市',pref:'長野県'},{title:'終わった',from:iso(-5),city:'松本市'}]})};
+   if(url.includes('nominatim'))return{ok:true,json:async()=>[{lat:'36.238',lon:'137.972'}]};
+   if(url.includes('/spots/search')){sent.push(JSON.parse(opt.body));return{ok:true,status:200,json:async()=>({shops:[{id:'hp:1',name:'松本のカフェ',lat:36.24,lng:137.97}]})};}
+   if(url.includes('overpass')||url.includes('kumi')||url.includes('osm.ch')||url.includes('private.coffee')){ovp.push(decodeURIComponent(String(opt.body)));return{ok:true,json:async()=>({elements:[{type:'node',id:1,lat:36.24,lon:137.97,tags:{name:'あがたの森公園',leisure:'park'}}]})};}
+   if(url.includes('/weather'))return{ok:true,json:async()=>({results:[{code:0,max:20,rain:0}]})};
+   return{ok:true,json:async()=>[]};};
+  const settle=async()=>{for(let i=0;i<4;i++)await new Promise(r=>setTimeout(r,20));};
+  d.querySelector('.maintabs [data-tab="find"]').click();await settle();
+  await d.getElementById('whereArea').onclick();assert(!d.getElementById('findAreaBox').classList.contains('hidden'));
+  const ps=d.getElementById('areaPref');assert.equal(ps.options.length,48);ps.value='19';await ps.onchange();
+  const cs=d.getElementById('areaCity');assert.equal(cs.disabled,false);cs.value='松本市';await cs.onchange();await settle();
+  assert.equal(d.getElementById('whereArea').textContent,'🗾 松本市');assert(d.getElementById('whereArea').classList.contains('on-where'));
+  assert.match(d.getElementById('outIn').textContent,/長野県松本市の中で探します/);
+  // events: only Matsumoto, upcoming
+  const ev=d.getElementById('localEvents').textContent;assert.match(ev,/松本の秋まつり/);assert.doesNotMatch(ev,/上田のまつり|終わった/);
+  assert(decodeURIComponent(d.querySelector('#eventSearch a').href).includes('長野県松本市 イベント'));
+  // outings inside the city
+  d.querySelector('[data-find="park"]').click();await settle();
+  assert(ovp.some(q=>q.includes('"ISO3166-2"="JP-20"')&&q.includes('"name"~"^松本市$"')&&q.includes('(area.a)')),ovp.join('\n'));
+  assert.match(d.getElementById('findNote').textContent,/^松本市で1件/);
+  // food: the whole city through Hotpepper
+  d.querySelector('[data-find="cafe"]').click();await settle();
+  assert.deepEqual(sent.at(-1),{kind:'cafe',keyword:'長野県松本市',count:100});
+  // plan from an event
+  d.querySelector('#localEvents [data-event]').click();assert.equal(d.getElementById('fTitle').value,'松本の秋まつり');assert.equal(d.getElementById('fDate').value,iso(1));assert.equal(d.getElementById('fPlace').value,'松本城');
+  // back to "here" clears the area
+  d.querySelector('.maintabs [data-tab="find"]').click();
+  Object.defineProperty(w.navigator,'geolocation',{value:{getCurrentPosition:(ok)=>ok({coords:{latitude:36.40,longitude:138.25}})},configurable:true});
+  d.querySelector('[data-where="here"]').click();await settle();assert.equal(d.getElementById('whereArea').textContent,'🗾 県・市町村で選ぶ');assert.match(d.getElementById('outIn').textContent,/今いる場所のまわり/);
+ }finally{a.close();}
+});
