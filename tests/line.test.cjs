@@ -119,3 +119,11 @@ test('a short scheduler delay does not discard an at-event reminder',async()=>{
  f.records.events.event.sends[0].at=jst;
  await f.main();assert.equal(f.records.events.event.sends[0].status,'sent');
 });
+
+test('an optional one-line message from the sender is added before the sign-off, cleaned and clipped', () => {
+  const text = buildText({date:'2026-10-06',time:'09:00',title:'遊び',place:'信州医療センター'},'川村理絵','  楽しみにしてるね！\u0007\n\n\n10分前に着くよ ');
+  assert.match(text, /📍 信州医療センター\n\n💬 楽しみにしてるね！\n10分前に着くよ\n\nヒビルカより$/);
+  assert.doesNotMatch(buildText({date:'2026-10-06',title:'遊び'},'理絵'), /💬/);
+  assert.doesNotMatch(buildText({date:'2026-10-06',title:'遊び'},'理絵','   '), /💬/);
+  assert.equal(buildText({date:'2026-10-06',title:'遊び'},'理絵','あ'.repeat(300)).match(/💬 (あ+)/)[1].length, 100);
+});

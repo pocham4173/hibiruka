@@ -26,7 +26,7 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
  w.firebase={initializeApp:()=>{},auth:authFn,firestore};w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.console.error=(...args)=>errors.push(args);w.liff={init:async()=>{},isLoggedIn:()=>true,getProfile:async()=>({userId:'U'+'a'.repeat(32),displayName:'A'}),isInClient:()=>false};
  const script=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean).pop();
  w.testNavigate=url=>calls.push(['navigate',url]);
- w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
+ w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setFriends:(value,self)=>{friends=value;selfFriendId=self;},setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
  return{w,d,data,calls,queries,db,errors,close:()=>{w.close();assert.equal(errors.length,0,errors.map(String).join(' '));}};
 }
 test('new user gets a private profile and all list queries are owner-filtered',async()=>{
@@ -499,5 +499,20 @@ test('search place: here by default, or a named place that moves the search, wea
   // back to here: re-runs the last search around the current location
   d.querySelector('[data-where="here"]').click();for(let i=0;i<4;i++)await settle();
   assert.deepEqual(sent.at(-1),{kind:'cafe',lat:36.4,lng:138.25,range:5});assert.equal(geo,1);
+ }finally{a.close();}
+});
+
+test('plan sending: an optional ひとこと is counted, saved with the reservation and shown in the plan',async()=>{
+ const a=app();try{await a.w.h.startOwner();const d=a.d,id='personalEvents/p1',plan={id:'p1',date:'2099-10-06',time:'09:00',title:'遊び',place:'信州医療センター'};
+ a.data.set(id,{...plan});a.w.h.setEvents([plan]);
+ a.w.h.setFriends([{id:'self',status:'joined',lineUserId:'U1'},{id:'f2',name:'純子さん',status:'joined',lineUserId:'U2'}],'self');
+ a.w.openSend('p1');assert.equal(d.getElementById('sNote').value,'');assert.equal(d.getElementById('sNote').maxLength,100);
+ d.querySelector('#sWho [data-id="f2"]').click();
+ d.getElementById('sNote').value='  楽しみにしてるね！ ';d.getElementById('sNote').oninput();assert.equal(d.getElementById('sNoteCount').textContent,'12/100');
+ await a.w.addSend(true);const sent=a.data.get(id).sends[0];
+ assert.equal(sent.note,'楽しみにしてるね！');assert.equal(sent.friendIds.join(),'f2');
+ assert.match(a.w.sendRows({id:'p1',sends:[sent]}),/💬 楽しみにしてるね！/);
+ a.w.openSend('p1');assert.equal(d.getElementById('sNote').value,'','a new send starts empty');
+ d.querySelector('#sWho [data-id="self"]').click();await a.w.addSend(true);assert.equal('note' in a.data.get(id).sends[1],false);
  }finally{a.close();}
 });
