@@ -35,7 +35,7 @@ export function firestore(accessToken, fetcher=fetch, limit=4){
   }
   function ref(c,id){if(!/^[A-Za-z]+$/.test(c)||!id||id.includes('/'))throw Error('Invalid document path');return {id,parent:{id:c},path:c+'/'+id,get:async()=>snapshot(await call('/'+c+'/'+encodeURIComponent(id)),c,id)};}
   function snapshot(doc,c,id){return {id:id||doc.name.split('/').pop(),exists:!!doc,ref:ref(c,id||doc.name.split('/').pop()),updateTime:doc?.updateTime,data:()=>data(doc?.fields)};}
-  const ops={'<=':'LESS_THAN_OR_EQUAL','==':'EQUAL'};
+  const ops={'<=':'LESS_THAN_OR_EQUAL','==':'EQUAL','in':'IN'};
   // select(): only these fields come back (keeps big photo strings out of the Worker's CPU budget)
   function collection(c,filters=[],n=limit,only=null){return {
     doc:id=>ref(c,id),limit:size=>collection(c,filters,Math.min(size,limit),only),

@@ -542,3 +542,17 @@ test('going out: choose where and which day first, then the weather of that day 
   const before=wx.length;p.value='2000-01-01';p.onchange();await settle();assert.equal(wx.length,before,'past days are refused');
  }finally{a.close();}
 });
+
+test('free-tier safety: monthly LINE allowance per person, 2 photos per record, and the notice is shown',async()=>{
+ const a=app();try{await a.w.h.startOwner();const d=a.d,ym=new Date().toISOString().slice(0,7);
+  const used={id:'old',date:'2099-01-01',title:'前',sends:[{id:'s',at:ym+'-01T09:00',status:'sent',friendIds:Array.from({length:29},(_,i)=>'x'+i)},{id:'f',at:ym+'-02T09:00',status:'fail',friendIds:['y']}]};
+  const plan={id:'p1',date:'2099-10-06',title:'遊び'};a.data.set('personalEvents/p1',{...plan});a.w.h.setEvents([used,plan]);
+  a.w.h.setFriends([{id:'self',status:'joined',lineUserId:'U1'},{id:'f2',name:'純子さん',status:'joined',lineUserId:'U2'}],'self');
+  a.w.openSend('p1');assert.match(d.getElementById('sQuota').textContent,/今月あと1通/);
+  d.querySelector('#sWho [data-id="self"]').click();assert.equal(d.getElementById('sNowBtn').disabled,false);
+  d.querySelector('#sWho [data-id="f2"]').click();assert.equal(d.getElementById('sNowBtn').disabled,true,'two people would go over');
+  await a.w.addSend(true);assert.equal(a.data.get('personalEvents/p1').sends,undefined);
+  a.w.renderPhotos();assert.match(d.getElementById('phCount').textContent,/^0\/2枚/);
+  for(const id of ['pairView','tab-set','firstRecordGuide'])assert.match(d.getElementById(id).textContent,/ご利用上の注意（免責事項）[\s\S]*非営利・無料[\s\S]*一切の責任を負いかねます/,id);
+ }finally{a.close();}
+});
