@@ -680,3 +680,22 @@ test('area: choose a prefecture and city; food and outings search inside it, and
   d.querySelector('[data-where="here"]').click();await settle();assert.equal(d.getElementById('whereArea').textContent,'🗾 県・市町村で選ぶ');assert.match(d.getElementById('outIn').textContent,/探す場所：📍 今いる場所のまわり/);await d.getElementById('outChange').onclick();assert(!d.getElementById('findAreaBox').classList.contains('hidden'),'opens the prefecture and city choice');
  }finally{a.close();}
 });
+
+test('smoking: the 喫煙OK condition goes to Hotpepper, cards show the smoking info, and 喫煙所 finds unnamed smoking areas',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  Object.defineProperty(w.navigator,'geolocation',{value:{getCurrentPosition:(ok)=>ok({coords:{latitude:36.40,longitude:138.25}})},configurable:true});
+  const sent=[],ovp=[];
+  w.fetch=async(url,opt)=>{url=String(url);
+   if(url.includes('/spots/search')){sent.push(JSON.parse(opt.body));return{ok:true,status:200,json:async()=>({shops:[{id:'hp:1',name:'けむりの店',lat:36.401,lng:138.251,smoking:'一部禁煙'}]})};}
+   if(/overpass|kumi|mail\.ru|private\.coffee/.test(url)){ovp.push(decodeURIComponent(String(opt.body)));return{ok:true,json:async()=>({elements:[{type:'node',id:5,lat:36.401,lon:138.251,tags:{amenity:'smoking_area'}},{type:'node',id:6,lat:36.402,lon:138.252,tags:{amenity:'smoking_area',operator:'上田市'}}]})};}
+   return{ok:true,json:async()=>[]};};
+  const settle=async()=>{for(let i=0;i<4;i++)await new Promise(r=>setTimeout(r,20));};
+  d.querySelector('.maintabs [data-tab="find"]').click();
+  d.querySelector('[data-filter="smoking"]').click();
+  d.querySelector('[data-find="cafe"]').click();await settle();
+  assert.deepEqual(sent.at(-1).filters,['smoking']);assert.match(d.querySelector('#findResults .spot').textContent,/🚬 一部禁煙/);
+  d.querySelector('[data-find="smoke"]').click();await settle();
+  assert(ovp.some(q=>q.includes('"amenity"="smoking_area"')));
+  const names=[...d.querySelectorAll('#findResults .spot h3')].map(h=>h.textContent);assert.deepEqual(names.sort(),['喫煙所','喫煙所（上田市）']);
+ }finally{a.close();}
+});
