@@ -91,8 +91,9 @@
   .find-res-head { display: flex; align-items: flex-start; gap: 8px; }
   .find-res-head .note { flex: 1; }
   .find-res-head .btn { flex: 0 0 auto; margin-top: 2px; }
-  .find-in { font-weight: 500; color: var(--muted); font-size: 12px; margin-left: 8px; }
-  .find-in a { color: var(--navy); font-weight: 700; }
+  .find-in { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; color: var(--navy); margin: 2px 0 8px; }
+  .find-in b { font-weight: 700; }
+  .find-in .btn { width: auto; }
   #findAreaBox { flex-wrap: wrap; }
   #findAreaBox select { flex: 1; min-width: 0; }
   .event-card { display: flex; gap: 10px; align-items: flex-start; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
@@ -746,7 +747,8 @@
         <div id="localCoupons"></div>
         <button type="button" class="find-deal-btn" data-find="coupon"><span>🍽</span><b>クーポンのあるお店を探す</b><small>ホットペッパーのクーポンが使えるお店を、行く場所のまわりで</small></button>
       </div>
-      <div class="find-gt">🚗 お出かけ<small class="find-in" id="outIn"></small></div>
+      <div class="find-gt">🚗 お出かけ</div>
+      <div class="find-in" id="outIn"></div>
       <div class="find-tiles">
         <button type="button" class="find-tile" data-find="park"><span>🌳</span>公園<br>観光</button>
         <button type="button" class="find-tile" data-find="indoor"><span>🏛</span>屋内<br>（雨の日）</button>
@@ -1613,8 +1615,10 @@ async function loadMunicipalities() {
 }
 function renderOutIn() {
   const el = $("outIn"); if (!el) return;
-  el.innerHTML = `${findArea ? `${esc(findArea.pref + findArea.city)}の中で探します` : findPlace ? `${esc(findPlace.label)}のまわりで探します` : "今いる場所のまわりで探します"}・<a href="#" id="outChange">場所を変える</a>`;
-  $("outChange").onclick = ev => { ev.preventDefault(); document.querySelector(".find-go").scrollIntoView({ block: "start", behavior: "smooth" }); };
+  const where = findArea ? `🗾 ${esc(findArea.pref + findArea.city)}の中` : findPlace ? `🗺 ${esc(findPlace.label)}のまわり` : "📍 今いる場所のまわり";
+  el.innerHTML = `<span>探す場所：<b>${where}</b></span><button type="button" class="btn small sub" id="outChange">🗾 場所を指定する</button>`;
+  // 「① どこに行く？」へ戻って、県・市町村の選択を開く
+  $("outChange").onclick = () => { document.querySelector(".find-go").scrollIntoView({ block: "start", behavior: "smooth" }); if ($("findAreaBox").classList.contains("hidden")) $("whereArea").onclick(); };
 }
 let localEvents = null;
 async function loadEvents() {

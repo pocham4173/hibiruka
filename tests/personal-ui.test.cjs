@@ -657,7 +657,7 @@ test('area: choose a prefecture and city; food and outings search inside it, and
   const ps=d.getElementById('areaPref');assert.equal(ps.options.length,48);ps.value='19';await ps.onchange();
   const cs=d.getElementById('areaCity');assert.equal(cs.disabled,false);cs.value='松本市';await cs.onchange();await settle();
   assert.equal(d.getElementById('whereArea').textContent,'🗾 松本市');assert(d.getElementById('whereArea').classList.contains('on-where'));
-  assert.match(d.getElementById('outIn').textContent,/長野県松本市の中で探します/);
+  assert.match(d.getElementById('outIn').textContent,/探す場所：🗾 長野県松本市の中/);
   // events: only Matsumoto, upcoming
   const ev=d.getElementById('localEvents').textContent;assert.match(ev,/松本の秋まつり/);assert.doesNotMatch(ev,/上田のまつり|終わった/);
   assert(decodeURIComponent(d.querySelector('#eventSearch a').href).includes('長野県松本市 イベント'));
@@ -677,6 +677,6 @@ test('area: choose a prefecture and city; food and outings search inside it, and
   // back to "here" clears the area
   d.querySelector('.maintabs [data-tab="find"]').click();
   Object.defineProperty(w.navigator,'geolocation',{value:{getCurrentPosition:(ok)=>ok({coords:{latitude:36.40,longitude:138.25}})},configurable:true});
-  d.querySelector('[data-where="here"]').click();await settle();assert.equal(d.getElementById('whereArea').textContent,'🗾 県・市町村で選ぶ');assert.match(d.getElementById('outIn').textContent,/今いる場所のまわり/);
+  d.querySelector('[data-where="here"]').click();await settle();assert.equal(d.getElementById('whereArea').textContent,'🗾 県・市町村で選ぶ');assert.match(d.getElementById('outIn').textContent,/探す場所：📍 今いる場所のまわり/);await d.getElementById('outChange').onclick();assert(!d.getElementById('findAreaBox').classList.contains('hidden'),'opens the prefecture and city choice');
  }finally{a.close();}
 });
