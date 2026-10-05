@@ -1,5 +1,6 @@
 // 探す：ホットペッパーグルメ（無料のWebサービス）でお店を探す。
 // キーはWorkerの中だけに置き、アプリ（公開ページ）には出さない。使えるのはヒビルカの利用者だけ。
+// キーは GitHub Secrets の HOTPEPPER_API_KEY（2026-10-05 登録）から配置のたびに渡す。
 import { verifyIdToken, cors } from './ai.mjs';
 const ORIGINS = ['https://pocham4173.github.io'];
 const API = 'https://webservice.recruit.co.jp/hotpepper/gourmet/v1/';
