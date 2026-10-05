@@ -1356,17 +1356,27 @@ function genreOf(t) {
 function addrOf(t) {
   return [t["addr:province"], t["addr:city"], t["addr:quarter"] || t["addr:suburb"], t["addr:neighbourhood"], t["addr:block_number"] || t["addr:street"], t["addr:housenumber"]].filter(Boolean).join("") || t["addr:full"] || "";
 }
+// 地図データ（OpenStreetMap）の検索サーバーは混みやすいので、いくつかに同時に聞いて一番早い答えを使う
+const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+const findCache = new Map();
 async function overpass(sel, c, radius) {
-  const q = `[out:json][timeout:20];(${sel.map(x => `nwr${x}(around:${radius},${c.lat},${c.lng});`).join("")});out center 60;`;
-  let last;
-  for (const url of ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]) {
-    try {
-      const r = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined });
-      if (r.ok) return (await r.json()).elements || [];
-      last = new Error("overpass " + r.status);
-    } catch (e) { last = e; }
-  }
-  throw last;
+  const q = `[out:json][timeout:15];(${sel.map(x => `nwr${x}(around:${radius},${c.lat.toFixed(4)},${c.lng.toFixed(4)});`).join("")});out center 150;`;
+  const cacheKey = q, hit = findCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < 600000) return hit.list;
+  const stop = new AbortController(), timer = setTimeout(() => stop.abort(), 18000);
+  try {
+    const list = await Promise.any(OVERPASS.map(async url => {
+      const r = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: stop.signal });
+      if (!r.ok) throw new Error("overpass " + r.status);
+      const j = await r.json();
+      if (!Array.isArray(j.elements)) throw new Error("overpass format");
+      return j.elements;
+    }));
+    findCache.set(cacheKey, { at: Date.now(), list });
+    return list;
+  } catch (e) {
+    const err = new Error("overpass failed"); err.name = stop.signal.aborted ? "TimeoutError" : "Error"; throw err;
+  } finally { clearTimeout(timer); stop.abort(); }
 }
 async function nominatim(q, c, limit = 15) {
   const v = c ? `&viewbox=${c.lng - 0.4},${c.lat + 0.3},${c.lng + 0.4},${c.lat - 0.3}` : "";
@@ -1424,11 +1434,11 @@ async function findSpots({ key = "", words = "" } = {}) {
     let spots = [];
     if (key) {
       const sel = FIND_CATS[key].sel;
-      for (const radius of [1500, 4000, 10000]) {
-        if (radius > 1500) findLoading("もう少し広く探しています…", `半径${radius / 1000}kmまで広げています`);
-        spots = (await overpass(sel, center, radius)).map(spotFromOsm).filter(Boolean);
-        if (spots.length >= 6) break;
-      }
+      // 近く（2.5km）と広め（10km）を同時に聞く。近くで十分見つかればそれを、足りなければ広めを使う
+      const near = overpass(sel, center, 2500), wide = overpass(sel, center, 10000);
+      wide.catch(() => {});
+      spots = (await near.catch(() => [])).map(spotFromOsm).filter(Boolean);
+      if (spots.length < 8) { findLoading("もう少し広く探しています…", "10kmまで広げています"); spots = (await wide).map(spotFromOsm).filter(Boolean); }
     } else {
       spots = (await nominatim(words, center)).map(spotFromNominatim).filter(Boolean);
     }
