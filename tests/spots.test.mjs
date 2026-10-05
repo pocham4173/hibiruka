@@ -26,6 +26,8 @@ test('queries: near me by genre, lunch, or a keyword like 上田駅 ランチ', 
   q = buildQuery({keyword: '上田駅 ランチ'}, 'K'); assert.equal(q.get('keyword'), '上田駅 ランチ'); assert.equal(q.has('lat'), false);
   q = buildQuery({kind: 'sushi', keyword: '上田'}, 'K'); assert.equal(q.get('keyword'), '上田 寿司'); assert.equal(q.get('genre'), 'G004');
   assert.equal(buildQuery({kind: 'cafe'}, 'K'), null, 'needs a place or a keyword');
+  q = buildQuery({kind: 'lunch', lat: 36.4, lng: 138.25, filters: ['parking', 'private_room', 'evil'], budget: ['B010', 'B011', 'B002', 'X']}, 'K');
+  assert.equal(q.get('parking'), '1'); assert.equal(q.get('private_room'), '1'); assert.equal(q.has('evil'), false); assert.deepEqual(q.getAll('budget'), ['B010', 'B011']);
   q = buildQuery({kind: 'dog', lat: 36.4, lng: 138.25}, 'K'); assert.equal(q.get('pet'), '1'); assert.equal(q.has('genre'), false);
 });
 test('shops are trimmed to safe fields; links and photos must be https', () => {

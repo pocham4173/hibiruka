@@ -71,6 +71,23 @@
   .find-bar input { flex: 1; min-width: 0; }
   .find-bar .btn { flex: 0 0 auto; padding: 0 18px; }
   .find-quick { margin-bottom: 4px; }
+  .find-more { margin: 8px 0 2px; }
+  .find-more summary { cursor: pointer; font-size: 13.5px; font-weight: 700; color: var(--lav-t); padding: 4px 0; }
+  .find-more summary span { margin-left: 6px; background: var(--lav-t); color: #fff; border-radius: 999px; padding: 0 8px; font-size: 12px; }
+  .find-opts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; align-items: center; }
+  .find-opts .chip { padding: 4px 11px; font-size: 13px; }
+  .find-opts .chip.on-opt { background: var(--lav-t); color: #fff; border-color: var(--lav-t); }
+  .find-opt-label { font-size: 12.5px; color: var(--muted); font-weight: 600; margin-right: 2px; }
+  .find-weather { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--sage); border: 1px solid var(--sage-b); border-radius: 14px; padding: 12px 14px; margin: 4px 0 10px; }
+  .find-weather.rain { background: var(--lav); border-color: var(--lav-b); }
+  .find-weather .w { font-size: 30px; line-height: 1; }
+  .find-weather .t { flex: 1; min-width: 150px; font-size: 14px; line-height: 1.5; }
+  .find-weather .t b { color: var(--navy); }
+  .find-weather .chip { padding: 4px 11px; font-size: 13px; }
+  .mine { background: var(--sand); border: 1px solid var(--sand-b); border-radius: 14px; padding: 12px 14px; margin: 8px 0 12px; }
+  .mine h3 { margin: 0 0 6px; font-size: 14.5px; color: var(--sand-t); }
+  .mine button { display: block; width: 100%; text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin-top: 6px; font-family: inherit; font-size: 14px; cursor: pointer; color: var(--text); }
+  .mine button small { color: var(--muted); margin-left: 6px; }
   .find-range { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; font-size: 13px; color: var(--muted); font-weight: 600; }
   .find-range span { margin-right: 2px; }
   .find-range .chip { padding: 4px 11px; font-size: 13px; }
@@ -582,6 +599,7 @@
   <section id="tab-find" class="wrap hidden">
     <div class="eyebrow">ここ行きたい！</div>
     <h2 style="margin-top:4px">スポットを探す</h2>
+    <div id="findWeather" class="find-weather hidden" aria-live="polite"></div>
     <form id="findForm" class="find-bar" role="search">
       <input type="search" id="findQ" placeholder="例：カフェ、ラーメン、上田駅 ランチ" enterkeyhint="search" autocomplete="off" aria-label="探したい場所やジャンル">
       <button class="btn small" type="submit">探す</button>
@@ -604,6 +622,26 @@
       <button type="button" class="chip on-range" data-range="5">3km</button>
       <button type="button" class="chip" data-range="city">市内まるごと</button>
     </div>
+    <details class="find-more" id="findMore">
+      <summary>こだわり・予算で絞る<span id="findMoreCount"></span></summary>
+      <div class="find-opts">
+        <button type="button" class="chip" data-filter="parking">🅿️ 駐車場あり</button>
+        <button type="button" class="chip" data-filter="private_room">🚪 個室</button>
+        <button type="button" class="chip" data-filter="child">👶 子ども連れOK</button>
+        <button type="button" class="chip" data-filter="non_smoking">🚭 禁煙</button>
+        <button type="button" class="chip" data-filter="free_food">🍽 食べ放題</button>
+        <button type="button" class="chip" data-filter="free_drink">🍻 飲み放題</button>
+        <button type="button" class="chip" data-filter="card">💳 カードOK</button>
+      </div>
+      <div class="find-opts"><span class="find-opt-label">予算（夜の目安）</span>
+        <button type="button" class="chip" data-budget="B009,B010">〜1,000円</button>
+        <button type="button" class="chip" data-budget="B011,B001">〜2,000円</button>
+        <button type="button" class="chip" data-budget="B002,B003">〜4,000円</button>
+        <button type="button" class="chip" data-budget="B008,B004">〜7,000円</button>
+        <button type="button" class="chip" data-budget="B005,B006">7,000円〜</button>
+      </div>
+      <p class="note" style="margin:6px 0 0">お店（ホットペッパー）を探すときに使えます。</p>
+    </details>
     <p class="note" id="findNote" aria-live="polite">現在地の近くを探します。最初に位置情報の確認が出たら「許可」を押してください。</p>
     <div id="findResults"></div>
 
@@ -1177,7 +1215,7 @@ function setupFirstRecordGuide() {
 function setupTabs() {
   document.querySelectorAll(".maintabs button").forEach(b => b.onclick = () => {
     if (b.dataset.tab === "set") return goTab("set");
-    if (b.dataset.tab === "find") { renderWishes(); return goTab("find"); }
+    if (b.dataset.tab === "find") { renderWishes(); showWeather(); return goTab("find"); }
     selectView(b.dataset.tab === "mem" ? "mem" : "cal"); goTab("list");
   });
   $("backToPlans").onclick = () => { selectView("cal"); goTab("list"); };
@@ -1340,6 +1378,7 @@ const FIND_CATS = {
   sweets: { label: "スイーツ・パン", sel: ['["shop"~"confectionery|pastry|bakery"]', '["amenity"="ice_cream"]', '["amenity"="cafe"]["cuisine"~"cake|dessert|crepe|ice_cream"]'], cat: ["カフェ", "食事"] },
   park:   { label: "公園・お出かけ", sel: ['["leisure"="park"]["name"]', '["tourism"~"attraction|museum|viewpoint|zoo|aquarium|theme_park|gallery"]'], cat: ["遊び", "旅行"] },
   onsen:  { label: "温泉", sel: ['["amenity"="public_bath"]', '["leisure"~"spa|sauna"]', '["natural"="hot_spring"]["name"]'], cat: ["遊び", "旅行"] },
+  indoor: { label: "屋内のお出かけ", sel: ['["tourism"~"museum|gallery|aquarium"]["name"]', '["amenity"="cinema"]["name"]', '["shop"="mall"]["name"]'], cat: ["遊び"] },
   dog:    { label: "わんこOK", sel: ['["leisure"="dog_park"]', '["dog"~"yes|leashed"]["name"]'], cat: ["遊び"] },
   yakiniku: { label: "焼肉", sel: ['["amenity"="restaurant"]["cuisine"~"yakiniku|barbecue|bbq"]'], cat: ["食事"] },
   sushi:  { label: "寿司", sel: ['["amenity"="restaurant"]["cuisine"~"sushi"]'], cat: ["食事"] },
@@ -1349,6 +1388,7 @@ const FIND_WORDS = [[/カフェ|喫茶|珈琲|コーヒー/, "cafe"], [/ラン�
   [/スイーツ|ケーキ|パン|ベーカリー|和菓子|アイス|クレープ/, "sweets"], [/公園|観光|お出かけ|おでかけ|美術館|博物館|遊び/, "park"], [/温泉|銭湯|サウナ|日帰り/, "onsen"],
   [/犬|わんこ|ドッグ|ペット/, "dog"], [/焼肉|焼き肉|BBQ/i, "yakiniku"], [/寿司|すし|鮨/, "sushi"], [/居酒屋|飲み/, "izakaya"]];
 const FIND_HOME = { lat: 36.4019, lng: 138.2491, label: "上田駅" }; // 現在地が使えないときの基準
+let findFilters = new Set(), findBudget = "";
 let findHere = null, findBusy = false, findShown = [], hpReady = true, findRange = "5", findCity = { key: "", name: "" };
 // 「市内まるごと」用に、いる場所の市町村名を調べる（一度調べたら覚えておく）
 async function cityOf(c) {
@@ -1369,7 +1409,8 @@ async function hotpepper(body) {
   if (!hpReady) return null;
   try {
     const token = await auth.currentUser.getIdToken();
-    const r = await fetch(CONFIG.spotsUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify(body), signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined });
+    const full = { ...body, ...(findFilters.size ? { filters: [...findFilters] } : {}), ...(findBudget ? { budget: findBudget.split(",") } : {}) };
+    const r = await fetch(CONFIG.spotsUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify(full), signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined });
     const out = await r.json().catch(() => ({}));
     if (r.status === 503) { hpReady = false; return null; }
     if (!r.ok) return null;
@@ -1462,8 +1503,9 @@ function catForSpot(keys) {
 function findLoading(text, sub) {
   $("findResults").innerHTML = `<div class="find-loading" role="status"><span class="spinner" aria-hidden="true"></span><div>${esc(text)}<small>${esc(sub || "少しお待ちください")}</small></div></div>`;
 }
+let pendingFind = null;
 async function findSpots({ key = "", words = "" } = {}) {
-  if (findBusy) return;
+  if (findBusy) { pendingFind = { key, words }; return; } // 探している途中に押されたら、終わってから最新のものを探す
   findBusy = true;
   const note = $("findNote"), box = $("findResults");
   const pressed = key ? document.querySelector(`[data-find="${key}"]`) : document.querySelector("#findForm .btn");
@@ -1471,6 +1513,7 @@ async function findSpots({ key = "", words = "" } = {}) {
   if (pressed) pressed.classList.add("busy");
   note.textContent = "";
   findLoading("さがしています…", key ? `「${FIND_CATS[key].label}」を探しています` : `「${words}」を探しています`);
+  const mine = words ? searchMine(words) : [];
   box.scrollIntoView({ block: "center", behavior: "smooth" });
   try {
     // 何を探すか（ジャンル）と、どこで探すか（地名）を分ける
@@ -1507,11 +1550,12 @@ async function findSpots({ key = "", words = "" } = {}) {
         center = findHere || FIND_HOME; centerLabel = findHere ? "現在地" : FIND_HOME.label;
       }
       findLoading("お店や場所を探しています…", `${centerLabel}のまわりを探しています`);
-      const letter = { park: "p", onsen: "o", dog: "d" }[key];
+      const letter = { park: "p", onsen: "o", dog: "d", indoor: "p" }[key];
+      const INDOOR = ["博物館・美術館", "ギャラリー", "水族館"];
       const ready = letter && inNagano(center) ? await loadSpotData() : null;
       if (ready) {
         // 長野県内は、前もってまとめたデータから（すぐ出る）
-        spots = ready.filter(r => r[0] === letter).map(r => ({ id: "osm:" + r[1], name: r[2], lat: r[3], lng: r[4], genre: r[5], address: r[6], hours: r[7], website: r[8] }))
+        spots = ready.filter(r => r[0] === letter && (key !== "indoor" || INDOOR.includes(r[5]))).map(r => ({ id: "osm:" + r[1], name: r[2], lat: r[3], lng: r[4], genre: r[5], address: r[6], hours: r[7], website: r[8] }))
           .map(x => ({ x, d: distanceM(center, x) })).filter(o => o.d < 40000).sort((a, b) => a.d - b.d).slice(0, 40).map(o => o.x);
       } else if (key) {
         const sel = FIND_CATS[key].sel;
@@ -1530,9 +1574,11 @@ async function findSpots({ key = "", words = "" } = {}) {
     spots = spots.filter(s => !seen.has(s.id) && seen.add(s.id)).map(s => ({ ...s, dist: distanceM(from, s), catKeys: key ? FIND_CATS[key].cat : [] }))
       .sort((a, b) => a.dist - b.dist).slice(0, usedHp && findRange === "city" ? 60 : 30);
     findShown = spots;
-    if (!spots.length) { box.innerHTML = ""; note.textContent = "見つかりませんでした。ことばを変えるか、地名を足してみてください（例：「上田駅 カフェ」）。"; return; }
+    if (!spots.length) { box.innerHTML = mineBox(mine); bindMine(); note.textContent = mine.length ? "自分の記録で見つかりました。お店や場所は見つかりませんでした。" : "見つかりませんでした。ことばを変えるか、地名を足してみてください（例：「上田駅 カフェ」）。"; return; }
     note.textContent = `${centerLabel}${cityMode ? "で" : "のまわりで"}${spots.length}件見つかりました${cityMode ? "（近い順）" : ""}${!findHere && centerLabel === FIND_HOME.label ? "（現在地が使えないため、上田駅を基準にしています）" : ""}。`;
-    box.innerHTML = spots.map((s, i) => spotCard(s, i)).join("") + (usedHp ? '<p class="note center hp-credit"><a href="https://webservice.recruit.co.jp/" target="_blank" rel="noopener">Powered by ホットペッパーグルメ Webサービス</a></p>' : "");
+    box.innerHTML = mineBox(mine) + spots.map((s, i) => spotCard(s, i)).join("") + (usedHp ? '<p class="note center hp-credit"><a href="https://webservice.recruit.co.jp/" target="_blank" rel="noopener">Powered by ホットペッパーグルメ Webサービス</a></p>' : "");
+    bindMine();
+    if (!usedHp && (findFilters.size || findBudget) && (FOOD.has(key) || !key)) note.textContent += "（こだわり・予算はホットペッパーのお店だけに使えます）";
     box.querySelectorAll("[data-wish]").forEach(b => b.onclick = () => addWish(findShown[+b.dataset.wish], b));
     box.querySelectorAll("[data-plan]").forEach(b => b.onclick = () => planFromSpot(findShown[+b.dataset.plan]));
   } catch (e) {
@@ -1541,9 +1587,56 @@ async function findSpots({ key = "", words = "" } = {}) {
     note.textContent = e && e.name === "TimeoutError" ? "地図のサービスが混んでいて時間がかかっています。少し待ってからもう一度お試しください。" : "うまく探せませんでした。電波のよい所で、少し待ってからもう一度お試しください。";
   } finally {
     findBusy = false;
+    if (findHere && !weatherHere) { weatherAt = 0; showWeather(); } // 現在地が分かったら、その場所の天気に
+    if (pendingFind) { const next = pendingFind; pendingFind = null; setTimeout(() => findSpots(next), 0); }
     document.querySelectorAll("[data-find], #findForm .btn").forEach(b => { b.disabled = false; b.classList.remove("busy"); });
     note.scrollIntoView({ block: "start", behavior: "smooth" });
   }
+}
+// ② 自分の記録（予定・思い出・行きたいリスト）から探す
+const norm = t => String(t || "").normalize("NFKC").toLowerCase().replace(/\s+/g, "");
+function searchMine(words) {
+  const toks = String(words).normalize("NFKC").toLowerCase().split(/\s+/).filter(Boolean);
+  if (!toks.length) return [];
+  return events.concat(wishes).filter(e => { const h = norm([e.title, e.place, e.memo, e.genre, catLabel(e.cat), (e.who || []).join(" ")].join(" ")); return toks.every(t => h.includes(norm(t))); })
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, 5);
+}
+function mineBox(list) {
+  if (!list.length) return "";
+  return `<div class="mine"><h3>📒 自分の記録から（${list.length}件）</h3>${list.map(e => `<button type="button" data-mine="${e.id}">${e.kind === "wish" ? "📌 " : isPlan(e) ? "📅 " : "📝 "}${esc(e.title || e.place || catLabel(e.cat))}<small>${e.kind === "wish" ? "行きたいリスト" : esc(fmtDate(e.date))}${e.title && e.place ? "・" + esc(e.place) : ""}</small></button>`).join("")}</div>`;
+}
+function bindMine() {
+  $("findResults").querySelectorAll("[data-mine]").forEach(b => b.onclick = () => {
+    const id = b.dataset.mine;
+    if (events.some(e => e.id === id)) openDetail(id);
+    else $("wishList").scrollIntoView({ block: "start", behavior: "smooth" });
+  });
+}
+// ③ 天気に合わせたおすすめ（Open-Meteo・キー不要・無料）
+let weatherAt = 0, weatherHere = false;
+function weatherKind(code) {
+  if ([0, 1].includes(code)) return { icon: "☀️", text: "晴れ", rain: false };
+  if ([2, 3, 45, 48].includes(code)) return { icon: "⛅", text: "くもり", rain: false };
+  if (code >= 71 && code <= 77 || code === 85 || code === 86) return { icon: "❄️", text: "雪", rain: true };
+  if (code >= 95) return { icon: "⛈️", text: "雷雨", rain: true };
+  return { icon: "☔", text: "雨", rain: true };
+}
+async function showWeather() {
+  const box = $("findWeather"); if (!box || Date.now() - weatherAt < 30 * 60000) return;
+  weatherAt = Date.now(); weatherHere = !!findHere;
+  const c = findHere || FIND_HOME;
+  try {
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${c.lat.toFixed(3)}&longitude=${c.lng.toFixed(3)}&current=weather_code,temperature_2m&daily=weather_code,temperature_2m_max,precipitation_probability_max&timezone=Asia%2FTokyo&forecast_days=1`, { signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+    const j = await r.json();
+    const code = Number(j.daily?.weather_code?.[0] ?? j.current?.weather_code), rainP = j.daily?.precipitation_probability_max?.[0], max = j.daily?.temperature_2m_max?.[0];
+    if (!Number.isFinite(code)) return;
+    const w = weatherKind(code), wet = w.rain || rainP >= 60;
+    const picks = wet ? [["onsen", "♨️ 温泉"], ["indoor", "🏛 屋内のお出かけ"], ["cafe", "☕ カフェ"]] : [["park", "🌳 公園・お出かけ"], ["sweets", "🍰 スイーツ"], ["dog", "🐶 わんこOK"]];
+    box.className = "find-weather" + (wet ? " rain" : "");
+    box.innerHTML = `<div class="w" aria-hidden="true">${w.icon}</div><div class="t">今日は<b>${w.text}</b>${Number.isFinite(max) ? `・最高${Math.round(max)}℃` : ""}${Number.isFinite(rainP) ? `・雨${rainP}%` : ""}<br>${wet ? "屋内で楽しめるところはどう？" : "お出かけ日和です"}${findHere ? "" : "（上田の天気）"}</div>
+      <div class="find-opts" style="margin:0">${picks.map(([k, l]) => `<button type="button" class="chip" data-wfind="${k}">${l}</button>`).join("")}</div>`;
+    box.querySelectorAll("[data-wfind]").forEach(b => b.onclick = () => { lastFind = { key: b.dataset.wfind }; findSpots(lastFind); });
+  } catch { weatherAt = 0; }
 }
 function spotCard(s, i) {
   const have = wishes.some(w => w.placeId === s.id);
@@ -1624,6 +1717,20 @@ let lastFind = null;
 function setupFind() {
   $("findForm").onsubmit = e => { e.preventDefault(); const q = $("findQ").value.trim(); if (!q) { $("findQ").focus(); return; } $("findQ").blur(); lastFind = { words: q }; findSpots(lastFind); };
   document.querySelectorAll("[data-find]").forEach(b => b.onclick = () => { lastFind = { key: b.dataset.find }; findSpots(lastFind); });
+  const optsChanged = () => {
+    const n = findFilters.size + (findBudget ? 1 : 0);
+    $("findMoreCount").textContent = n ? String(n) : "";
+    if (lastFind && !findBusy) findSpots(lastFind);
+  };
+  document.querySelectorAll("[data-filter]").forEach(b => b.onclick = () => {
+    const f = b.dataset.filter; findFilters.has(f) ? findFilters.delete(f) : findFilters.add(f);
+    b.classList.toggle("on-opt", findFilters.has(f)); b.setAttribute("aria-pressed", String(findFilters.has(f))); optsChanged();
+  });
+  document.querySelectorAll("[data-budget]").forEach(b => b.onclick = () => {
+    findBudget = findBudget === b.dataset.budget ? "" : b.dataset.budget;
+    document.querySelectorAll("[data-budget]").forEach(x => { x.classList.toggle("on-opt", x.dataset.budget === findBudget); x.setAttribute("aria-pressed", String(x.dataset.budget === findBudget)); });
+    optsChanged();
+  });
   document.querySelectorAll("[data-range]").forEach(b => b.onclick = () => {
     findRange = b.dataset.range;
     document.querySelectorAll("[data-range]").forEach(x => x.classList.toggle("on-range", x === b));
