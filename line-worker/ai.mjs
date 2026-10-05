@@ -67,10 +67,25 @@ export const PROMPTS = {
 - 多かった分類や、よく行った場所、印象に残りそうな出来事に、具体的にふれる。
 - 最後の1文は、来月が楽しみになるような、前向きな一言でしめくくる。
 - 絵文字・ハッシュタグは付けない。${COMMON}`,
+  plan: `${ROLE}
+行く日・場所・天気と、候補の場所の一覧から、1日のおでかけプランを作ります。
+# 書き方
+- 候補の一覧にある場所だけを使う。場所の名前は一覧の名前をそのまま書く。一覧にない店や施設を作らない。
+- 3〜5か所。移動しやすい順（近いものどうしを続ける）に並べ、食事の時間（お昼は11:30〜13:00ごろ）にはごはんの場所を入れる。
+- 雨や雪の予報なら屋内の場所を中心に、晴れなら外の場所も入れる。暑い日・寒い日も考える。
+- 1行に1か所、「時刻｜場所の名前｜ひとこと（15〜30文字、やわらかい口調）」の形で書く。時刻は 10:00 のような24時間の形。
+- 前置き・まとめ・説明は書かない。
+# 例
+入力: 行く日=10月11日(土) / 場所=上田市 / 天気=雨 最高18℃
+候補: 上田城跡公園（公園）/ ソラノカフェ（カフェ）/ 上田市立美術館（美術館）/ 信州の湯（温泉）
+出力:
+10:00｜上田市立美術館｜雨の日は美術館でゆっくりスタート。
+12:00｜ソラノカフェ｜あたたかいランチでひと休み。
+14:00｜信州の湯｜冷えた体を温泉でぽかぽかに。${COMMON}`,
 };
 export const SYSTEM_PROMPT = PROMPTS.diary;
-const LIMITS = { diary: 200, short: 60, sns: 260, title: 120, month: 400 };
-const TOKENS = { diary: 400, short: 150, sns: 500, title: 200, month: 800 };
+const LIMITS = { diary: 200, short: 60, sns: 260, title: 120, month: 400, plan: 600 };
+const TOKENS = { diary: 400, short: 150, sns: 500, title: 200, month: 800, plan: 700 };
 
 const pad = n => String(n).padStart(2, '0');
 const jstDay = now => { const d = new Date(now + 9 * 3600e3); return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}`; };
@@ -112,6 +127,9 @@ const recordLines = (r, today) => [
   `場所=${r.place || 'なし'}`, `分類=${r.cat || 'なし'}`, `メモ=${r.memo || 'なし'}`,
 ].join('\n');
 export function userMessage(input, today, mode = 'diary') {
+  if (mode === 'plan') {
+    return `行く日=${input.dayText} / 場所=${input.area || 'わからない'} / 天気=${input.weather || 'わからない'}\n候補（この中からだけ選ぶ）:\n<候補>\n${input.spots.map(x => `${x.name}（${x.kind || '場所'}）`).join('\n')}\n</候補>`;
+  }
   if (mode === 'month') {
     const rows = input.records.map(r => `- ${r.date} ${r.title || r.place || ''}${r.place && r.title ? '（' + r.place + '）' : ''}${r.cat ? ' [' + r.cat + ']' : ''}${r.fav ? ' ♥また行きたい' : ''}${r.memo ? ' メモ: ' + r.memo : ''}`);
     return `${input.month}の記録（${rows.length}件）から、ふりかえりを作ってください。\n<記録>\n${rows.join('\n')}\n</記録>`;
@@ -180,7 +198,11 @@ export async function handleAi(request, env, { db, fetcher = fetch, now = Date.n
   try { body = JSON.parse((await request.text()).slice(0, 12000)); } catch { return json({ error: 'input' }, 400, origin); }
   const mode = PROMPTS[body?.mode] ? body.mode : 'diary';
   let input;
-  if (mode === 'month') {
+  if (mode === 'plan') {
+    const spots = (Array.isArray(body.spots) ? body.spots : []).slice(0, 14).map(x => ({ name: clean(x?.name, 40), kind: clean(x?.kind, 20) })).filter(x => x.name);
+    input = { date: clean(body.date, 10), dayText: clean(body.dayText, 20), area: clean(body.area, 30), weather: clean(body.weather, 40), spots };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || spots.length < 2) return json({ error: 'input' }, 400, origin);
+  } else if (mode === 'month') {
     const records = (Array.isArray(body.records) ? body.records : []).slice(0, 40).map(r => ({ title: clean(r?.title, 40), place: clean(r?.place, 40), cat: clean(r?.cat, 20), memo: clean(r?.memo, 60), date: clean(r?.date, 10), fav: !!r?.fav })).filter(r => /^\d{4}-\d{2}-\d{2}$/.test(r.date) && (r.title || r.place));
     input = { month: clean(body.month, 10), records };
     if (!/^\d{4}年\d{1,2}月$/.test(input.month) || !records.length) return json({ error: 'input' }, 400, origin);
@@ -198,6 +220,11 @@ export async function handleAi(request, env, { db, fetcher = fetch, now = Date.n
     return json({ error: res.diag === 'busy' ? 'busy' : 'ai', diag: res.diag }, 502, origin);
   }
   const raw = keepLines(res.text, LIMITS[mode] + 200);
+  if (mode === 'plan') {
+    const steps = planSteps(raw, input.spots);
+    if (steps.length < 2) return json({ error: 'ai', diag: 'plan' }, 502, origin);
+    return json({ steps, left: quota.left }, 200, origin);
+  }
   if (mode === 'title') {
     const titles = [...new Set(raw.split('\n').map(l => unquote(l.replace(/^\s*(?:[-*・●]|\d+[.)．、])\s*/, '')).slice(0, 25)).filter(Boolean))].slice(0, 3);
     if (!titles.length) return json({ error: 'ai' }, 502, origin);
@@ -206,6 +233,22 @@ export async function handleAi(request, env, { db, fetcher = fetch, now = Date.n
   const text = mode === 'sns' ? raw.split('\n').map(unquote).join('\n').slice(0, LIMITS[mode]) : unquote(raw.replace(/\s*\n+\s*/g, '')).slice(0, LIMITS[mode]);
   if (!text) return json({ error: 'ai' }, 502, origin);
   return json({ text, left: quota.left }, 200, origin);
+}
+
+// 「10:00｜場所｜ひとこと」の行を読み、候補にある場所だけを残す（AIが作った店は使わない）
+const fold = t => String(t || '').normalize('NFKC').replace(/\s+/g, '').toLowerCase();
+export function planSteps(raw, spots) {
+  const out = [], used = new Set();
+  for (const line of String(raw || '').split('\n')) {
+    const m = line.normalize('NFKC').match(/(\d{1,2}):(\d{2})\s*[|｜]\s*(.+?)\s*[|｜]\s*(.*)$/);
+    if (!m) continue;
+    const name = fold(m[3].replace(/[「」『』]/g, ''));
+    const spot = spots.find(x => fold(x.name) === name) || spots.find(x => name.length >= 2 && (fold(x.name).includes(name) || name.includes(fold(x.name))));
+    if (!spot || used.has(spot.name)) continue;
+    used.add(spot.name);
+    out.push({ time: `${m[1].padStart(2, '0')}:${m[2]}`, name: spot.name, note: unquote(m[4]).slice(0, 40) });
+  }
+  return out.sort((a, b) => a.time < b.time ? -1 : 1).slice(0, 6);
 }
 
 /* ---------- LINE: 話しかけるだけで記録 ---------- */

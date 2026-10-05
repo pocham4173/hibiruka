@@ -102,6 +102,14 @@
   .cd .n b { font-size: 26px; margin: 0 2px; }
   .cd .t { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cd small { color: var(--muted); font-size: 11.5px; }
+  .ai-plan-btn { margin-top: 10px; background: #f1edfb !important; border-color: #d9cff3 !important; }
+  .plan-steps { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; margin-top: 8px; }
+  .plan-step { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px dashed var(--line); }
+  .plan-step:first-of-type { border-top: none; }
+  .plan-step .tm { font-weight: 900; color: var(--rose); min-width: 46px; font-variant-numeric: tabular-nums; }
+  .plan-step b { color: var(--navy); display: block; }
+  .plan-step small { color: var(--muted); display: block; }
+  .plan-step .btn { width: auto; margin-top: 4px; }
   .find-in { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; color: var(--navy); margin: 2px 0 8px; }
   .find-in b { font-weight: 700; }
   .find-in .btn { width: auto; }
@@ -711,6 +719,8 @@
       <div class="find-place hidden" id="findDayBox"><input type="date" id="findDayPick" aria-label="行く日を選ぶ"></div>
       <h3 class="find-h" style="margin-top:14px"><span class="find-n">3</span>その日の天気とおすすめ</h3>
       <div id="findWeather" class="find-weather" aria-live="polite"><div class="t">天気を調べています…</div></div>
+      <button type="button" class="find-deal-btn ai-plan-btn" id="aiPlanBtn"><span>✨</span><b>AIにおでかけプランを作ってもらう</b><small>行きたいリストと、下で探した場所から、この日の天気に合わせて1日の回り方を考えます</small></button>
+      <div id="aiPlan"></div>
       <p class="note" style="text-align:right;margin-top:4px;font-size:11px">出典：<a href="https://www.jma.go.jp/" target="_blank" rel="noopener">気象庁ホームページ</a>（天気予報）</p>
     </section>
     <section class="find-sec" aria-labelledby="findWhatTitle">
@@ -776,6 +786,10 @@
         <p class="find-subh" id="findEventTitle">🎪 イベント<small id="eventWhen"></small></p>
         <div id="localEvents"></div>
         <div class="find-deal-links" id="eventSearch"></div>
+      </div>
+      <div class="find-sub find-deal" aria-labelledby="findGiftTitle">
+        <p class="find-subh" id="findGiftTitle">🎁 お土産・ふるさと納税<small>楽天市場</small></p>
+        <div class="find-deal-links" id="giftLinks"></div>
       </div>
       <div class="find-sub find-deal" aria-labelledby="findTripTitle">
         <p class="find-subh" id="findTripTitle">🏨 旅のクーポン<small>楽天トラベル</small></p>
@@ -1623,6 +1637,45 @@ async function loadSpotData() {
   } catch { return null; }
 }
 let michiData = null;
+/* ---------- 行き方（Googleマップ：無料のリンク） ---------- */
+const ll = p => `${(+p.lat).toFixed(5)},${(+p.lng).toFixed(5)}`;
+function dirUrl(to, { from = null, mode = "", via = [] } = {}) {
+  const q = new URLSearchParams({ api: "1", destination: ll(to) });
+  if (from) q.set("origin", ll(from));
+  if (via.length) q.set("waypoints", via.map(ll).join("|"));
+  if (mode) q.set("travelmode", mode);
+  return "https://www.google.com/maps/dir/?" + q.toString();
+}
+/* ---------- ② AIのおでかけプラン ---------- */
+// 候補：行く場所のまわり（40km以内）の行きたいリスト ＋ いま探して出ている場所
+function planCandidates() {
+  const c = findPlace || findHere || FIND_HOME, seen = new Set(), out = [];
+  const add = (name, kind, lat, lng, extra = {}) => { const k = String(name || "").trim(); if (!k || seen.has(k) || !Number.isFinite(lat)) return; seen.add(k); out.push({ name: k, kind: kind || "", lat, lng, ...extra }); };
+  wishes.filter(w => w.status !== "visited" && Number.isFinite(w.lat) && distanceM(c, w) < 40000).forEach(w => add(w.place || w.title, w.genre || catLabel(w.cat), w.lat, w.lng, { wishId: w.id, cat: w.cat }));
+  findShown.slice(0, 10).forEach(x => add(x.name, x.genre, x.lat, x.lng, { catKeys: x.catKeys, address: x.address }));
+  return out.slice(0, 14);
+}
+async function makePlan() {
+  const box = $("aiPlan"), btn = $("aiPlanBtn"), cands = planCandidates();
+  if (cands.length < 2) { box.innerHTML = '<p class="note">候補が足りません。下の「何を探す？」で探すか、「📌 ここ行きたい！」で行きたいリストに2か所以上入れてから押してね。</p>'; return; }
+  const day = findDay || todayStr(), where = findArea ? findArea.city : findPlace ? findPlace.label : findCity.name || (findHere ? "今いる場所のまわり" : "上田駅のまわり");
+  btn.disabled = true; box.innerHTML = '<p class="note">✨ プランを考えています…（10秒ほど）</p>';
+  try {
+    const token = await auth.currentUser.getIdToken();
+    const r = await fetch(CONFIG.aiUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ mode: "plan", date: day, dayText: fmtDate(day), area: where, weather: lastWx, spots: cands.map(x => ({ name: x.name, kind: x.kind })) }) });
+    const out = await r.json().catch(() => ({}));
+    if (!r.ok || !Array.isArray(out.steps)) throw new Error(out.error === "limit" ? "AIは1日20回までです。また明日使ってください。" : out.error === "busy" ? "今日はAIがとても混んでいます。また明日お試しください。" : "うまく作れませんでした。少し待ってもう一度お試しください。");
+    const steps = out.steps.map(x => ({ ...x, spot: cands.find(c => c.name === x.name) })).filter(x => x.spot);
+    box.innerHTML = `<div class="plan-steps"><p class="find-subh" style="margin:0 0 4px">✨ ${esc(dayWord(day))}のおでかけプラン<small>${esc(where)}${lastWx ? "・" + esc(lastWx) : ""}</small></p>${steps.map((x, i) => `<div class="plan-step"><span class="tm">${esc(x.time)}</span><div><b>${esc(x.name)}</b><small>${esc(x.note)}</small><button type="button" class="btn small sub" data-plan-step="${i}">📅 予定に追加</button> <a class="btn small ghost" href="${esc(dirUrl(x.spot, { from: i ? steps[i - 1].spot : findHere, mode: "transit" }))}" target="_blank" rel="noopener">🚃 ${i ? "前の場所から" : "ここまで"}の行き方</a></div></div>`).join("")}
+      <div class="find-deal-links" style="margin-top:8px"><a class="btn small sub" href="${esc(dirUrl(steps.at(-1).spot, { from: findHere, mode: "driving", via: steps.slice(0, -1).map(x => x.spot) }))}" target="_blank" rel="noopener">🚗 このコースを車で（時間を見る）</a><a class="btn small sub" href="${esc(dirUrl(steps[0].spot, { from: findHere, mode: "transit" }))}" target="_blank" rel="noopener">🚃 最初の場所まで電車で</a></div><p class="note" style="margin:6px 0 0">AIが考えた案です。営業時間などはお店のページで確かめてね${leftNote(out)}</p></div>`;
+    box.querySelectorAll("[data-plan-step]").forEach(b => b.onclick = () => {
+      const x = steps[+b.dataset.planStep], sp = x.spot;
+      planFromSpot({ name: sp.name, lat: sp.lat, lng: sp.lng, address: sp.address, catKeys: sp.catKeys || [] }, sp.wishId);
+      $("fDate").value = day; $("fTime").value = x.time; updateSaveNote();
+    });
+  } catch (e) { box.innerHTML = `<p class="note">${esc(e.message)}</p>`; }
+  finally { btn.disabled = false; }
+}
 /* ---------- 県・市町村 と イベント ---------- */
 const PREF_SLUG = Object.fromEntries("北海道 hokkaido 青森県 aomori 岩手県 iwate 宮城県 miyagi 秋田県 akita 山形県 yamagata 福島県 fukushima 茨城県 ibaraki 栃木県 tochigi 群馬県 gunma 埼玉県 saitama 千葉県 chiba 東京都 tokyo 神奈川県 kanagawa 新潟県 niigata 富山県 toyama 石川県 ishikawa 福井県 fukui 山梨県 yamanashi 長野県 nagano 岐阜県 gifu 静岡県 shizuoka 愛知県 aichi 三重県 mie 滋賀県 shiga 京都府 kyoto 大阪府 osaka 兵庫県 hyogo 奈良県 nara 和歌山県 wakayama 鳥取県 tottori 島根県 shimane 岡山県 okayama 広島県 hiroshima 山口県 yamaguchi 徳島県 tokushima 香川県 kagawa 愛媛県 ehime 高知県 kochi 福岡県 fukuoka 佐賀県 saga 長崎県 nagasaki 熊本県 kumamoto 大分県 oita 宮崎県 miyazaki 鹿児島県 kagoshima 沖縄県 okinawa".split(" ").reduce((a, x, i, all) => (i % 2 ? a : [...a, [x, all[i + 1]]]), []));
 let municipalities = null;
@@ -1667,18 +1720,21 @@ async function drawEvents() {
     $("fTitle").value = e.title; $("fDate").value = e.from > day ? e.from : day; updateSaveNote();
   });
   const [, m, d] = day.split("-").map(Number), google = q => `https://www.google.com/search?q=${encodeURIComponent(q)}`;
-  const draw = (word, pref) => {
+  const draw = (word, pref, city = "") => {
     if (!$("eventSearch")) return;
+    const short = String(pref || "").replace(/(都|府|県)$/, ""), town = city || (findArea ? findArea.city : "");
+    $("giftLinks").innerHTML = affButton(`https://search.rakuten.co.jp/search/mall/${encodeURIComponent(`${short || "ご当地"} お土産`)}/`, "rakuten", `🎁 ${esc(short || "ご当地")}のお土産`, "btn small sub")
+      + affButton(`https://search.rakuten.co.jp/search/mall/${encodeURIComponent(`ふるさと納税 ${town || pref || ""}`.trim())}/`, "rakuten", `🏡 ${esc(town || pref || "")}${town || pref ? "の" : ""}ふるさと納税`, "btn small sub");
     const slug = PREF_SLUG[pref], exp = `https://experiences.travel.rakuten.co.jp/${slug ? "destinations/" + slug : ""}`;
     $("eventSearch").innerHTML = `<a class="btn small sub" href="${google(`${word || "近く"} イベント ${m}月${d}日`)}" target="_blank" rel="noopener">🔍 ${esc(word || "近く")}の${esc(dayWord(day))}のイベント</a>`
       + `<a class="btn small sub" href="${google(`${word || "近く"} イベント ${m}月`)}" target="_blank" rel="noopener">🗓 ${esc(word || "近く")}の${m}月のイベント</a>`
       + affButton(exp, "rakuten", `🎟 ${esc(slug ? pref : "全国")}の遊び・体験を予約`, "btn small sub");
   };
   // 探している場所（県・市町村／指定した場所／今いる市町村）のイベント
-  if (findArea) return draw(findArea.pref + findArea.city, findArea.pref);
+  if (findArea) return draw(findArea.pref + findArea.city, findArea.pref, findArea.city);
   const at = findPlace || findHere;
   draw(findPlace ? findPlace.label : "", "");
-  if (at) { const city = await cityOf(at).catch(() => ""); if (day === (findDay || todayStr())) draw(findPlace ? findPlace.label : city, findCity.pref); }
+  if (at) { const city = await cityOf(at).catch(() => ""); if (day === (findDay || todayStr())) draw(findPlace ? findPlace.label : city, findCity.pref, city); }
 }
 /* ---------- お得・クーポン ---------- */
 // アフィリエイトのリンクに変える（IDが空なら元のリンクのまま）。変えたときは「PR」を付ける
@@ -1970,6 +2026,7 @@ function setFindDay(day) {
   findDay = day; renderWhen(); weatherAt = 0; showWeather(); renderEvents();
   if (findShown.length) badgeWeather(findShown);
 }
+let lastWx = "";
 async function showWeather() {
   const box = $("findWeather"); if (!box || Date.now() - weatherAt < 30 * 60000) return;
   if (findDay && findDay <= todayStr()) findDay = "";
@@ -1982,6 +2039,7 @@ async function showWeather() {
     if (day !== findDay) return;
     if (!w) { box.className = "find-weather"; box.innerHTML = '<div class="t">この場所・この日の天気予報はありません（気象庁の予報は日本国内・6日先まで）</div>'; return; }
     const k = weatherKind(w.code), wet = k.rain || w.rain >= 60, hot = !wet && w.max >= 30, cold = !wet && w.max <= 8;
+    lastWx = `${k.text}${Number.isFinite(w.max) ? ` 最高${Math.round(w.max)}℃` : ""}${Number.isFinite(w.rain) ? ` 雨${w.rain}%` : ""}`;
     const [say, picks] = wet ? ["雨の予報。屋内で楽しめるところはどう？", [["indoor", "🏛 屋内"], ["onsen", "♨️ 温泉"], ["cafe", "☕ カフェ"]]]
       : hot ? ["暑くなりそう。涼しい屋内や甘いものでひと休み", [["indoor", "🏛 屋内"], ["cafe", "☕ カフェ"], ["sweets", "🍰 スイーツ"]]]
       : cold ? ["寒くなりそう。あったまるところへ", [["onsen", "♨️ 温泉"], ["ramen", "🍜 ラーメン"], ["cafe", "☕ カフェ"]]]
@@ -2011,6 +2069,7 @@ function spotCard(s, i) {
       <button type="button" class="btn small ${have ? "sub" : "rose"}" data-wish="${i}" ${have ? "disabled" : ""}>${have ? "✓ 行きたいリストにあります" : "📌 ここ行きたい！"}</button>
       <button type="button" class="btn small sub" data-plan="${i}">📅 予定に追加</button>
       <a class="btn small ghost" href="${spotMapLink(s)}" target="_blank" rel="noopener">🗺 地図</a>
+      <a class="btn small ghost" href="${esc(dirUrl(s, { from: findHere }))}" target="_blank" rel="noopener">🧭 行き方</a>
       ${s.source === "hp" && s.couponUrl ? affButton(s.couponUrl, "hp", s.coupon ? "🎟 クーポンを見る" : "🎟 クーポン・予約", "btn small rose-ghost") : ""}
       ${s.website && /^https?:\/\//.test(s.website) ? (s.source === "hp" ? affButton(s.website, "hp", "🔗 ホットペッパーで見る", "btn small ghost") : `<a class="btn small ghost" href="${esc(s.website)}" target="_blank" rel="noopener">🔗 お店のページ</a>`) : ""}
     </div></div>`;
@@ -2090,6 +2149,7 @@ function closeFind() {
   $("findWhatTitle").scrollIntoView({ block: "start", behavior: "smooth" });
 }
 function setupFind() {
+  $("aiPlanBtn").onclick = makePlan;
   $("findCloseTop").onclick = closeFind; $("findCloseBottom").onclick = closeFind;
   renderTravelDeals();
   $("findForm").onsubmit = e => { e.preventDefault(); const q = $("findQ").value.trim(); if (!q) { $("findQ").focus(); return; } $("findQ").blur(); lastFind = { words: q }; findSpots(lastFind); };
