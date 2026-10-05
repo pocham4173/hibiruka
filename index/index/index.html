@@ -820,6 +820,13 @@
       <p class="note">スマホのアイコンから、すぐに開けます。</p>
       <button class="btn navy" type="button" data-install>ホームに追加</button>
     </div>
+    <div class="card" id="pushCard" style="margin-top:18px">
+      <h2>📱 この端末に通知</h2>
+      <p class="note" id="pushStatus" role="status">予定のお知らせを、LINEではなくこの端末に直接届けます。LINEの送信数（月30通）は使いません。</p>
+      <button class="btn" type="button" id="pushOn">この端末で通知を受け取る</button>
+      <button class="btn sub hidden" type="button" id="pushTest">テスト通知を送る</button>
+      <button class="btn ghost hidden" type="button" id="pushOff">この端末の通知をやめる</button>
+    </div>
     <div class="card" id="selfLineCard" style="margin-top:18px">
       <h2>自分のLINEを登録する</h2>
       <p class="note" id="selfLineStatus" role="status">最初に1回、自分のLINEを登録してください。</p>
@@ -1097,6 +1104,7 @@ const CONFIG = {
   lineOaId: "@626hnkgo",
   aiUrl: "https://hibiruka-line.okm-co.workers.dev/ai/memory-text",
   spotsUrl: "https://hibiruka-line.okm-co.workers.dev/spots/search",
+  pushUrl: "https://hibiruka-line.okm-co.workers.dev/push/",
   weatherUrl: "https://hibiruka-line.okm-co.workers.dev/weather",
   // アフィリエイト（登録ができたら値を入れるだけ。空のあいだは普通のリンクで開く）
   //   valuecommerce: バリューコマースの MyLink の sid と pid（ホットペッパーグルメのプログラム）
@@ -1385,7 +1393,7 @@ function setupFirstRecordGuide() {
 /* ---------- メインタブ ---------- */
 function setupTabs() {
   document.querySelectorAll(".maintabs button").forEach(b => b.onclick = () => {
-    if (b.dataset.tab === "set") return goTab("set");
+    if (b.dataset.tab === "set") { renderPush(); return goTab("set"); }
     if (b.dataset.tab === "find") { renderWishes(); showWeather(); renderLocalCoupons(); renderEvents(); return goTab("find"); }
     selectView(b.dataset.tab === "mem" ? "mem" : "cal"); goTab("list");
   });
@@ -1418,6 +1426,8 @@ function setupForm() {
   $("fPhotoInput").onchange = addPhotos;
   $("aiWrite").onclick = () => writeWithAi("diary"); bindAiActions();
   setupFind();
+  $("pushOn").onclick = pushEnable; $("pushOff").onclick = pushDisable; $("pushTest").onclick = pushTest;
+  renderPush();
   document.querySelectorAll("[data-ai-mode]").forEach(c => c.onclick = () => writeWithAi(c.dataset.aiMode));
   $("aiTitle").onclick = suggestTitles;
   $("instaAi").onclick = snsWithAi;
@@ -2967,6 +2977,7 @@ let sendFor = null, sendWho = new Set();
 function openSend(id, ev) {
   const e = ev || events.find(x => x.id === id); if (!e) return;
   sendFor = { id, e }; sendWho = new Set();
+  renderPush().then(() => { if (!$("sendSheet").classList.contains("hidden")) renderSendWho(); }).catch(() => {});
   $("sNote").value = ""; $("sNoteCount").textContent = "0/100";
   $("sNote").oninput = () => { $("sNoteCount").textContent = `${[...$("sNote").value].length}/100`; };
   // 「誰と？」に入れたLINEの人を最初から選んでおく
@@ -2995,32 +3006,85 @@ function openSend(id, ev) {
   $("sendSheet").onclick = (x) => { if (x.target.id === "sendSheet") closeSheets(); };
   $("sendSheet").classList.remove("hidden");
 }
+/* ---------- 📱 この端末に通知（Web Push） ---------- */
+const PUSH_SELF = "push:self";
+let pushReady = false; // この端末で通知を受け取る設定になっている
+const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window && window.isSecureContext;
+const isIos = () => /iPhone|iPad|iPod/.test(navigator.userAgent || "");
+const standalone = () => window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true;
+async function pushCall(path, body) {
+  const token = await auth.currentUser.getIdToken();
+  const r = await fetch(CONFIG.pushUrl + path, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify(body || {}) });
+  return { ok: r.ok, out: await r.json().catch(() => ({})) };
+}
+async function currentSub() { try { const reg = await navigator.serviceWorker.getRegistration(); return reg ? await reg.pushManager.getSubscription() : null; } catch { return null; } }
+async function renderPush() {
+  if (!$("pushCard")) return;
+  const card = $("pushCard"), st = $("pushStatus");
+  card.classList.toggle("hidden", !personalMode);
+  if (!pushSupported()) {
+    pushReady = false; ["pushOn", "pushTest", "pushOff"].forEach(id => $(id).classList.add("hidden"));
+    st.textContent = isIos() && !standalone() ? "iPhoneでは、ヒビルカを「ホーム画面に追加」して、ホーム画面のアイコンから開くと通知を受け取れます（iOS 16.4以降）。" : "この端末やブラウザは、アプリの通知に対応していません。LINEでのお知らせを使ってください。";
+    return;
+  }
+  const sub = Notification.permission === "granted" ? await currentSub() : null;
+  pushReady = !!sub;
+  $("pushOn").classList.toggle("hidden", pushReady); $("pushTest").classList.toggle("hidden", !pushReady); $("pushOff").classList.toggle("hidden", !pushReady);
+  st.textContent = pushReady ? "✅ この端末で通知を受け取れます。予定をLINEで送る画面で「📱 アプリ通知」を選ぶと、ここに届きます。"
+    : Notification.permission === "denied" ? "通知が「許可しない」になっています。スマホの設定 → 通知 → ヒビルカ（またはブラウザ）で許可してから、もう一度押してください。"
+    : "予定のお知らせを、LINEではなくこの端末に直接届けます。LINEの送信数（月30通）は使いません。";
+}
+async function pushEnable() {
+  const btn = $("pushOn"); btn.disabled = true; btn.textContent = "設定しています…";
+  try {
+    if ((await Notification.requestPermission()) !== "granted") { toast("通知が許可されませんでした"); return; }
+    const reg = await navigator.serviceWorker.register("./sw.js"); await navigator.serviceWorker.ready;
+    const kr = await fetch(CONFIG.pushUrl + "key"); const { key } = await kr.json();
+    const raw = Uint8Array.from(atob(key.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((key.length + 3) % 4)), c => c.charCodeAt(0));
+    const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: raw });
+    const { ok } = await pushCall("subscribe", { subscription: sub.toJSON() });
+    if (!ok) throw new Error("save");
+    toast("この端末で通知を受け取れるようにしました");
+  } catch (e) { console.warn(e); toast("通知を設定できませんでした。少し待ってもう一度お試しください"); }
+  finally { btn.disabled = false; btn.textContent = "この端末で通知を受け取る"; renderPush(); }
+}
+async function pushDisable() {
+  const sub = await currentSub();
+  try { if (sub) { await pushCall("subscribe", { subscription: sub.toJSON(), action: "remove" }); await sub.unsubscribe(); } } catch {}
+  toast("この端末の通知をやめました"); renderPush();
+}
+async function pushTest() {
+  const { ok } = await pushCall("test", {}).catch(() => ({ ok: false }));
+  toast(ok ? "テスト通知を送りました。数秒で届きます" : "届けられませんでした。「通知をやめる」→「受け取る」をやり直してください", 5000);
+}
 // LINEの無料枠（公式アカウント全体で月200通）をみんなで分けるため、1人あたり月の上限を決める。1人に送る＝1通。
 const LINE_MONTHLY = 30;
 function lineUsedThisMonth() {
   const ym = todayStr().slice(0, 7);
-  return events.reduce((n, e) => n + (e.sends || []).filter(x => String(x.at || "").startsWith(ym) && x.status !== "fail").reduce((m, x) => m + (x.friendIds || []).length, 0), 0);
+  return events.reduce((n, e) => n + (e.sends || []).filter(x => String(x.at || "").startsWith(ym) && x.status !== "fail").reduce((m, x) => m + (x.friendIds || []).filter(id => id !== PUSH_SELF).length, 0), 0);
 }
-function recipientName(id) { return id === selfFriendId ? '自分' : friends.find(f => f.id === id)?.name; }
+function recipientName(id) { return id === PUSH_SELF ? "📱 アプリ通知" : id === selfFriendId ? '自分' : friends.find(f => f.id === id)?.name; }
 function renderSendWho() {
   const joined = friends.filter(f => f.status === "joined" && f.lineUserId);
   const valid = new Set(joined.map(f => f.id));
+  if (pushReady && personalMode) valid.add(PUSH_SELF);
   sendWho = new Set([...sendWho].filter(id => valid.has(id)));
   joined.sort((a,b) => Number(b.id === selfFriendId) - Number(a.id === selfFriendId));
-  $("sWho").innerHTML = joined.map(f => `<button type="button" class="chip ${sendWho.has(f.id) ? "on" : ""}" aria-pressed="${sendWho.has(f.id)}" data-id="${esc(f.id)}">${esc(recipientName(f.id))}</button>`).join("");
+  const chips = [...(pushReady && personalMode ? [PUSH_SELF] : []), ...joined.map(f => f.id)];
+  $("sWho").innerHTML = chips.map(id => `<button type="button" class="chip ${sendWho.has(id) ? "on" : ""}" aria-pressed="${sendWho.has(id)}" data-id="${esc(id)}">${esc(recipientName(id))}</button>`).join("");
   $("sWho").querySelectorAll("[data-id]").forEach(c => c.onclick = () => { const id = c.dataset.id; sendWho.has(id) ? sendWho.delete(id) : sendWho.add(id); renderSendWho(); });
-  $("sWhoNote").textContent = joined.length ? "選んだ人にだけ届きます。自分と友だちを一緒に選べます。" : "自分のLINEを登録するか、設定から相手を招待してください。";
+  $("sWhoNote").textContent = chips.length ? `選んだ人にだけ届きます。${pushReady && personalMode ? "「📱 アプリ通知」はLINEの通数を使わずに自分の端末へ届きます。" : "自分と友だちを一緒に選べます。"}` : "自分のLINEを登録するか、設定から相手を招待してください。";
   $("sSelfSetup").classList.toggle("hidden", joined.some(f => f.id === selfFriendId));
   $("sSelfSetup").onclick = () => { closeSheets(); goTab("set"); $("selfLineCard").scrollIntoView({behavior:"smooth"}); };
-  const left = Math.max(0, LINE_MONTHLY - lineUsedThisMonth());
-  $("sQuota").textContent = `📮 今月あと${left}通送れます（1人に送ると1通・無料で続けるため月${LINE_MONTHLY}通まで）`;
-  $("sOkBtn").disabled = $("sNowBtn").disabled = sendWho.size === 0 || sending || left < sendWho.size;
+  const left = Math.max(0, LINE_MONTHLY - lineUsedThisMonth()), lineCount = [...sendWho].filter(id => id !== PUSH_SELF).length;
+  $("sQuota").textContent = `📮 LINEは今月あと${left}通送れます（1人に送ると1通・無料で続けるため月${LINE_MONTHLY}通まで。アプリ通知は数えません）`;
+  $("sOkBtn").disabled = $("sNowBtn").disabled = sendWho.size === 0 || sending || left < lineCount;
 }
 let sending = false;
 async function addSend(now) {
   if (sending) return;
   if (!sendFor || !sendWho.size) { toast("送る人を選んでください"); return; }
-  if (lineUsedThisMonth() + sendWho.size > LINE_MONTHLY) { toast(`今月のLINE送信は${LINE_MONTHLY}通までです。来月1日からまた送れます`, 5000); return; }
+  if (lineUsedThisMonth() + [...sendWho].filter(id => id !== PUSH_SELF).length > LINE_MONTHLY) { toast(`今月のLINE送信は${LINE_MONTHLY}通までです。来月1日からまた送れます`, 5000); return; }
   let at;
   if (now) at = localStr(new Date());
   else {

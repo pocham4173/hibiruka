@@ -3,6 +3,7 @@ const nowJst = () => new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 1
 const sendList = value => Array.isArray(value) ? value.filter(x => x && typeof x === 'object') : [];
 const validSend = x => typeof x.id === 'string' && !!x.id && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(x.at || '') && Array.isArray(x.friendIds);
 const nextSendAt = sends => sendList(sends).filter(x => x.status === 'wait' && validSend(x)).map(x => x.at).sort()[0] || null;
+const PUSH_SELF = 'push:self';
 function retryKey(eventId, sendId) {
   const h = createHash('sha256').update(JSON.stringify([eventId, sendId])).digest('hex');
   return `${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-a${h.slice(17,20)}-${h.slice(20,32)}`;
@@ -32,7 +33,7 @@ async function updateSend(db, ref, id, update) {
     tx.update(ref, { sends, nextSendAt:nextSendAt(sends) });
   });
 }
-async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=Infinity}) {
+async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=Infinity, push=null}) {
   const botResponse = await lineRequest('/v2/bot/info', token);
   if (!botResponse.ok) throw new Error(`LINE接続情報を確認できません（HTTP ${botResponse.status}）。`);
   const bot = await botResponse.json();
@@ -93,10 +94,21 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
       if (!claimed) continue;
       processed++;
       const {ev,item} = claimed;
-      const ids = [...new Set(item.friendIds || [])].filter(id => typeof id === 'string' && id && !id.includes('/'));
+      // 'push:self' = 自分の端末へのアプリ通知（LINEの通数を使わない）
+      const wantPush = (item.friendIds || []).includes(PUSH_SELF) && isPersonal;
+      const ids = [...new Set(item.friendIds || [])].filter(id => typeof id === 'string' && id && id !== PUSH_SELF && !id.includes('/'));
       const refs = ids.map(id => db.collection(isPersonal ? 'personalFriends' : 'friends').doc(id));
       const recipients = !refs.length ? [] : db.getAll ? await db.getAll(...refs) : await Promise.all(refs.map(ref=>ref.get()));
       const userIds = [...new Set(recipients.filter(d => d.exists).map(d => d.data()).filter(f => (!isPersonal || (typeof ev.ownerUid === 'string' && f.ownerUid === ev.ownerUid)) && f.status === 'joined' && /^U[0-9a-f]{32}$/i.test(f.lineUserId || '')).map(f => f.lineUserId))];
+      let pushed = 0;
+      if (wantPush) {
+        if (typeof push !== 'function') { if (!ids.length) { await updateSend(db,doc.ref,item.id,{leaseUntil:0}); continue; } }
+        else pushed = await push(ev.ownerUid, {title:`🔔 ${ev.title || '予定'}`, body:buildText(ev,'',item.note).replace(/^🔔[^\n]*\n+/, '').replace(/\n+ヒビルカより$/, '').slice(0, 300), url:'./?tab=list', tag:`plan-${doc.id}`}).catch(() => 0);
+      }
+      if (wantPush && !ids.length) {
+        await updateSend(db,doc.ref,item.id,pushed ? {status:'sent',sentAt:nowJst(),leaseUntil:0,error:''} : {status:'fail',leaseUntil:0,error:'アプリの通知を届けられませんでした。設定で「この端末に通知」をオンにし直してください。'});
+        pushed ? sent++ : failed++; continue;
+      }
       if (!userIds.length || userIds.length > 500) {
         await updateSend(db,doc.ref,item.id,{status:'fail',error:'送れる相手がいません。LINE登録を確認してください。'}); failed++; continue;
       }

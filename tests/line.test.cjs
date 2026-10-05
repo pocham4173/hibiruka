@@ -49,7 +49,7 @@ function fixture({lineMessage='',validate=false,status=200,accepted=false,expire
   vm.createContext(context);vm.runInContext(fs.readFileSync(require.resolve('../scripts/line-engine.cjs'),'utf8'),context);
   const engine=context.module.exports, originalRequire=context.require;context.require=name=>name==='./line-engine.cjs'?engine:originalRequire(name);
   vm.runInContext(fs.readFileSync(require.resolve('../scripts/send-line.cjs'),'utf8'),context);
-  return {main:context.module.exports.main,records,calls};
+  return {main:context.module.exports.main,records,calls,db,engine};
 }
 
 test('validation uses real credential checks without sending or changing records',async()=>{
@@ -73,6 +73,18 @@ test('monthly free allowance used up: the plan is marked with a clear message an
   const f=fixture({status:429,lineMessage:'You have reached your monthly limit.'});await f.main();
   const s=f.records.events.event.sends[0];assert.equal(s.status,'fail');assert.match(s.error,/今月のLINE無料送信の上限/);
   const g=fixture({status:429,lineMessage:'Too Many Requests'});await g.main();assert.equal(g.records.events.event.sends[0].status,'wait');
+});
+test('app notification: push:self goes to the owner devices without LINE; mixed sends use both; failure is explained',async()=>{
+  let f=fixture({personal:true});f.records.personalEvents.event.sends[0].friendIds=['push:self'];f.records.personalEvents.event.sends[0].note='傘を忘れずに';
+  const got=[];await f.engine.runSender({db:f.db,token:'t',push:async(uid,msg)=>{got.push([uid,msg]);return 1;}});
+  assert.equal(got.length,1);assert.equal(got[0][0],'owner-A');assert.match(got[0][1].title,/テストの予定/);assert.match(got[0][1].body,/💬 傘を忘れずに/);assert.doesNotMatch(got[0][1].body,/ヒビルカより|予定のお知らせ/);
+  assert.equal(f.calls.filter(x=>x.url.endsWith('/multicast')).length,0,'no LINE message used');assert.equal(f.records.personalEvents.event.sends[0].status,'sent');
+  f=fixture({personal:true});f.records.personalEvents.event.sends[0].friendIds=['push:self'];
+  await f.engine.runSender({db:f.db,token:'t',push:async()=>0});assert.equal(f.records.personalEvents.event.sends[0].status,'fail');assert.match(f.records.personalEvents.event.sends[0].error,/アプリの通知/);
+  f=fixture({personal:true});f.records.personalEvents.event.sends[0].friendIds=['push:self','self'];let n=0;
+  await f.engine.runSender({db:f.db,token:'t',push:async()=>{n++;return 1;}});assert.equal(n,1);assert.equal(f.calls.filter(x=>x.url.endsWith('/multicast')).length,1);assert.equal(f.records.personalEvents.event.sends[0].status,'sent');
+  f=fixture({personal:true});f.records.personalEvents.event.sends[0].friendIds=['push:self'];
+  await f.engine.runSender({db:f.db,token:'t'});assert.equal(f.records.personalEvents.event.sends[0].status,'wait','a sender without push leaves it for the one that can');
 });
 test('all app scripts parse and install manifest is scoped to the GitHub app',()=>{
   const html=fs.readFileSync('index/index/index.html','utf8');
