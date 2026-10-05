@@ -71,6 +71,10 @@
   .find-bar input { flex: 1; min-width: 0; }
   .find-bar .btn { flex: 0 0 auto; padding: 0 18px; }
   .find-quick { margin-bottom: 4px; }
+  .find-range { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; font-size: 13px; color: var(--muted); font-weight: 600; }
+  .find-range span { margin-right: 2px; }
+  .find-range .chip { padding: 4px 11px; font-size: 13px; }
+  .find-range .chip.on-range { background: var(--navy); color: #fff; border-color: var(--navy); }
   .find-quick .chip.busy, .find-bar .btn.busy { background: var(--navy); color: #fff; border-color: var(--navy); }
   .find-loading { display: flex; align-items: center; gap: 14px; background: var(--lav); border: 1px solid var(--lav-b); border-radius: 14px; padding: 18px 16px; margin: 10px 0; color: var(--lav-t); font-weight: 700; font-size: 16px; }
   .find-loading small { display: block; font-weight: 500; font-size: 13px; color: var(--muted); margin-top: 2px; }
@@ -587,9 +591,18 @@
       <button type="button" class="chip" data-find="lunch">🍽 近くのランチ</button>
       <button type="button" class="chip" data-find="ramen">🍜 ラーメン・そば</button>
       <button type="button" class="chip" data-find="sweets">🍰 スイーツ・パン</button>
+      <button type="button" class="chip" data-find="yakiniku">🍖 焼肉</button>
+      <button type="button" class="chip" data-find="sushi">🍣 寿司・和食</button>
+      <button type="button" class="chip" data-find="izakaya">🍺 居酒屋</button>
       <button type="button" class="chip" data-find="park">🌳 公園・お出かけ</button>
       <button type="button" class="chip" data-find="onsen">♨️ 温泉</button>
       <button type="button" class="chip" data-find="dog">🐶 わんこOK</button>
+    </div>
+    <div class="find-range" role="group" aria-label="探す範囲">
+      <span>お店を探す範囲</span>
+      <button type="button" class="chip" data-range="3">1km</button>
+      <button type="button" class="chip on-range" data-range="5">3km</button>
+      <button type="button" class="chip" data-range="city">市内まるごと</button>
     </div>
     <p class="note" id="findNote" aria-live="polite">現在地の近くを探します。最初に位置情報の確認が出たら「許可」を押してください。</p>
     <div id="findResults"></div>
@@ -1336,7 +1349,20 @@ const FIND_WORDS = [[/カフェ|喫茶|珈琲|コーヒー/, "cafe"], [/ラン�
   [/スイーツ|ケーキ|パン|ベーカリー|和菓子|アイス|クレープ/, "sweets"], [/公園|観光|お出かけ|おでかけ|美術館|博物館|遊び/, "park"], [/温泉|銭湯|サウナ|日帰り/, "onsen"],
   [/犬|わんこ|ドッグ|ペット/, "dog"], [/焼肉|焼き肉|BBQ/i, "yakiniku"], [/寿司|すし|鮨/, "sushi"], [/居酒屋|飲み/, "izakaya"]];
 const FIND_HOME = { lat: 36.4019, lng: 138.2491, label: "上田駅" }; // 現在地が使えないときの基準
-let findHere = null, findBusy = false, findShown = [], hpReady = true;
+let findHere = null, findBusy = false, findShown = [], hpReady = true, findRange = "5", findCity = { key: "", name: "" };
+// 「市内まるごと」用に、いる場所の市町村名を調べる（一度調べたら覚えておく）
+async function cityOf(c) {
+  const key = `${c.lat.toFixed(2)},${c.lng.toFixed(2)}`;
+  if (findCity.key === key) return findCity.name;
+  let name = "";
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${c.lat}&lon=${c.lng}&zoom=10&accept-language=ja`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined });
+    const a = (await r.json()).address || {};
+    name = a.city || a.town || a.village || a.county || "";
+  } catch {}
+  findCity = { key, name };
+  return name;
+}
 const FOOD = new Set(["cafe", "lunch", "ramen", "sweets", "yakiniku", "sushi", "izakaya"]);
 // 飲食店はホットペッパー（写真・予算つき、速い）。使えないときは地図データ（OpenStreetMap）で探す
 async function hotpepper(body) {
@@ -1450,7 +1476,7 @@ async function findSpots({ key = "", words = "" } = {}) {
     // 何を探すか（ジャンル）と、どこで探すか（地名）を分ける
     let area = words.trim();
     if (!key) for (const [re, k] of FIND_WORDS) if (re.test(area)) { key = k; area = area.replace(re, "").replace(/(の|で|近く|周辺|あたり)/g, " ").trim(); break; }
-    let center = null, centerLabel = "", spots = [], usedHp = false;
+    let center = null, centerLabel = "", spots = [], usedHp = false, cityMode = false;
     // 1) 飲食店はホットペッパー（速い・写真つき）
     if (FOOD.has(key) || key === "dog" || (!key && words)) {
       findLoading("お店を探しています…", key === "dog" ? "ホットペッパーでペット可のお店を探しています" : "ホットペッパーで探しています");
@@ -1458,12 +1484,16 @@ async function findSpots({ key = "", words = "" } = {}) {
       const base = findHere || FIND_HOME;
       let hp;
       if (key && area) hp = await hotpepper({ kind: key, keyword: area });                     // 「上田駅 カフェ」
-      else if (key) hp = await hotpepper({ kind: key, lat: base.lat, lng: base.lng, range: 5 }); // 近くのカフェ
+      else if (key && findRange === "city") {                                                  // 市内まるごと
+        const city = await cityOf(base) || (findHere ? "" : "上田市");
+        hp = city ? await hotpepper({ kind: key, keyword: city, count: 100 }) : await hotpepper({ kind: key, lat: base.lat, lng: base.lng, range: 5 });
+      }
+      else if (key) hp = await hotpepper({ kind: key, lat: base.lat, lng: base.lng, range: Number(findRange) }); // 近くのカフェ
       else {                                                                                    // 「スタバ」など：まず近く、なければ全国
-        hp = await hotpepper({ keyword: words, lat: base.lat, lng: base.lng, range: 5 });
+        hp = await hotpepper({ keyword: words, lat: base.lat, lng: base.lng, range: findRange === "city" ? 5 : Number(findRange) });
         if (hp && !hp.length) hp = await hotpepper({ keyword: words });
       }
-      if (hp && hp.length) { spots = hp; usedHp = true; center = base; centerLabel = key && area ? area : findHere ? "現在地" : FIND_HOME.label; }
+      if (hp && hp.length) { spots = hp; usedHp = true; center = base; cityMode = !!(key && !area && findRange === "city" && findCity.name); centerLabel = key && area ? area : cityMode ? findCity.name : findHere ? "現在地" : FIND_HOME.label; }
     }
     // 2) それ以外（公園・温泉など）や、ホットペッパーで見つからないときは地図データ。わんこOKはドッグランも足す
     if (!usedHp || key === "dog") {
@@ -1498,10 +1528,10 @@ async function findSpots({ key = "", words = "" } = {}) {
     const from = findHere || center;
     const seen = new Set();
     spots = spots.filter(s => !seen.has(s.id) && seen.add(s.id)).map(s => ({ ...s, dist: distanceM(from, s), catKeys: key ? FIND_CATS[key].cat : [] }))
-      .sort((a, b) => a.dist - b.dist).slice(0, 30);
+      .sort((a, b) => a.dist - b.dist).slice(0, usedHp && findRange === "city" ? 60 : 30);
     findShown = spots;
     if (!spots.length) { box.innerHTML = ""; note.textContent = "見つかりませんでした。ことばを変えるか、地名を足してみてください（例：「上田駅 カフェ」）。"; return; }
-    note.textContent = `${centerLabel}のまわりで${spots.length}件見つかりました${!findHere && centerLabel === FIND_HOME.label ? "（現在地が使えないため、上田駅を基準にしています）" : ""}。`;
+    note.textContent = `${centerLabel}${cityMode ? "で" : "のまわりで"}${spots.length}件見つかりました${cityMode ? "（近い順）" : ""}${!findHere && centerLabel === FIND_HOME.label ? "（現在地が使えないため、上田駅を基準にしています）" : ""}。`;
     box.innerHTML = spots.map((s, i) => spotCard(s, i)).join("") + (usedHp ? '<p class="note center hp-credit"><a href="https://webservice.recruit.co.jp/" target="_blank" rel="noopener">Powered by ホットペッパーグルメ Webサービス</a></p>' : "");
     box.querySelectorAll("[data-wish]").forEach(b => b.onclick = () => addWish(findShown[+b.dataset.wish], b));
     box.querySelectorAll("[data-plan]").forEach(b => b.onclick = () => planFromSpot(findShown[+b.dataset.plan]));
@@ -1590,9 +1620,15 @@ function renderWishes() {
     try { await recordCollection("events").doc(w.id).delete(); toast("消しました"); } catch { toast("消せませんでした。もう一度お試しください。"); }
   });
 }
+let lastFind = null;
 function setupFind() {
-  $("findForm").onsubmit = e => { e.preventDefault(); const q = $("findQ").value.trim(); if (!q) { $("findQ").focus(); return; } $("findQ").blur(); findSpots({ words: q }); };
-  document.querySelectorAll("[data-find]").forEach(b => b.onclick = () => findSpots({ key: b.dataset.find }));
+  $("findForm").onsubmit = e => { e.preventDefault(); const q = $("findQ").value.trim(); if (!q) { $("findQ").focus(); return; } $("findQ").blur(); lastFind = { words: q }; findSpots(lastFind); };
+  document.querySelectorAll("[data-find]").forEach(b => b.onclick = () => { lastFind = { key: b.dataset.find }; findSpots(lastFind); });
+  document.querySelectorAll("[data-range]").forEach(b => b.onclick = () => {
+    findRange = b.dataset.range;
+    document.querySelectorAll("[data-range]").forEach(x => x.classList.toggle("on-range", x === b));
+    if (lastFind && !findBusy) findSpots(lastFind); // 範囲を変えたら、さっきの検索をもう一度
+  });
 }
 
 /* ✨ AIで文章を作成：題名・日付・場所・メモから、思い出の文章（80〜120文字）を作る */
