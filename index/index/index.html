@@ -102,6 +102,18 @@
   .cd .n b { font-size: 26px; margin: 0 2px; }
   .cd .t { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cd small { color: var(--muted); font-size: 11.5px; }
+  .course-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 25; background: var(--navy); color: #fff; border: none; border-radius: 999px; padding: 12px 20px; font: inherit; font-weight: 800; box-shadow: 0 6px 18px rgba(31,45,74,.3); cursor: pointer; white-space: nowrap; }
+  .course-item { display: flex; gap: 8px; align-items: flex-start; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-bottom: 6px; }
+  .course-item .no { flex: 0 0 26px; height: 26px; border-radius: 50%; background: var(--rose); color: #fff; font-weight: 900; display: flex; align-items: center; justify-content: center; }
+  .course-item .body { flex: 1; min-width: 0; }
+  .course-item b { color: var(--navy); display: block; }
+  .course-item small { color: var(--muted); display: block; }
+  .course-item input[type=time] { width: 110px; padding: 4px 6px; font-size: 14px; margin-top: 4px; }
+  .course-item .ops { display: flex; flex-direction: column; gap: 4px; }
+  .course-item .ops button { background: none; border: 1px solid var(--line); border-radius: 8px; width: 34px; height: 30px; cursor: pointer; }
+  .course-move { font-size: 12px; color: var(--muted); margin: -2px 0 6px 34px; }
+  .course-move a { color: var(--navy); font-weight: 700; }
+  .btn.small.on-course { background: var(--sage); color: var(--sage-t); border-color: var(--sage-b); }
   .ai-plan-btn { margin-top: 10px; background: #f1edfb !important; border-color: #d9cff3 !important; }
   .plan-steps { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; margin-top: 8px; }
   .plan-step { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-top: 1px dashed var(--line); }
@@ -719,8 +731,7 @@
       <div class="find-place hidden" id="findDayBox"><input type="date" id="findDayPick" aria-label="行く日を選ぶ"></div>
       <h3 class="find-h" style="margin-top:14px"><span class="find-n">3</span>その日の天気とおすすめ</h3>
       <div id="findWeather" class="find-weather" aria-live="polite"><div class="t">天気を調べています…</div></div>
-      <button type="button" class="find-deal-btn ai-plan-btn" id="aiPlanBtn"><span>✨</span><b>AIにおでかけプランを作ってもらう</b><small>行きたいリストと、下で探した場所から、この日の天気に合わせて1日の回り方を考えます</small></button>
-      <div id="aiPlan"></div>
+      <button type="button" class="find-deal-btn ai-plan-btn" id="courseOpen"><span>🧭</span><b>この日のおでかけコースを作る</b><small>行きたい場所を「➕ コース」で集めて、順番・時間・行き方をまとめます（AIもお手伝い）</small></button>
       <p class="note" style="text-align:right;margin-top:4px;font-size:11px">出典：<a href="https://www.jma.go.jp/" target="_blank" rel="noopener">気象庁ホームページ</a>（天気予報）</p>
     </section>
     <section class="find-sec" aria-labelledby="findWhatTitle">
@@ -784,11 +795,12 @@
       </div>
       <div class="find-sub find-event" aria-labelledby="findEventTitle">
         <p class="find-subh" id="findEventTitle">🎪 イベント<small id="eventWhen"></small></p>
+        <form class="find-place" id="eventNameForm" style="margin:0 0 8px"><input type="search" id="eventNameQ" placeholder="イベント名で調べる（例：上田わっしょい）" enterkeyhint="search" aria-label="イベント名"><button type="submit" class="btn small">調べる</button></form>
         <div id="localEvents"></div>
         <div class="find-deal-links" id="eventSearch"></div>
       </div>
       <div class="find-sub find-deal" aria-labelledby="findGiftTitle">
-        <p class="find-subh" id="findGiftTitle">🎁 お土産・ふるさと納税<small>楽天市場</small></p>
+        <p class="find-subh" id="findGiftTitle">🍜 ご当地グルメ・お土産<small id="giftWhere"></small></p>
         <div class="find-deal-links" id="giftLinks"></div>
       </div>
       <div class="find-sub find-deal" aria-labelledby="findTripTitle">
@@ -1032,6 +1044,10 @@
   <button class="btn sub" id="sNowBtn">次の送信で届ける</button>
   <button class="btn ghost" id="sNoBtn">送らない</button>
 </div></div>
+
+<!-- 🧭 おでかけコース -->
+<button type="button" id="courseBar" class="course-bar hidden"></button>
+<div id="courseSheet" class="sheet-bg hidden"><div class="sheet" id="courseBody"></div></div>
 
 <!-- 見せるだけクーポン -->
 <div id="couponSheet" class="sheet-bg hidden"><div class="sheet coupon-sheet" id="couponBody"></div></div>
@@ -1405,6 +1421,7 @@ function goTab(t) {
   document.querySelectorAll(".maintabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === active));
   ["rec", "list", "find", "set"].forEach(x => $("tab-" + x).classList.toggle("hidden", x !== t));
   window.scrollTo(0, 0);
+  renderCourseBar();
 }
 
 /* =========================================================
@@ -1647,6 +1664,21 @@ async function loadSpotData() {
   } catch { return null; }
 }
 let michiData = null;
+// 名前のないドッグランに、そばの施設の名前を付ける（例：綿半スーパーセンター上田店のドッグラン）
+const NEAR_NAMED = ['["name"]["shop"]', '["name"]["tourism"]', '["name"]["leisure"~"^(park|sports_centre|resort|garden|playground)$"]', '["name"]["amenity"~"^(cafe|restaurant|parking|community_centre|townhall|marketplace|veterinary)$"]'];
+async function nameDogRuns(spots) {
+  const plain = spots.filter(x => x.name === "ドッグラン").slice(0, 15);
+  if (!plain.length) return spots;
+  let els = [];
+  try { els = await overpassRun(`[out:json][timeout:15];(${plain.map(x => NEAR_NAMED.map(f => `nwr${f}(around:300,${(+x.lat).toFixed(5)},${(+x.lng).toFixed(5)});`).join("")).join("")});out center 200;`); } catch { return spots; }
+  const named = els.map(e => [String(e.tags?.["name:ja"] || e.tags?.name || "").trim(), e.lat ?? e.center?.lat, e.lon ?? e.center?.lon]).filter(([n, lat]) => n && !/ドッグラン/.test(n) && Number.isFinite(lat));
+  return spots.map(x => {
+    if (x.name !== "ドッグラン") return x;
+    let best = null, bd = 300;
+    for (const [n, lat, lng] of named) { const d = distanceM(x, { lat, lng }); if (d < bd) { bd = d; best = n; } }
+    return best ? { ...x, name: `${best}のドッグラン` } : x;
+  });
+}
 // 喫煙所はCLUB JT（JT）の喫煙所マップでも探せるようにする
 function jtBox() {
   const pref = findArea ? findArea.pref : findCity.pref, n = Object.keys(PREF_SLUG).indexOf(pref) + 1;
@@ -1661,35 +1693,102 @@ function dirUrl(to, { from = null, mode = "", via = [] } = {}) {
   if (mode) q.set("travelmode", mode);
   return "https://www.google.com/maps/dir/?" + q.toString();
 }
-/* ---------- ② AIのおでかけプラン ---------- */
+/* ---------- ② おでかけコース（集めて・並べて・時間と行き方。AIもお手伝い） ---------- */
+let course = [];
+try { course = JSON.parse(localStorage.getItem("hibiruka-course") || "[]").filter(x => x && x.name && Number.isFinite(x.lat)); } catch { course = []; }
+const saveCourse = () => { try { localStorage.setItem("hibiruka-course", JSON.stringify(course)); } catch {} renderCourseBar(); };
+const inCourse = s => course.some(x => x.name === s.name);
+const wishSpot = w => ({ name: w.place || w.title, lat: w.lat, lng: w.lng, kind: w.genre || catLabel(w.cat), address: w.memo || "", wishId: w.id, catKeys: [w.cat] });
+function toggleCourse(s, btn) {
+  if (!s || !Number.isFinite(+s.lat)) return;
+  if (inCourse(s)) { course = course.filter(x => x.name !== s.name); toast(`「${s.name}」をコースから外しました`); }
+  else { if (course.length >= 8) { toast("コースは8か所までです"); return; } course.push({ name: s.name, lat: +s.lat, lng: +s.lng, kind: s.kind || s.genre || "", address: s.address || "", wishId: s.wishId || null, catKeys: s.catKeys || [], time: "", note: "" }); toast(`🧭「${s.name}」をコースに入れました（${course.length}か所）`); }
+  if (btn) { const on = inCourse(s); btn.classList.toggle("on-course", on); btn.textContent = on ? (btn.dataset.courseWish ? "✓ コース" : "✓ コースに入っています") : "➕ コース"; }
+  saveCourse();
+}
+function renderCourseBar() {
+  const bar = $("courseBar"); if (!bar) return;
+  try { course.length; } catch { return; } // 起動の途中（まだコースを読み込む前）
+  const show = course.length && !$("tab-find").classList.contains("hidden") && $("courseSheet").classList.contains("hidden");
+  bar.classList.toggle("hidden", !show); bar.textContent = `🧭 コース ${course.length}か所 ▶ ひらく`;
+}
 // 候補：行く場所のまわり（40km以内）の行きたいリスト ＋ いま探して出ている場所
 function planCandidates() {
-  const c = findPlace || findHere || FIND_HOME, seen = new Set(), out = [];
-  const add = (name, kind, lat, lng, extra = {}) => { const k = String(name || "").trim(); if (!k || seen.has(k) || !Number.isFinite(lat)) return; seen.add(k); out.push({ name: k, kind: kind || "", lat, lng, ...extra }); };
-  wishes.filter(w => w.status !== "visited" && Number.isFinite(w.lat) && distanceM(c, w) < 40000).forEach(w => add(w.place || w.title, w.genre || catLabel(w.cat), w.lat, w.lng, { wishId: w.id, cat: w.cat }));
-  findShown.slice(0, 10).forEach(x => add(x.name, x.genre, x.lat, x.lng, { catKeys: x.catKeys, address: x.address }));
-  return out.slice(0, 14);
+  const c = findPlace || findHere || FIND_HOME, seen = new Set(course.map(x => x.name)), out = [];
+  const add = s => { if (!s.name || seen.has(s.name) || !Number.isFinite(+s.lat)) return; seen.add(s.name); out.push(s); };
+  wishes.filter(w => w.status !== "visited" && Number.isFinite(w.lat) && distanceM(c, w) < 40000).forEach(w => add(wishSpot(w)));
+  findShown.slice(0, 10).forEach(x => add({ name: x.name, lat: x.lat, lng: x.lng, kind: x.genre, address: x.address, catKeys: x.catKeys }));
+  return out.slice(0, 12);
 }
-async function makePlan() {
-  const box = $("aiPlan"), btn = $("aiPlanBtn"), cands = planCandidates();
-  if (cands.length < 2) { box.innerHTML = '<p class="note">候補が足りません。下の「何を探す？」で探すか、「📌 ここ行きたい！」で行きたいリストに2か所以上入れてから押してね。</p>'; return; }
-  const day = findDay || todayStr(), where = findArea ? findArea.city : findPlace ? findPlace.label : findCity.name || (findHere ? "今いる場所のまわり" : "上田駅のまわり");
-  btn.disabled = true; box.innerHTML = '<p class="note">✨ プランを考えています…（10秒ほど）</p>';
+const courseDay = () => findDay || todayStr();
+const courseWhere = () => findArea ? findArea.city : findPlace ? findPlace.label : findCity.name || (findHere ? "今いる場所のまわり" : "上田駅のまわり");
+function openCourse() {
+  const day = courseDay(), cands = planCandidates(), start = findHere;
+  const minutes = (a, b) => Math.round(distanceM(a, b) / 1000 / 40 * 60); // 車でおよそ（時速40km）
+  $("courseBody").innerHTML = `<h2 style="margin:0 0 4px">🧭 ${esc(dayWord(day))}のおでかけコース</h2>
+    <p class="note" style="margin:0 0 10px">${esc(courseWhere())}${lastWx ? "・" + esc(lastWx) : ""}　<a href="#" id="courseDay">行く日・場所を変える</a></p>
+    ${course.length ? course.map((x, i) => `${i ? `<div class="course-move">🚗 約${Math.max(5, minutes(course[i - 1], x))}分（目安）・<a href="${esc(dirUrl(x, { from: course[i - 1], mode: "transit" }))}" target="_blank" rel="noopener">🚃 電車の行き方</a>・<a href="${esc(dirUrl(x, { from: course[i - 1], mode: "driving" }))}" target="_blank" rel="noopener">🚗 車の行き方</a></div>` : start ? `<div class="course-move">📍 今いる場所から <a href="${esc(dirUrl(x, { from: start, mode: "transit" }))}" target="_blank" rel="noopener">🚃 電車</a>・<a href="${esc(dirUrl(x, { from: start, mode: "driving" }))}" target="_blank" rel="noopener">🚗 車</a></div>` : ""}
+      <div class="course-item"><span class="no">${i + 1}</span><div class="body"><b>${esc(x.name)}</b>${x.kind ? `<small>${esc(x.kind)}</small>` : ""}${x.note ? `<small>💬 ${esc(x.note)}</small>` : ""}<input type="time" data-ctime="${i}" value="${esc(x.time || "")}" aria-label="${esc(x.name)}に着く時間"></div>
+        <div class="ops"><button type="button" data-cup="${i}" aria-label="上へ" ${i ? "" : "disabled"}>↑</button><button type="button" data-cdown="${i}" aria-label="下へ" ${i < course.length - 1 ? "" : "disabled"}>↓</button><button type="button" data-cdel="${i}" aria-label="外す">✕</button></div></div>`).join("")
+      : '<p class="note">まだコースに場所がありません。探した場所や行きたいリストの「➕ コース」か、下の候補から入れてね。</p>'}
+    ${cands.length ? `<p class="find-subh" style="margin:12px 0 6px">➕ 入れられる場所<small>行きたいリスト・探した場所から</small></p><div class="find-deal-links">${cands.map((x, i) => `<button type="button" class="btn small sub" data-cadd="${i}">➕ ${esc(x.name)}</button>`).join("")}</div>` : ""}
+    ${course.length >= 2 ? `<div class="find-deal-links" style="margin-top:12px">
+      <button type="button" class="btn small sub" id="courseSort">📏 近い順に並べる</button>
+      <button type="button" class="btn small sub" id="courseAi">✨ AIに順番と時間を考えてもらう</button>
+      <a class="btn small sub" href="${esc(dirUrl(course.at(-1), { from: start, mode: "driving", via: course.slice(0, -1) }))}" target="_blank" rel="noopener">🚗 コース全体を地図で（時間を見る）</a></div>` : ""}
+    <p class="note" id="courseMsg"></p>
+    ${course.length ? `<button type="button" class="btn" id="courseSave">📅 ${esc(fmtDate(day))}の予定にまとめて入れる</button>
+    <button type="button" class="btn ghost" id="courseClear">コースを空にする</button>` : ""}
+    <button type="button" class="btn ghost" id="courseClose">閉じる</button>`;
+  const body = $("courseBody"), redo = () => openCourse();
+  body.querySelectorAll("[data-ctime]").forEach(el => el.onchange = () => { course[+el.dataset.ctime].time = el.value; saveCourse(); });
+  body.querySelectorAll("[data-cup]").forEach(b => b.onclick = () => { const i = +b.dataset.cup; [course[i - 1], course[i]] = [course[i], course[i - 1]]; saveCourse(); redo(); });
+  body.querySelectorAll("[data-cdown]").forEach(b => b.onclick = () => { const i = +b.dataset.cdown; [course[i + 1], course[i]] = [course[i], course[i + 1]]; saveCourse(); redo(); });
+  body.querySelectorAll("[data-cdel]").forEach(b => b.onclick = () => { course.splice(+b.dataset.cdel, 1); saveCourse(); redo(); refreshCourseButtons(); });
+  body.querySelectorAll("[data-cadd]").forEach(b => b.onclick = () => { toggleCourse(cands[+b.dataset.cadd]); redo(); refreshCourseButtons(); });
+  if ($("courseSort")) $("courseSort").onclick = () => { sortCourse(); redo(); };
+  if ($("courseAi")) $("courseAi").onclick = aiCourse;
+  if ($("courseSave")) $("courseSave").onclick = saveCourseAsPlans;
+  if ($("courseClear")) $("courseClear").onclick = () => { if (!confirm("コースを空にしますか？")) return; course = []; saveCourse(); redo(); refreshCourseButtons(); };
+  $("courseClose").onclick = closeSheets;
+  $("courseDay").onclick = ev => { ev.preventDefault(); closeSheets(); document.querySelector(".find-go").scrollIntoView({ block: "start", behavior: "smooth" }); };
+  $("courseSheet").onclick = x => { if (x.target.id === "courseSheet") closeSheets(); };
+  $("courseSheet").classList.remove("hidden"); renderCourseBar();
+}
+function refreshCourseButtons() { if (findShown.length && $("findResults").innerHTML) $("findResults").querySelectorAll("[data-course]").forEach(b => { const on = inCourse(findShown[+b.dataset.course] || {}); b.classList.toggle("on-course", on); b.textContent = on ? "✓ コースに入っています" : "➕ コース"; }); renderWishes(); }
+// 近い順：出発地（今いる場所 or 1番目）から、いちばん近い所へ順につなぐ
+function sortCourse() {
+  let at = findHere || course[0], rest = course.slice(); const out = [];
+  while (rest.length) { rest.sort((a, b) => distanceM(at, a) - distanceM(at, b)); at = rest.shift(); out.push(at); }
+  course = out; saveCourse();
+}
+async function aiCourse() {
+  const msg = $("courseMsg"), btn = $("courseAi"); btn.disabled = true; msg.textContent = "✨ AIが順番と時間を考えています…（10秒ほど）";
   try {
-    const token = await auth.currentUser.getIdToken();
-    const r = await fetch(CONFIG.aiUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ mode: "plan", date: day, dayText: fmtDate(day), area: where, weather: lastWx, spots: cands.map(x => ({ name: x.name, kind: x.kind })) }) });
+    const token = await auth.currentUser.getIdToken(), day = courseDay();
+    const r = await fetch(CONFIG.aiUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ mode: "plan", date: day, dayText: fmtDate(day), area: courseWhere(), weather: lastWx, spots: course.map(x => ({ name: x.name, kind: x.kind })) }) });
     const out = await r.json().catch(() => ({}));
     if (!r.ok || !Array.isArray(out.steps)) throw new Error(out.error === "limit" ? "AIは1日20回までです。また明日使ってください。" : out.error === "busy" ? "今日はAIがとても混んでいます。また明日お試しください。" : "うまく作れませんでした。少し待ってもう一度お試しください。");
-    const steps = out.steps.map(x => ({ ...x, spot: cands.find(c => c.name === x.name) })).filter(x => x.spot);
-    box.innerHTML = `<div class="plan-steps"><p class="find-subh" style="margin:0 0 4px">✨ ${esc(dayWord(day))}のおでかけプラン<small>${esc(where)}${lastWx ? "・" + esc(lastWx) : ""}</small></p>${steps.map((x, i) => `<div class="plan-step"><span class="tm">${esc(x.time)}</span><div><b>${esc(x.name)}</b><small>${esc(x.note)}</small><button type="button" class="btn small sub" data-plan-step="${i}">📅 予定に追加</button> <a class="btn small ghost" href="${esc(dirUrl(x.spot, { from: i ? steps[i - 1].spot : findHere, mode: "transit" }))}" target="_blank" rel="noopener">🚃 ${i ? "前の場所から" : "ここまで"}の行き方</a></div></div>`).join("")}
-      <div class="find-deal-links" style="margin-top:8px"><a class="btn small sub" href="${esc(dirUrl(steps.at(-1).spot, { from: findHere, mode: "driving", via: steps.slice(0, -1).map(x => x.spot) }))}" target="_blank" rel="noopener">🚗 このコースを車で（時間を見る）</a><a class="btn small sub" href="${esc(dirUrl(steps[0].spot, { from: findHere, mode: "transit" }))}" target="_blank" rel="noopener">🚃 最初の場所まで電車で</a></div><p class="note" style="margin:6px 0 0">AIが考えた案です。営業時間などはお店のページで確かめてね${leftNote(out)}</p></div>`;
-    box.querySelectorAll("[data-plan-step]").forEach(b => b.onclick = () => {
-      const x = steps[+b.dataset.planStep], sp = x.spot;
-      planFromSpot({ name: sp.name, lat: sp.lat, lng: sp.lng, address: sp.address, catKeys: sp.catKeys || [] }, sp.wishId);
-      $("fDate").value = day; $("fTime").value = x.time; updateSaveNote();
-    });
-  } catch (e) { box.innerHTML = `<p class="note">${esc(e.message)}</p>`; }
-  finally { btn.disabled = false; }
+    const used = out.steps.map(st => { const x = course.find(c => c.name === st.name); return x && { ...x, time: st.time, note: st.note }; }).filter(Boolean);
+    course = [...used, ...course.filter(c => !used.some(u => u.name === c.name))]; saveCourse(); openCourse();
+    $("courseMsg").textContent = `✨ AIが順番と時間を入れました。時間は自由に直せます${leftNote(out)}`;
+  } catch (e) { msg.textContent = e.message; btn.disabled = false; }
+}
+async function saveCourseAsPlans() {
+  const day = courseDay(), btn = $("courseSave");
+  if (day < todayStr()) { toast("過ぎた日には入れられません"); return; }
+  btn.disabled = true; btn.textContent = "入れています…";
+  try {
+    const batch = db.batch();
+    for (const x of course) {
+      const ref = recordCollection("events").doc();
+      batch.set(ref, ownedData({ cat: catForSpot(x.catKeys), kind: "plan", date: day, time: x.time || "", who: [], place: x.name, title: x.name, memo: [x.note, x.address].filter(Boolean).join("\n"), link: "", fav: false, thumbs: [], lat: x.lat, lng: x.lng, sends: [], nextSendAt: null, createdAt: TS(), updatedAt: TS() }));
+      if (x.wishId) batch.update(recordCollection("events").doc(x.wishId), { status: "scheduled", planId: ref.id, updatedAt: TS() });
+    }
+    await batch.commit();
+    toast(`📅 ${fmtDate(day)}に${course.length}件の予定を入れました`, 5000);
+    course = []; saveCourse(); closeSheets(); refreshCourseButtons();
+  } catch (e) { console.warn(e); toast("予定に入れられませんでした。もう一度お試しください"); btn.disabled = false; btn.textContent = "📅 予定にまとめて入れる"; }
 }
 /* ---------- 県・市町村 と イベント ---------- */
 const PREF_SLUG = Object.fromEntries("北海道 hokkaido 青森県 aomori 岩手県 iwate 宮城県 miyagi 秋田県 akita 山形県 yamagata 福島県 fukushima 茨城県 ibaraki 栃木県 tochigi 群馬県 gunma 埼玉県 saitama 千葉県 chiba 東京都 tokyo 神奈川県 kanagawa 新潟県 niigata 富山県 toyama 石川県 ishikawa 福井県 fukui 山梨県 yamanashi 長野県 nagano 岐阜県 gifu 静岡県 shizuoka 愛知県 aichi 三重県 mie 滋賀県 shiga 京都府 kyoto 大阪府 osaka 兵庫県 hyogo 奈良県 nara 和歌山県 wakayama 鳥取県 tottori 島根県 shimane 岡山県 okayama 広島県 hiroshima 山口県 yamaguchi 徳島県 tokushima 香川県 kagawa 愛媛県 ehime 高知県 kochi 福岡県 fukuoka 佐賀県 saga 長崎県 nagasaki 熊本県 kumamoto 大分県 oita 宮崎県 miyazaki 鹿児島県 kagoshima 沖縄県 okinawa".split(" ").reduce((a, x, i, all) => (i % 2 ? a : [...a, [x, all[i + 1]]]), []));
@@ -1737,8 +1836,12 @@ async function drawEvents() {
   const [, m, d] = day.split("-").map(Number), google = q => `https://www.google.com/search?q=${encodeURIComponent(q)}`;
   const draw = (word, pref, city = "") => {
     if (!$("eventSearch")) return;
-    const short = String(pref || "").replace(/(都|府|県)$/, ""), town = city || (findArea ? findArea.city : "");
-    $("giftLinks").innerHTML = affButton(`https://search.rakuten.co.jp/search/mall/${encodeURIComponent(`${short || "ご当地"} お土産`)}/`, "rakuten", `🎁 ${esc(short || "ご当地")}のお土産`, "btn small sub")
+    const short = String(pref || "").replace(/(都|府|県)$/, ""), town = city || (findArea ? findArea.city : ""), local = town || short;
+    $("giftWhere").textContent = local ? `行く場所：${town ? (pref || "") + town : pref}` : "① で行く場所を選ぶと、その土地のものが出ます";
+    $("giftLinks").innerHTML = (local ? `<a class="btn small sub" href="${google(`${local} ご当地グルメ 名物`)}" target="_blank" rel="noopener">🍜 ${esc(local)}のご当地グルメを調べる</a>`
+      + `<button type="button" class="btn small sub" data-local-food="${esc(local)}">🍽 ${esc(local)}の名物が食べられるお店</button>` : "")
+      + affButton(`https://search.rakuten.co.jp/search/mall/${encodeURIComponent(`${local || "ご当地"} 名物 お取り寄せ`)}/`, "rakuten", `🛒 ${esc(local || "ご当地")}の名物をお取り寄せ`, "btn small sub")
+      + affButton(`https://search.rakuten.co.jp/search/mall/${encodeURIComponent(`${short || "ご当地"} お土産`)}/`, "rakuten", `🎁 ${esc(short || "ご当地")}のお土産`, "btn small sub")
       + affButton(`https://search.rakuten.co.jp/search/mall/${encodeURIComponent(`ふるさと納税 ${town || pref || ""}`.trim())}/`, "rakuten", `🏡 ${esc(town || pref || "")}${town || pref ? "の" : ""}ふるさと納税`, "btn small sub");
     const slug = PREF_SLUG[pref], exp = `https://experiences.travel.rakuten.co.jp/${slug ? "destinations/" + slug : ""}`;
     $("eventSearch").innerHTML = `<a class="btn small sub" href="${google(`${word || "近く"} イベント ${m}月${d}日`)}" target="_blank" rel="noopener">🔍 ${esc(word || "近く")}の${esc(dayWord(day))}のイベント</a>`
@@ -1746,6 +1849,7 @@ async function drawEvents() {
       + affButton(exp, "rakuten", `🎟 ${esc(slug ? pref : "全国")}の遊び・体験を予約`, "btn small sub");
   };
   // 探している場所（県・市町村／指定した場所／今いる市町村）のイベント
+  $("giftLinks").onclick = ev => { const b = ev.target.closest("[data-local-food]"); if (b) { lastFind = { words: `${b.dataset.localFood} 名物` }; findSpots(lastFind); } };
   if (findArea) return draw(findArea.pref + findArea.city, findArea.pref, findArea.city);
   const at = findPlace || findHere;
   draw(findPlace ? findPlace.label : "", "");
@@ -1856,10 +1960,10 @@ async function nominatim(q, c, limit = 15) {
 function spotFromOsm(e) {
   const t = e.tags || {}, lat = e.lat ?? e.center?.lat, lng = e.lon ?? e.center?.lon;
   // 喫煙所は名前がないことが多いので「喫煙所」と出す
-  const smoke = t.amenity === "smoking_area" || t.smoking === "designated";
-  const name = t["name:ja"] || t.name || (smoke ? `喫煙所${t.operator ? `（${t.operator}）` : ""}` : "");
+  const smoke = t.amenity === "smoking_area" || t.smoking === "designated", dog = t.leisure === "dog_park";
+  const name = t["name:ja"] || t.name || (smoke ? `喫煙所${t.operator ? `（${t.operator}）` : ""}` : dog ? "ドッグラン" : "");
   if (!name || !Number.isFinite(lat)) return null;
-  return { id: `osm:${e.type}/${e.id}`, name, genre: genreOf(t) || (smoke ? "喫煙所" : ""), address: addrOf(t), lat, lng, hours: t.opening_hours || "", website: t.website || t["contact:website"] || "", ...(t.name || t["name:ja"] ? {} : { generic: true }) };
+  return { id: `osm:${e.type}/${e.id}`, name, genre: genreOf(t) || (smoke ? "喫煙所" : dog ? "ドッグラン" : ""), address: addrOf(t), lat, lng, hours: t.opening_hours || "", website: t.website || t["contact:website"] || "", ...(t.name || t["name:ja"] ? {} : { generic: true }) };
 }
 function spotFromNominatim(n) {
   const a = n.address || {}, lat = Number(n.lat), lng = Number(n.lon);
@@ -1959,6 +2063,7 @@ async function findSpots({ key = "", words = "" } = {}) {
         spots = (await nominatim(words, center)).map(spotFromNominatim).filter(Boolean);
       }
     }
+    if (key === "dog") { findLoading("ドッグランの場所を確かめています…", "そばのお店や公園の名前を調べています"); spots = await nameDogRuns(spots); }
     const from = findPlace || findHere || center;
     const seen = new Set();
     spots = spots.filter(s => !seen.has(s.id) && seen.add(s.id)).map(s => ({ ...s, dist: distanceM(from, s), catKeys: key ? FIND_CATS[key].cat : [] }))
@@ -1974,6 +2079,7 @@ async function findSpots({ key = "", words = "" } = {}) {
     if (!usedHp && (findFilters.size || findBudget) && (FOOD.has(key) || !key)) note.textContent += "（こだわり・予算はホットペッパーのお店だけに使えます）";
     box.querySelectorAll("[data-wish]").forEach(b => b.onclick = () => addWish(findShown[+b.dataset.wish], b));
     box.querySelectorAll("[data-plan]").forEach(b => b.onclick = () => planFromSpot(findShown[+b.dataset.plan]));
+    box.querySelectorAll("[data-course]").forEach(b => b.onclick = () => toggleCourse(findShown[+b.dataset.course], b));
   } catch (e) {
     console.warn(e);
     box.innerHTML = "";
@@ -2086,6 +2192,7 @@ function spotCard(s, i) {
     <div class="acts">
       <button type="button" class="btn small ${have ? "sub" : "rose"}" data-wish="${i}" ${have ? "disabled" : ""}>${have ? "✓ 行きたいリストにあります" : "📌 ここ行きたい！"}</button>
       <button type="button" class="btn small sub" data-plan="${i}">📅 予定に追加</button>
+      <button type="button" class="btn small sub ${inCourse(s) ? "on-course" : ""}" data-course="${i}">${inCourse(s) ? "✓ コースに入っています" : "➕ コース"}</button>
       <a class="btn small ghost" href="${spotMapLink(s)}" target="_blank" rel="noopener">🗺 地図</a>
       <a class="btn small ghost" href="${esc(dirUrl(s, { from: findHere }))}" target="_blank" rel="noopener">🧭 行き方</a>
       ${s.source === "hp" && s.couponUrl ? affButton(s.couponUrl, "hp", s.coupon ? "🎟 クーポンを見る" : "🎟 クーポン・予約", "btn small rose-ghost") : ""}
@@ -2146,11 +2253,13 @@ function renderWishes() {
     return `<div class="spot${w.imageUrl ? " has-photo" : ""}">${w.imageUrl ? `<img class="spot-photo" src="${esc(w.imageUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}<div class="spot-body"><h3>${badge}${esc(w.place || w.title)}</h3>
       <div class="meta">${w.genre ? `<b>${esc(w.genre)}</b>　` : ""}${w.memo ? esc(w.memo) : ""}</div></div>
       <div class="acts">${main}
+        ${w.status !== "visited" && Number.isFinite(w.lat) ? `<button type="button" class="btn small sub ${inCourse({ name: w.place }) ? "on-course" : ""}" data-course-wish="${w.id}">${inCourse({ name: w.place }) ? "✓ コース" : "➕ コース"}</button>` : ""}
         <a class="btn small ghost" href="${spotMapLink({ name: w.place, lat: w.lat, lng: w.lng })}" target="_blank" rel="noopener">🗺 地図</a>
         <button type="button" class="btn small ghost" data-wdel="${w.id}">消す</button></div></div>`;
   }).join("");
   box.querySelectorAll("[data-wplan]").forEach(b => b.onclick = () => { const w = wishes.find(x => x.id === b.dataset.wplan); if (w) planFromSpot({ name: w.place, lat: w.lat, lng: w.lng, address: w.memo, catKeys: [w.cat] }, w.id); });
   box.querySelectorAll("[data-open-plan]").forEach(b => b.onclick = () => { const w = wishes.find(x => x.id === b.dataset.openPlan); if (w) openDetail(w.planId); });
+  box.querySelectorAll("[data-course-wish]").forEach(b => b.onclick = () => { const w = wishes.find(x => x.id === b.dataset.courseWish); if (w) toggleCourse(wishSpot(w), b); });
   box.querySelectorAll("[data-memory]").forEach(b => b.onclick = () => { const w = wishes.find(x => x.id === b.dataset.memory); if (w) editRecord(w.planId); });
   box.querySelectorAll("[data-wdel]").forEach(b => b.onclick = async () => {
     const w = wishes.find(x => x.id === b.dataset.wdel); if (!w || !confirm(`「${w.place}」を行きたいリストから消しますか？`)) return;
@@ -2167,7 +2276,11 @@ function closeFind() {
   $("findWhatTitle").scrollIntoView({ block: "start", behavior: "smooth" });
 }
 function setupFind() {
-  $("aiPlanBtn").onclick = makePlan;
+  $("eventNameForm").onsubmit = ev => {
+    ev.preventDefault(); const q = $("eventNameQ").value.trim(); if (!q) { $("eventNameQ").focus(); return; }
+    window.open(`https://www.google.com/search?q=${encodeURIComponent(`${q} イベント 日程 ${new Date().getFullYear()}`)}`, "_blank", "noopener");
+  };
+  $("courseOpen").onclick = openCourse; $("courseBar").onclick = openCourse; renderCourseBar();
   $("findCloseTop").onclick = closeFind; $("findCloseBottom").onclick = closeFind;
   renderTravelDeals();
   $("findForm").onsubmit = e => { e.preventDefault(); const q = $("findQ").value.trim(); if (!q) { $("findQ").focus(); return; } $("findQ").blur(); lastFind = { words: q }; findSpots(lastFind); };
@@ -2443,8 +2556,9 @@ async function fillFromPhoto(file, targetForm) {
 }
 function renderPhotos() {
   const box = $("fPhotos");
-  box.innerHTML = form.photos.map((p, i) => `<div class="ph"><img src="${p.thumb}" alt=""><button data-rm="${i}" aria-label="外す">✕</button></div>`).join("") +
-    (form.photos.length < MAX_PHOTOS ? `<label class="addph" for="fPhotoInput">${icon("camera")}写真を追加</label>` : "");
+  // 写真が読み込めなかった記録は、写真はそのまま（文字だけ直せる）
+  box.innerHTML = form.photos.map((p, i) => `<div class="ph"><img src="${p.thumb}" alt="">${form.keepPhotos ? "" : `<button data-rm="${i}" aria-label="外す">✕</button>`}</div>`).join("") +
+    (!form.keepPhotos && form.photos.length < MAX_PHOTOS ? `<label class="addph" for="fPhotoInput">${icon("camera")}写真を追加</label>` : "");
   box.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { form.photos.splice(+b.dataset.rm, 1); renderPhotos(); });
   $("phCount").textContent = `${form.photos.length}/${MAX_PHOTOS}枚${form.photoPending ? "（写真を準備中…）" : ""}`;
 }
@@ -2469,7 +2583,8 @@ async function saveRecord() {
   else if (editingId) { data.lat = firebase.firestore.FieldValue.delete(); data.lng = firebase.firestore.FieldValue.delete(); }
   if (!data.title && !data.place) { toast("「どこで？」か「なにをする？」を入れてください"); $("fTitle").focus(); return; }
   if ($("saveBtn").disabled) return;
-  if (form.photos.some(p => !p.full)) { toast("写真を読み込めませんでした。記録を開き直してください。"); return; }
+  if (!form.keepPhotos && form.photos.some(p => !p.full)) { toast("写真を読み込めませんでした。記録を開き直してください。"); return; }
+  if (form.keepPhotos) delete data.thumbs; // 写真は元のまま
   const savingForm = form;
   const photos = form.photos.map(p => ({...p}));
   const controls = [...document.querySelectorAll('#tab-rec input, #tab-rec textarea, #tab-rec select, #tab-rec button')].filter(el => !el.disabled);
@@ -2486,13 +2601,15 @@ async function saveRecord() {
       try { existing = await eventRef.get({source: "server"}); }
       catch (error) { if (error.code !== "permission-denied") throw error; }
     }
-    const old = await ownedQuery("photos").where("eventId", "==", id).get({source: "server"});
+    const keep = savingForm.keepPhotos;
+    // 写真のない記録は、古い写真の確認ができなくても保存を止めない
+    const old = keep ? [] : await ownedQuery("photos").where("eventId", "==", id).get({source: "server"}).catch(err => { if (photos.length) throw err; console.warn(err); return []; });
     const batch = db.batch();
     if (wasNew && !existing?.exists) batch.set(eventRef, ownedData({...data, sends: [], nextSendAt: null, createdAt: TS()}));
     else batch.update(eventRef, data);
     const photoIds = new Set(photos.map((p, i) => `${id}_${i}`));
     old.forEach(d => { if (!photoIds.has(d.id)) batch.delete(d.ref); });
-    photos.forEach((p, i) => batch.set(recordCollection("photos").doc(`${id}_${i}`), ownedData({ eventId: id, i, data: p.full })));
+    if (!keep) photos.forEach((p, i) => batch.set(recordCollection("photos").doc(`${id}_${i}`), ownedData({ eventId: id, i, data: p.full })));
     await batch.commit();
     if (savingForm.fromWish && isPlan(data)) recordCollection("events").doc(savingForm.fromWish).update({ status: "scheduled", planId: id, updatedAt: TS() }).catch(e => console.warn(e));
     if (form !== savingForm) { toast("記録を保存しました"); return; }
@@ -2518,16 +2635,17 @@ async function editRecord(id) {
   $("fFav").classList.toggle("on", form.fav);
   $("saveBtn").textContent = "変更を保存する"; $("cancelEditBtn").classList.remove("hidden");
   $("recEyebrow").textContent = "記録を直す";
-  // 既存の大きい写真を読み込む
-  try {
-    const ps = await ownedQuery("photos").where("eventId", "==", id).get();
-    ps.forEach(d => { const x = d.data(); if (form.photos[x.i]) form.photos[x.i].full = x.data; });
-    if (form.photos.some(p => !p.full)) throw new Error("Missing full photo");
-  } catch {
-    resetForm();
-    toast("写真を読み込めなかったため、編集を止めました。電波のよい所で開き直してください。");
-    goTab("list");
-    return;
+  // 既存の大きい写真を読み込む（写真のない予定は読まない）。読めなくても、写真はそのままにして文字は直せるようにする
+  if (form.photos.length) {
+    try {
+      const ps = await ownedQuery("photos").where("eventId", "==", id).get();
+      ps.forEach(d => { const x = d.data(); if (form.photos[x.i]) form.photos[x.i].full = x.data; });
+      if (form.photos.some(p => !p.full)) throw new Error("Missing full photo");
+    } catch (err) {
+      console.warn(err);
+      form.keepPhotos = true;
+      toast("写真を読み込めなかったので、写真はそのままです。文字や日時は直せます。", 5000);
+    }
   }
   renderCats(); renderWho(); renderPhotos(); updateSaveNote(); updateMapLink();
   goTab("rec");
@@ -2841,7 +2959,7 @@ async function openDetail(id) {
     if (full.length && $("dPhotos")) $("dPhotos").innerHTML = full.map(s => `<img src="${s}" alt="">`).join("");
   } catch {}
 }
-function closeSheets() { closeInsta(); clearInterval(couponClock); ["detailSheet", "catSheet", "sendSheet", "couponSheet"].forEach(x => $(x).classList.add("hidden")); }
+function closeSheets() { closeInsta(); clearInterval(couponClock); ["detailSheet", "catSheet", "sendSheet", "couponSheet", "courseSheet"].forEach(x => $(x).classList.add("hidden"));  renderCourseBar(); }
 
 /* =========================================================
    インスタに投稿：画像を作ってiPhoneの共有画面へ

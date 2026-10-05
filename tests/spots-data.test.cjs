@@ -45,3 +45,13 @@ test('道の駅 rows: one per name, closed ones skipped', () => {
   ]);
   assert.deepEqual(r, [['n1', '道の駅 雷電くるみの里', 36.36, 138.36, '東御市', '', '']]);
 });
+
+test('dog runs without a name get the name of the shop or park right next to them', () => {
+  const {nameDogRuns} = require('../scripts/spots-data.cjs');
+  const list = [['d', 'w1', 'ドッグラン', 36.40803, 138.20455, 'ドッグラン', '', '', ''], ['d', 'w2', 'ドッグラン', 36.0, 138.0, 'ドッグラン', '', '', ''], ['d', 'n3', '滝沢牧場', 35.96, 138.46, '', '', '', ''], ['p', 'x', 'ドッグラン', 36.40803, 138.20455, '', '', '', '']];
+  const near = [{type: 'way', center: {lat: 36.4085, lon: 138.2049}, tags: {name: '綿半スーパーセンター上田店', shop: 'doityourself'}}, {type: 'node', lat: 36.4081, lon: 138.2046, tags: {name: '第2ドッグラン'}}, {type: 'node', lat: 36.5, lon: 138.5, tags: {name: '遠いお店', shop: 'x'}}];
+  const out = nameDogRuns(list, near);
+  assert.equal(out[0][2], '綿半スーパーセンター上田店のドッグラン');
+  assert.equal(out[1][2], 'ドッグラン', 'nothing nearby → unchanged');
+  assert.equal(out[2][2], '滝沢牧場'); assert.equal(out[3][2], 'ドッグラン', 'only dog runs are renamed');
+});
