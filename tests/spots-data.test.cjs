@@ -1,6 +1,6 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {rows, kinds, keepRicher} = require('../scripts/spots-data.cjs');
+const {rows, kinds, keepRicher, michiRows} = require('../scripts/spots-data.cjs');
 test('places are sorted into parks, hot springs and dog-friendly spots with compact rows', () => {
   assert.deepEqual(kinds({leisure: 'park'}), ['p']);
   assert.deepEqual(kinds({amenity: 'public_bath', name: '別所温泉 大湯'}), ['o']);
@@ -34,4 +34,14 @@ test('a kind that shrank a lot keeps last week\'s places', () => {
   const out = keepRicher(fresh, old, k => warned.push(k));
   assert.equal(out.filter(r => r[0] === 'p').length, 10); assert.deepEqual(warned, ['p']);
   assert.deepEqual(out.filter(r => r[0] !== 'p'), [['o', 'y'], ['d', 'z']]);
+});
+
+test('道の駅 rows: one per name, closed ones skipped', () => {
+  const r = michiRows([
+    {type: 'node', id: 1, lat: 36.36, lon: 138.36, tags: {name: '道の駅 雷電くるみの里', 'addr:city': '東御市'}},
+    {type: 'way', id: 2, center: {lat: 36.3601, lon: 138.3601}, tags: {name: '道の駅 雷電くるみの里'}},
+    {type: 'node', id: 3, lat: 36, lon: 138, tags: {name: '道の駅 むかし（閉館）'}},
+    {type: 'node', id: 4, lat: 36, lon: 138, tags: {name: 'ただの駐車場'}},
+  ]);
+  assert.deepEqual(r, [['n1', '道の駅 雷電くるみの里', 36.36, 138.36, '東御市', '', '']]);
 });

@@ -378,7 +378,7 @@ test('find spots: food searches use Hotpepper (photo, budget, credit) and fall b
   d.querySelector('[data-find="cafe"]').click();await settle();await settle();assert.equal(sent.length,n);
  }finally{a.close();}
 });
-test('find spots: Nagano parks and hot springs come from the weekly data; わんこOK mixes pet-friendly shops and dog runs',async()=>{
+test('find spots: Nagano parks and hot springs come from the weekly data; dog runs and dog-friendly shops are separate',async()=>{
  const a=app();try{const {w,d}=a;await w.h.startOwner();
   Object.defineProperty(w.navigator,'geolocation',{value:{getCurrentPosition:(ok)=>ok({coords:{latitude:36.40,longitude:138.25}})},configurable:true});
   const calls=[];
@@ -399,7 +399,10 @@ test('find spots: Nagano parks and hot springs come from the weekly data; わん
   assert(!calls.some(u=>u.includes('overpass')));
   d.querySelector('[data-find="dog"]').click();await settle();await settle();
   names=[...d.querySelectorAll('#findResults .spot h3')].map(x=>x.textContent);
-  assert.deepEqual(names.sort(),['わんこカフェ','ドッグラン'].sort());
+  assert.deepEqual(names,['ドッグラン'],'ドッグラン only shows dog runs');
+  d.querySelector('[data-find="dogfood"]').click();await settle();await settle();
+  names=[...d.querySelectorAll('#findResults .spot h3')].map(x=>x.textContent);
+  assert.deepEqual(names,['わんこカフェ'],'わんこと入れるお店 asks Hotpepper for pet-friendly shops');
   assert.match(d.getElementById('findResults').textContent,/Powered by ホットペッパー/);
  }finally{a.close();}
 });
@@ -436,19 +439,65 @@ test('find extras: conditions and budget go to Hotpepper, my own records match f
   w.h.setEvents([{id:'m1',kind:'memory',date:'2026-09-01',title:'ラーメン',place:'中華 はなこ',memo:'餃子がおいしい',cat:'食事'}]);
   d.querySelector('.maintabs [data-tab="find"]').click();await settle();
   // weather: rainy day suggests indoor places
-  const wb=d.getElementById('findWeather');assert(!wb.classList.contains('hidden'));assert.match(wb.textContent,/雨.*最高18℃.*雨80%/s);assert(wb.classList.contains('rain'));
+  const wb=d.getElementById('findWeather');assert(!wb.classList.contains('hidden'));assert.match(wb.textContent,/上田駅あたりの今日の天気.*雨.*最高18℃.*雨80%/s);assert(wb.querySelector('#wxHere'),'offers to use the current location');assert(wb.classList.contains('rain'));
   wb.querySelector('[data-wfind="indoor"]').click();await settle();await settle();
   assert.deepEqual([...d.querySelectorAll('#findResults .spot h3')].map(x=>x.textContent),['上田市立博物館'],'indoor = museums only');
   // conditions and budget
   d.querySelector('[data-filter="parking"]').click();d.querySelector('[data-filter="private_room"]').click();d.querySelector('[data-budget="B011,B001"]').click();
-  assert.equal(d.getElementById('findMoreCount').textContent,'3');
   d.getElementById('findQ').value='餃子';d.getElementById('findForm').dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();await settle();
   const b=sent.at(-1);assert.deepEqual(b.filters,['parking','private_room']);assert.deepEqual(b.budget,['B011','B001']);
   // my own record appears first, and opens the detail
   const mine=d.querySelector('#findResults .mine');assert(mine);assert.match(mine.textContent,/自分の記録から（1件）.*ラーメン/s);
   mine.querySelector('[data-mine]').click();assert(!d.getElementById('detailSheet').classList.contains('hidden'));
   // budget toggles off
-  d.querySelector('[data-budget="B011,B001"]').click();assert.equal(d.getElementById('findMoreCount').textContent,'2');
+  d.querySelector('[data-budget="B011,B001"]').click();assert(!d.querySelector('[data-budget="B011,B001"]').classList.contains('on-opt'));
   for(let i=0;i<6;i++)await settle();
+ }finally{a.close();}
+});
+
+test('道の駅 come from the nationwide list; spot cards and plan details show the weather where you are going',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  Object.defineProperty(w.navigator,'geolocation',{value:{getCurrentPosition:(ok)=>ok({coords:{latitude:36.40,longitude:138.25}})},configurable:true});
+  const wx=[];
+  w.fetch=async(url)=>{url=String(url);
+   if(url.includes('michinoeki'))return{ok:true,json:async()=>({rows:[['n1','道の駅 雷電くるみの里',36.36,138.36,'東御市','',''],['n2','道の駅 遠すぎ',43.0,141.3,'札幌市','','']]})};
+   if(url.includes('open-meteo')){wx.push(url);const n=new URL(url).searchParams.get('latitude').split(',').length;const one={daily:{weather_code:[0],temperature_2m_max:[24.2],temperature_2m_min:[11],precipitation_probability_max:[0]}};return{ok:true,json:async()=>n>1?Array(n).fill(one):one};}
+   return{ok:true,json:async()=>[]};};
+  const settle=()=>new Promise(r=>setTimeout(r,25));
+  d.querySelector('.maintabs [data-tab="find"]').click();await settle();
+  d.querySelector('[data-find="michi"]').click();for(let i=0;i<4;i++)await settle();
+  const cards=[...d.querySelectorAll('#findResults .spot')];assert.equal(cards.length,1);assert.match(cards[0].textContent,/道の駅 雷電くるみの里/);
+  assert.match(cards[0].querySelector('.wx').textContent,/今日 ☀️ 晴れ 24℃ 雨0%/);
+  // the weather card now says it is for the current location
+  assert.match(d.getElementById('findWeather').textContent,/現在地の今日の天気/);
+  // plan detail: forecast for that place and day
+  const t=new Date();t.setDate(t.getDate()+3);const day=`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  w.h.setEvents([{id:'p1',kind:'plan',date:day,title:'ドライブ',place:'道の駅 雷電くるみの里',lat:36.36,lng:138.36,cat:'旅行'}]);
+  w.eval('openDetail("p1")');await settle();
+  assert(wx.some(u=>u.includes('start_date='+day)));
+  assert.match(d.getElementById('dWeather').textContent,/道の駅 雷電くるみの里の天気予報：☀️ 晴れ 24℃ 雨0%（最低11℃）/);
+ }finally{a.close();}
+});
+test('search place: here by default, or a named place that moves the search, weather and distances',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  let geo=0;Object.defineProperty(w.navigator,'geolocation',{value:{getCurrentPosition:(ok)=>{geo++;ok({coords:{latitude:36.40,longitude:138.25}});}},configurable:true});
+  const sent=[],wx=[];
+  w.fetch=async(url,opt)=>{url=String(url);
+   if(url.includes('nominatim')&&url.includes('search'))return{ok:true,json:async()=>[{lat:'36.3428',lon:'138.6353',name:'軽井沢駅'}]};
+   if(url.includes('open-meteo')){wx.push(url);return{ok:true,json:async()=>({daily:{weather_code:[3],temperature_2m_max:[17],precipitation_probability_max:[20]}})};}
+   if(url.includes('/spots/search')){sent.push(JSON.parse(opt.body));return{ok:true,status:200,json:async()=>({shops:[{id:'hp:1',name:'森のカフェ',genre:'カフェ',lat:36.345,lng:138.636,url:'',photo:''}]})};}
+   return{ok:true,json:async()=>[]};};
+  const settle=()=>new Promise(r=>setTimeout(r,25));
+  d.querySelector('.maintabs [data-tab="find"]').click();await settle();
+  d.getElementById('wherePick').click();assert(!d.getElementById('findPlaceForm').classList.contains('hidden'));
+  d.getElementById('findPlaceQ').value='軽井沢駅';d.getElementById('findPlaceForm').dispatchEvent(new w.Event('submit',{cancelable:true}));for(let i=0;i<3;i++)await settle();
+  assert.equal(d.getElementById('wherePick').textContent,'🗺 軽井沢駅');assert(d.getElementById('wherePick').classList.contains('on-where'));
+  assert.match(d.getElementById('findWeather').textContent,/軽井沢駅あたりの今日の天気/);assert.match(wx.at(-1),/latitude=36\.343/);
+  d.querySelector('[data-find="cafe"]').click();for(let i=0;i<3;i++)await settle();
+  assert.deepEqual(sent.at(-1),{kind:'cafe',lat:36.3428,lng:138.6353,range:5});assert.equal(geo,0,'no location needed for a named place');
+  assert.match(d.getElementById('findNote').textContent,/^軽井沢駅のまわりで1件/);assert.match(d.querySelector('#findResults .spot').textContent,/📍(2\d0|3\d0)m/);
+  // back to here: re-runs the last search around the current location
+  d.querySelector('[data-where="here"]').click();for(let i=0;i<4;i++)await settle();
+  assert.deepEqual(sent.at(-1),{kind:'cafe',lat:36.4,lng:138.25,range:5});assert.equal(geo,1);
  }finally{a.close();}
 });
