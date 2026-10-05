@@ -91,6 +91,12 @@
   .find-res-head { display: flex; align-items: flex-start; gap: 8px; }
   .find-res-head .note { flex: 1; }
   .find-res-head .btn { flex: 0 0 auto; margin-top: 2px; }
+  .countdown { display: flex; gap: 8px; overflow-x: auto; margin: 4px 0 12px; padding-bottom: 2px; }
+  .cd { flex: 0 0 auto; min-width: 128px; max-width: 200px; text-align: left; background: #fff4e8; border: 1px solid #f0d2ae; border-radius: 14px; padding: 10px 12px; cursor: pointer; font: inherit; color: var(--navy); }
+  .cd .n { font-size: 13px; color: var(--rose); font-weight: 800; }
+  .cd .n b { font-size: 26px; margin: 0 2px; }
+  .cd .t { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cd small { color: var(--muted); font-size: 11.5px; }
   .find-in { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 13px; color: var(--navy); margin: 2px 0 8px; }
   .find-in b { font-weight: 700; }
   .find-in .btn { width: auto; }
@@ -642,6 +648,7 @@
     </div>
       <button class="plus-btn" id="heroPlus" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg><span id="heroPlusLabel">記録する</span></button>
 
+    <div id="countdown" class="countdown hidden" aria-label="楽しみな予定"></div>
     <div class="tiles hidden" id="memoryViews">
       <button type="button" class="tile c2" data-view="mem" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>思い出</button>
       <button type="button" class="tile c0" data-view="fav" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.5-1.4 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.1 3 5.5l7 7Z"/></svg>また行きたい</button>
@@ -2592,7 +2599,20 @@ function memoryCover(e) {
   const detail = e.memo || e.place || ((e.who || []).length ? e.who.join("・") + "と" : "この日の記録");
   return `<div class="img memory-cover ${catColor(catIndex(e.cat))}"><div class="cover-top"><span>${esc(catLabel(e.cat) || "記録")}</span>${icon(category.icon)}</div><div class="cover-date">${p.m}<span style="font-size:16px">月</span> ${p.d}<span style="font-size:16px">日</span></div><div class="cover-note">${esc(detail)}</div></div>`;
 }
+// ⑤ カウントダウン：60日以内の予定を近い順に3つ
+function renderCountdown() {
+  const box = $("countdown"); if (!box) return;
+  const t = todayStr(), until = addDays(t, 60);
+  const list = events.filter(e => e.kind !== "memory" && e.date >= t && e.date <= until).sort((a, b) => (a.date + (a.time || "")) < (b.date + (b.time || "")) ? -1 : 1).slice(0, 3);
+  const show = list.length && $("memoryViews").classList.contains("hidden");
+  box.classList.toggle("hidden", !show); if (!show) { box.innerHTML = ""; return; }
+  const days = d => Math.round((new Date(d + "T12:00") - new Date(t + "T12:00")) / 86400000);
+  box.innerHTML = list.map(e => { const n = days(e.date);
+    return `<button type="button" class="cd" data-cd="${esc(e.id)}"><div class="n">${n === 0 ? "🎉 <b>今日</b>！" : n === 1 ? "✨ <b>明日</b>！" : `あと<b>${n}</b>日`}</div><div class="t">${esc(e.title || e.place || catLabel(e.cat))}</div><small>${esc(fmtDate(e.date))}${e.time ? " " + esc(e.time) : ""}</small></button>`; }).join("");
+  box.querySelectorAll("[data-cd]").forEach(b => b.onclick = () => openDetail(b.dataset.cd));
+}
 function renderList() {
+  renderCountdown();
   if (!$("listBox") || !calMonth) return;
   const waiting = recordsState !== "ready";
   const message = recordsState === "error" ? "記録を読み込めませんでした。通信を確認して、もう一度お試しください。" : recordsState === "cached" ? "保存済みの記録を確認中です。通信が戻ると更新します。" : "記録を読み込み中…";
