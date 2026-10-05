@@ -699,3 +699,15 @@ test('smoking: the 喫煙OK condition goes to Hotpepper, cards show the smoking 
   const names=[...d.querySelectorAll('#findResults .spot h3')].map(h=>h.textContent);assert.deepEqual(names.sort(),['喫煙所','喫煙所（上田市）']);
  }finally{a.close();}
 });
+
+test('countdown: the next plans within 60 days show as 今日 / 明日 / あと◯日 and open the plan',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  const t=new Date(),iso=k=>{const x=new Date(t.getFullYear(),t.getMonth(),t.getDate()+k);return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-${String(x.getDate()).padStart(2,'0')}`;};
+  w.h.setEvents([{id:'a',date:iso(5),title:'松本旅行'},{id:'b',date:iso(0),title:'ヨガ'},{id:'c',date:iso(1),title:'歯医者'},{id:'d',date:iso(2),title:'4つ目'},{id:'m',kind:'memory',date:iso(0),title:'思い出'},{id:'f',date:iso(90),title:'遠い'}]);
+  w.renderList();
+  const cards=[...d.querySelectorAll('#countdown .cd')].map(c=>c.textContent);
+  assert.equal(cards.length,3);assert.match(cards[0],/今日！ヨガ/);assert.match(cards[1],/明日！歯医者/);assert.match(cards[2],/あと2日4つ目/);
+  w.h.setEvents([{id:'a',date:iso(5),title:'松本旅行'}]);w.renderList();assert.match(d.querySelector('#countdown .cd').textContent,/あと5日松本旅行/);
+  w.h.setEvents([]);w.renderList();assert(d.getElementById('countdown').classList.contains('hidden'));
+ }finally{a.close();}
+});
