@@ -378,3 +378,28 @@ test('find spots: food searches use Hotpepper (photo, budget, credit) and fall b
   d.querySelector('[data-find="cafe"]').click();await settle();await settle();assert.equal(sent.length,n);
  }finally{a.close();}
 });
+test('find spots: Nagano parks and hot springs come from the weekly data; わんこOK mixes pet-friendly shops and dog runs',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  Object.defineProperty(w.navigator,'geolocation',{value:{getCurrentPosition:(ok)=>ok({coords:{latitude:36.40,longitude:138.25}})},configurable:true});
+  const calls=[];
+  w.fetch=async(url,opt)=>{calls.push(String(url));
+   if(String(url).includes('spots-nagano'))return{ok:true,json:async()=>({rows:[
+     ['o','n1','別所温泉 大湯',36.361,138.182,'温泉・銭湯','上田市','06:00-22:00',''],
+     ['o','n2','遠くの温泉',35.5,137.9,'温泉','','',''],
+     ['p','w3','上田城跡公園',36.402,138.244,'公園','上田市','',''],
+     ['d','n4','ドッグラン',36.41,138.26,'ドッグラン','','','']]})};
+   if(String(url).includes('/spots/search')){const b=JSON.parse(opt.body);return{ok:true,status:200,json:async()=>({shops:b.kind==='dog'?[{id:'hp:P1',name:'わんこカフェ',genre:'カフェ',lat:36.401,lng:138.251,url:'https://www.hotpepper.jp/strP1/',photo:''}]:[]})};}
+   if(String(url).includes('overpass'))throw new Error('should not be needed');
+   return{ok:true,json:async()=>[]};};
+  const settle=()=>new Promise(r=>setTimeout(r,20));
+  d.querySelector('.maintabs [data-tab="find"]').click();
+  d.querySelector('[data-find="onsen"]').click();await settle();await settle();
+  let names=[...d.querySelectorAll('#findResults .spot h3')].map(x=>x.textContent);
+  assert.deepEqual(names,['別所温泉 大湯'],'only hot springs within 40km');
+  assert(!calls.some(u=>u.includes('overpass')));
+  d.querySelector('[data-find="dog"]').click();await settle();await settle();
+  names=[...d.querySelectorAll('#findResults .spot h3')].map(x=>x.textContent);
+  assert.deepEqual(names.sort(),['わんこカフェ','ドッグラン'].sort());
+  assert.match(d.getElementById('findResults').textContent,/Powered by ホットペッパー/);
+ }finally{a.close();}
+});

@@ -5,7 +5,7 @@ import { verifyIdToken, cors } from './ai.mjs';
 const ORIGINS = ['https://pocham4173.github.io'];
 const API = 'https://webservice.recruit.co.jp/hotpepper/gourmet/v1/';
 // ジャンル（ホットペッパーのジャンルコード）
-export const GENRES = { cafe: 'G014', sweets: 'G014', ramen: 'G013', yakiniku: 'G008', izakaya: 'G001', sushi: 'G004', lunch: '' };
+export const GENRES = { cafe: 'G014', sweets: 'G014', ramen: 'G013', yakiniku: 'G008', izakaya: 'G001', sushi: 'G004', lunch: '', dog: '' };
 const json = (body, status, origin) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...cors(origin) } });
 const clean = (s, n) => String(s ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, n);
 const num = v => (typeof v === 'number' || (typeof v === 'string' && v.trim() !== '')) && Number.isFinite(Number(v)) ? Number(v) : NaN;
@@ -23,6 +23,7 @@ export function buildQuery(body, key) {
   if (!p.has('lat') && !keyword) return null;
   if (GENRES[kind]) p.set('genre', GENRES[kind]);
   if (kind === 'lunch') p.set('lunch', '1');
+  if (kind === 'dog') p.set('pet', '1'); // ペット可のお店だけ
   if (kind === 'sweets') p.set('keyword', [keyword, 'スイーツ'].filter(Boolean).join(' '));
   else if (kind === 'sushi') p.set('keyword', [keyword, '寿司'].filter(Boolean).join(' '));
   else if (keyword) p.set('keyword', keyword);
