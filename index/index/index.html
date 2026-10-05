@@ -2618,7 +2618,7 @@ async function saveRecord() {
     resetForm(); selectView(isPlan(saved) ? "cal" : "mem"); goTab("list");
     if (isPlan(saved)) openSend(id, saved);
     else toast(wasNew ? "記録しました" : "変更を保存しました");
-  } catch (e) { console.error(e); toast("保存できませんでした。電波のよい所でもう一度お試しください。"); }
+  } catch (e) { console.error(e); toast(`保存できませんでした。電波のよい所でもう一度お試しください。（${e?.code || e?.name || "error"}）`, 6000); }
   finally { controls.forEach(el => { el.disabled = false; }); updateSaveNote(); }
 }
 async function editRecord(id) {
@@ -2939,7 +2939,7 @@ async function openDetail(id) {
       <button class="btn ghost" id="dClose">閉じる</button>
     </div>`;
   if (plan) $("dSend").onclick = () => { closeSheets(); openSend(id); };
-  $("dEdit").onclick = () => editRecord(id);
+  $("dEdit").onclick = () => editRecord(id).catch(err => { console.error(err); toast(`直す画面を開けませんでした（${err?.code || err?.message || "error"}）。画面を見せてね`, 6000); });
   const fullPhotos = ownedQuery("photos").where("eventId", "==", id).get().then(ps => { const full = []; ps.forEach(d => { const x = d.data(); full[x.i] = x.data; }); return full.filter(Boolean); });
   $("dInsta").onclick = () => openInsta(e, fullPhotos.then(f => f[0] || (e.thumbs || [])[0] || "", () => (e.thumbs || [])[0] || ""));
   $("dDel").onclick = () => deleteRecord(id);
