@@ -42,7 +42,17 @@ function rows(elements) {
 }
 // GitHub の画面に理由が出るように（::warning:: / ::error::）
 const note = (level, msg) => console.log(`::${level}::${String(msg).replace(/[\r\n]+/g, ' ').slice(0, 300)}`);
+const wait = ms => new Promise(r => setTimeout(r, ms));
 async function fetchPart(part) {
+  let last;
+  // 地図サーバーが混んでいるときは、少し待って最大3回までやり直す
+  for (let round = 0; round < 3; round++) {
+    if (round) { note('warning', `busy; retrying in ${round * 60}s`); await wait(round * 60000); }
+    try { return await fetchOnce(part); } catch (e) { last = e; }
+  }
+  throw last;
+}
+async function fetchOnce(part) {
   let last;
   for (const url of MIRRORS) {
     try {
