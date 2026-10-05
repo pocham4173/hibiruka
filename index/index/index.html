@@ -71,6 +71,12 @@
   .find-bar input { flex: 1; min-width: 0; }
   .find-bar .btn { flex: 0 0 auto; padding: 0 18px; }
   .find-quick { margin-bottom: 4px; }
+  .find-quick .chip.busy, .find-bar .btn.busy { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .find-loading { display: flex; align-items: center; gap: 14px; background: var(--lav); border: 1px solid var(--lav-b); border-radius: 14px; padding: 18px 16px; margin: 10px 0; color: var(--lav-t); font-weight: 700; font-size: 16px; }
+  .find-loading small { display: block; font-weight: 500; font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .spinner { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; border: 4px solid var(--lav-b); border-top-color: var(--lav-t); animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
   .spot { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 10px; }
   .spot h3 { margin: 0 0 2px; font-size: 16.5px; color: var(--navy); line-height: 1.45; }
   .spot .meta { font-size: 13px; color: var(--muted); line-height: 1.6; }
@@ -1355,7 +1361,7 @@ async function overpass(sel, c, radius) {
   let last;
   for (const url of ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"]) {
     try {
-      const r = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+      const r = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined });
       if (r.ok) return (await r.json()).elements || [];
       last = new Error("overpass " + r.status);
     } catch (e) { last = e; }
@@ -1364,7 +1370,7 @@ async function overpass(sel, c, radius) {
 }
 async function nominatim(q, c, limit = 15) {
   const v = c ? `&viewbox=${c.lng - 0.4},${c.lat + 0.3},${c.lng + 0.4},${c.lat - 0.3}` : "";
-  const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&countrycodes=jp&accept-language=ja&addressdetails=1&namedetails=1&limit=${limit}${v}`, { headers: { Accept: "application/json" } });
+  const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&countrycodes=jp&accept-language=ja&addressdetails=1&namedetails=1&limit=${limit}${v}`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined });
   if (!r.ok) throw new Error("nominatim " + r.status);
   return r.json();
 }
@@ -1387,11 +1393,19 @@ function catForSpot(keys) {
   return cats[0]?.name || "";
 }
 
+function findLoading(text, sub) {
+  $("findResults").innerHTML = `<div class="find-loading" role="status"><span class="spinner" aria-hidden="true"></span><div>${esc(text)}<small>${esc(sub || "少しお待ちください")}</small></div></div>`;
+}
 async function findSpots({ key = "", words = "" } = {}) {
   if (findBusy) return;
   findBusy = true;
   const note = $("findNote"), box = $("findResults");
-  box.innerHTML = ""; note.textContent = "さがしています…";
+  const pressed = key ? document.querySelector(`[data-find="${key}"]`) : document.querySelector("#findForm .btn");
+  document.querySelectorAll("[data-find], #findForm .btn").forEach(b => { b.disabled = true; });
+  if (pressed) pressed.classList.add("busy");
+  note.textContent = "";
+  findLoading("さがしています…", key ? `「${FIND_CATS[key].label}」を探しています` : `「${words}」を探しています`);
+  box.scrollIntoView({ block: "center", behavior: "smooth" });
   try {
     // 何を探すか（ジャンル）と、どこで探すか（地名）を分ける
     let area = words.trim();
@@ -1402,13 +1416,16 @@ async function findSpots({ key = "", words = "" } = {}) {
       if (g && key) { center = { lat: Number(g.lat), lng: Number(g.lon) }; centerLabel = area; }
     }
     if (!center) {
+      if (!findHere) findLoading("現在地を確認しています…", "位置情報の確認が出たら「許可」を押してください");
       findHere = findHere || await hereNow();
+      findLoading("お店や場所を探しています…", findHere ? "現在地のまわりを探しています" : "上田駅のまわりを探しています");
       center = findHere || FIND_HOME; centerLabel = findHere ? "現在地" : FIND_HOME.label;
     }
     let spots = [];
     if (key) {
       const sel = FIND_CATS[key].sel;
       for (const radius of [1500, 4000, 10000]) {
+        if (radius > 1500) findLoading("もう少し広く探しています…", `半径${radius / 1000}kmまで広げています`);
         spots = (await overpass(sel, center, radius)).map(spotFromOsm).filter(Boolean);
         if (spots.length >= 6) break;
       }
@@ -1420,15 +1437,20 @@ async function findSpots({ key = "", words = "" } = {}) {
     spots = spots.filter(s => !seen.has(s.id) && seen.add(s.id)).map(s => ({ ...s, dist: distanceM(from, s), catKeys: key ? FIND_CATS[key].cat : [] }))
       .sort((a, b) => a.dist - b.dist).slice(0, 30);
     findShown = spots;
-    if (!spots.length) { note.textContent = "見つかりませんでした。ことばを変えるか、地名を足してみてください（例：「上田駅 カフェ」）。"; return; }
+    if (!spots.length) { box.innerHTML = ""; note.textContent = "見つかりませんでした。ことばを変えるか、地名を足してみてください（例：「上田駅 カフェ」）。"; return; }
     note.textContent = `${centerLabel}のまわりで${spots.length}件見つかりました${!findHere && centerLabel === FIND_HOME.label ? "（現在地が使えないため、上田駅を基準にしています）" : ""}。`;
     box.innerHTML = spots.map((s, i) => spotCard(s, i)).join("");
     box.querySelectorAll("[data-wish]").forEach(b => b.onclick = () => addWish(findShown[+b.dataset.wish], b));
     box.querySelectorAll("[data-plan]").forEach(b => b.onclick = () => planFromSpot(findShown[+b.dataset.plan]));
   } catch (e) {
     console.warn(e);
-    note.textContent = "うまく探せませんでした。電波のよい所で、少し待ってからもう一度お試しください。";
-  } finally { findBusy = false; }
+    box.innerHTML = "";
+    note.textContent = e && e.name === "TimeoutError" ? "地図のサービスが混んでいて時間がかかっています。少し待ってからもう一度お試しください。" : "うまく探せませんでした。電波のよい所で、少し待ってからもう一度お試しください。";
+  } finally {
+    findBusy = false;
+    document.querySelectorAll("[data-find], #findForm .btn").forEach(b => { b.disabled = false; b.classList.remove("busy"); });
+    note.scrollIntoView({ block: "start", behavior: "smooth" });
+  }
 }
 function spotCard(s, i) {
   const have = wishes.some(w => w.placeId === s.id);
