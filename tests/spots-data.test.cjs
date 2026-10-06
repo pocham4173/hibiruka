@@ -54,4 +54,6 @@ test('dog runs without a name get the name of the shop or park right next to the
   assert.equal(out[0][2], '綿半スーパーセンター上田店のドッグラン');
   assert.equal(out[1][2], 'ドッグラン', 'nothing nearby → unchanged');
   assert.equal(out[2][2], '滝沢牧場'); assert.equal(out[3][2], 'ドッグラン', 'only dog runs are renamed');
+  const twin = nameDogRuns([['d', 'a', 'ドッグラン', 36.40803, 138.20455], ['d', 'b', 'ドッグラン', 36.40808, 138.2044]], [{lat: 36.4081, lon: 138.2046, tags: {name: '上田道と川の駅おとぎの里周辺案内', tourism: 'information'}}, {lat: 36.4083, lon: 138.2047, tags: {name: '道と川の駅', tourism: 'attraction'}}]);
+  assert.deepEqual(twin.map(r => r[2]), ['道と川の駅のドッグラン'], 'info boards are not used; the same dog run twice is shown once');
 });

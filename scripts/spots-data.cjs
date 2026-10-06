@@ -11,7 +11,7 @@ const PARTS = [
 ];
 const query = part => `[out:json][timeout:180];area["ISO3166-2"="JP-20"]["admin_level"="4"]->.a;(${part});out center tags;`;
 // 名前のないドッグランに「〇〇のドッグラン」と付けるため、そばにある名前つきの施設（お店・公園・観光地など）
-const DOG_NEIGHBORS = `[out:json][timeout:180];area["ISO3166-2"="JP-20"]["admin_level"="4"]->.a;nwr["leisure"="dog_park"](area.a)->.dp;(nwr(around.dp:300)["name"]["shop"];nwr(around.dp:300)["name"]["tourism"];nwr(around.dp:300)["name"]["leisure"~"^(park|sports_centre|resort|garden|playground)$"];nwr(around.dp:300)["name"]["amenity"~"^(cafe|restaurant|parking|community_centre|townhall|marketplace|veterinary)$"];);out center tags;`;
+const DOG_NEIGHBORS = `[out:json][timeout:180];area["ISO3166-2"="JP-20"]["admin_level"="4"]->.a;nwr["leisure"="dog_park"](area.a)->.dp;(nwr(around.dp:300)["name"]["shop"];nwr(around.dp:300)["name"]["tourism"]["tourism"!~"^(information|artwork)$"];nwr(around.dp:300)["name"]["leisure"~"^(park|sports_centre|resort|garden|playground)$"];nwr(around.dp:300)["name"]["amenity"~"^(cafe|restaurant|parking|community_centre|townhall|marketplace|veterinary)$"];);out center tags;`;
 // 道の駅は全国（約1,200か所）
 const MICHI_QUERY = `[out:json][timeout:300];area["ISO3166-1"="JP"]["admin_level"="2"]->.a;(nwr["name"~"^道の駅"](area.a););out center tags;`;
 const GENRE = { park: '公園', attraction: '観光スポット', museum: '博物館・美術館', viewpoint: '景色のいい場所', zoo: '動物園', aquarium: '水族館', theme_park: 'テーマパーク', gallery: 'ギャラリー',
@@ -48,13 +48,13 @@ function rows(elements) {
 const meters = (a, b) => { const k = Math.PI / 180, x = (b[1] - a[1]) * k * Math.cos((a[0] + b[0]) / 2 * k), y = (b[0] - a[0]) * k; return Math.sqrt(x * x + y * y) * 6371000; };
 function nameDogRuns(list, neighbors) {
   const named = (neighbors || []).map(e => { const t = e.tags || {}; return [String(t['name:ja'] || t.name || '').trim(), e.lat ?? e.center?.lat, e.lon ?? e.center?.lon]; })
-    .filter(([n, lat, lng]) => n && !/ドッグラン|dog\s*run/i.test(n) && Number.isFinite(lat) && Number.isFinite(lng));
+    .filter(([n, lat, lng]) => n && !/ドッグラン|dog\s*run|案内|看板|掲示|地図|マップ|トイレ|駐輪/i.test(n) && Number.isFinite(lat) && Number.isFinite(lng));
   return list.map(r => {
     if (r[0] !== 'd' || r[2] !== 'ドッグラン') return r;
     let best = null, bd = 300;
     for (const [n, lat, lng] of named) { const d = meters([r[3], r[4]], [lat, lng]); if (d < bd) { bd = d; best = n; } }
     return best ? [r[0], r[1], `${best}のドッグラン`.slice(0, 60), ...r.slice(3)] : r;
-  });
+  }).filter((r, i, all) => !(r[0] === 'd' && all.slice(0, i).some(o => o[0] === 'd' && o[2] === r[2] && meters([o[3], o[4]], [r[3], r[4]]) < 300))); // 同じ名前で300m以内は1つに
 }
 // GitHub の画面に理由が出るように（::warning:: / ::error::）
 const note = (level, msg) => console.log(`::${level}::${String(msg).replace(/[\r\n]+/g, ' ').slice(0, 300)}`);
