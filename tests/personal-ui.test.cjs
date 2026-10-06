@@ -861,3 +861,15 @@ test('search words: OR runs each word, - removes matches, the same place twice i
   const u=new URL(opened.at(-1));assert.equal(u.searchParams.get('destination'),'松本城');assert.equal(u.searchParams.get('travelmode'),'driving');assert.equal(u.searchParams.get('origin'),null,'from where I am');
  }finally{a.close();}
 });
+
+test('AI look-back can be made for any earlier month that has memories',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  const t=new Date(),ym=k=>{const x=new Date(t.getFullYear(),t.getMonth()-k,15);return `${x.getFullYear()}-${String(x.getMonth()+1).padStart(2,'0')}-15`;};
+  let asked=null;w.fetch=async(url,opt)=>{asked=JSON.parse(opt.body);return{ok:true,status:200,json:async()=>({text:'楽しい月。',left:19})};};
+  w.h.setEvents([{id:'a',kind:'memory',date:ym(0),title:'今月'},{id:'b',kind:'memory',date:ym(3),title:'3か月前'},{id:'c',kind:'memory',date:ym(14),title:'去年'}]);
+  d.querySelector('[data-view="mem"]').click();
+  const opts=[...d.getElementById('monthPick').options].map(o=>o.value);assert.deepEqual(opts,['','3','14']);
+  const sel=d.getElementById('monthPick');sel.value='14';await sel.onchange();await new Promise(r=>setTimeout(r,20));
+  assert.equal(asked.mode,'month');assert.equal(asked.records[0].title,'去年');assert.match(d.getElementById('monthText').textContent,/楽しい月/);
+ }finally{a.close();}
+});

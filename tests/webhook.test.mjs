@@ -91,7 +91,47 @@ test('today and favorites list only the owner\'s records',async()=>{
   const db=memoryDb({...linked(),personalEvents:{a:{ownerUid:'alice',date:'2026-10-03',time:'18:00',title:'夕食',place:'駅前'},b:{ownerUid:'bob',date:'2026-10-03',title:'他人'},c:{ownerUid:'alice',date:'2026-10-03',time:'09:00',place:'朝カフェ',fav:true}}});
   const [today]=await handleEvent(db,{},msg({type:'text',text:'今日'}),NOW);
   assert.match(today.text,/09:00 朝カフェ\n18:00 夕食（駅前）/);assert.doesNotMatch(today.text,/他人/);
-  assert.match((await handleEvent(db,{},msg({type:'text',text:'また行きたい'}),NOW))[0].text,/朝カフェ/);
+  const fav=await handleEvent(db,{},msg({type:'text',text:'また行きたい'}),NOW);
+  assert.equal(fav[0].type,'flex');assert.match(fav[1].text,/朝カフェ/);assert.doesNotMatch(JSON.stringify(fav),/他人/);
+});
+test('今日 also shows the coming plans with how many days are left',async()=>{
+  const db=memoryDb({...linked(),personalEvents:{
+    a:{ownerUid:'alice',date:'2026-10-03',time:'18:00',title:'夕食'},
+    b:{ownerUid:'alice',kind:'plan',date:'2026-10-04',time:'10:00',title:'歯医者'},
+    c:{ownerUid:'alice',kind:'plan',date:'2026-10-10',title:'松本旅行',place:'松本城'},
+    d:{ownerUid:'alice',kind:'memory',date:'2026-10-05',title:'思い出は出さない'},
+    e:{ownerUid:'bob',kind:'plan',date:'2026-10-05',title:'他人'},
+    f:{ownerUid:'alice',kind:'plan',date:'2026-12-01',title:'先すぎる'}}});
+  const [r]=await handleEvent(db,{},msg({type:'text',text:'今日'}),NOW);
+  assert.match(r.text,/📅 今日の予定・記録\n18:00 夕食/);
+  assert.match(r.text,/🎉 これからの予定\n明日｜10月4日\(日\) 10:00 歯医者\nあと7日｜10月10日\(土\) 松本旅行（松本城）/);
+  assert.doesNotMatch(r.text,/思い出は出さない|他人|先すぎる/);
+});
+test('また行きたい shows the wish list and ♥ places as cards with map and app buttons, and a guide card',async()=>{
+  const db=memoryDb({...linked(),personalEvents:{
+    w:{ownerUid:'alice',kind:'wish',status:'wished',place:'森のカフェ',genre:'カフェ',lat:36.4,lng:138.25,imageUrl:'https://img.example/a.jpg'},
+    v:{ownerUid:'alice',kind:'wish',status:'visited',place:'行った所'},
+    f:{ownerUid:'alice',fav:true,place:'上田城跡公園',cat:'遊び'}}});
+  const [flex,list]=await handleEvent(db,{},msg({type:'text',text:'また行きたい'}),NOW);
+  const cards=flex.contents.contents;assert.equal(cards.length,3);
+  assert.equal(cards[0].hero.url,'https://img.example/a.jpg');assert.match(JSON.stringify(cards[0]),/📌 行きたいリスト.*森のカフェ/);
+  assert.equal(cards[0].footer.contents[0].action.uri,'https://www.google.com/maps/search/?api=1&query=36.400000,138.250000');
+  assert.match(JSON.stringify(cards[1]),/♥ また行きたい.*上田城跡公園/);assert.match(cards[2].footer.contents[0].action.uri,/guide\/#wish$/);
+  assert.doesNotMatch(list.text,/行った所/);
+  for(const c of cards)for(const b of c.footer.contents)assert.ok(b.action.label.length<=20,b.action.label);
+});
+test('ふりかえり of past months: words become months, and buttons offer the months before',async()=>{
+  const {monthsAgoFrom}=await import('../line-worker/webhook.mjs');
+  const n=Date.parse('2026-10-06T01:00:00Z');
+  assert.equal(monthsAgoFrom('ふりかえり',n),0);assert.equal(monthsAgoFrom('先月',n),1);assert.equal(monthsAgoFrom('先々月のふりかえり',n),2);
+  assert.equal(monthsAgoFrom('3か月前のふりかえり',n),3);assert.equal(monthsAgoFrom('8月のふりかえり',n),2);assert.equal(monthsAgoFrom('12月のふりかえり',n),10,'a later month means last year');
+  assert.equal(monthsAgoFrom('2025年12月',n),10);assert.equal(monthsAgoFrom('去年の8月',n),14);
+  assert.equal(monthsAgoFrom('8月',n),null,'just a month name is not a request');assert.equal(monthsAgoFrom('昨日ランチ行った',n),null);
+  const db=memoryDb({...linked(),personalEvents:{a:{ownerUid:'alice',kind:'memory',date:'2026-08-15',title:'花火'}}});
+  const env=aiEnv('花火がきれいだった8月。');
+  const [r]=await handleEvent(db,env,msg({type:'text',text:'8月のふりかえり'}),NOW);
+  assert.match(r.text,/2026年8月のふりかえり（1件）/);assert.deepEqual(r.quickReply.items.map(i=>i.action.label),['3か月前','4か月前','5か月前']);
+  const [none]=await handleEvent(db,env,msg({type:'text',text:'先月のふりかえり'}),NOW);assert.match(none.text,/まだありません/);assert.ok(none.quickReply);
 });
 test('legacy owner records go to the legacy collection',async()=>{
   const db=memoryDb({members:{rie:{pinHash:'x'}},lineLinkCodes:{ABCDEFGH23:{ownerUid:'rie',scope:'legacy',expiresAt:new Date(NOW+1000)}}});

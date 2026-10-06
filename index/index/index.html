@@ -707,6 +707,7 @@
     <div id="monthAi" class="card ai-month hidden">
       <div class="ai-month-head"><b>✨ AIでふりかえり</b><span class="note" style="margin:0">思い出から、ひと月のまとめを作ります</span></div>
       <div class="btnrow"><button type="button" class="btn small" id="monthThis">今月</button><button type="button" class="btn small sub" id="monthLast">先月</button></div>
+      <div class="month-pick"><label class="lbl" for="monthPick" style="margin:8px 0 4px">ほかの月をふりかえる</label><select id="monthPick" aria-label="ふりかえる月"><option value="">思い出のある月を選ぶ</option></select></div>
       <div id="monthOut" class="hidden"><p class="ai-text" id="monthText"></p><div class="ai-actions"><button type="button" class="btn small sub" id="monthCopy">コピー</button><button type="button" class="btn small ghost" id="monthClose">閉じる</button></div><p class="note" id="monthNote"></p></div>
     </div>
     <div id="listBox"></div>
@@ -1369,7 +1370,8 @@ function enterApp() {
   // LINEのメニューなどから開いたとき：?tab=rec / list / set、?view=up / cal / mem / fav
   const t0 = qs.get("tab"), v0 = qs.get("view");
   if (["rec", "list", "set"].includes(t0)) goTab(t0);
-  if (["up", "cal", "mem", "fav"].includes(v0)) selectView(v0 === "up" ? "cal" : v0);
+  if (t0 === "find") { goTab("find"); renderWishes(); showWeather(); renderLocalCoupons(); renderEvents(); }
+  if (["up", "cal", "mem", "fav", "map"].includes(v0)) selectView(v0 === "up" ? "cal" : v0);
   const denied = (e) => { console.error(e); if (e.code === "permission-denied") toast("読み込めませんでした。もう一度開き直してください。", 6000); };
   unsub.push((personalMode ? ownedQuery("friends") : recordCollection("friends").orderBy("createdAt")).onSnapshot(s => {
     friends = s.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1471,6 +1473,7 @@ function setupForm() {
   $("aiTitle").onclick = suggestTitles;
   $("instaAi").onclick = snsWithAi;
   $("monthThis").onclick = () => monthWithAi(0); $("monthLast").onclick = () => monthWithAi(1);
+  $("monthPick").onchange = () => { const v = $("monthPick").value; if (v !== "") monthWithAi(+v); };
   $("monthCopy").onclick = () => copyText($("monthText").textContent);
   $("monthClose").onclick = () => $("monthOut").classList.add("hidden");
   $("fInsta").onclick = () => {
@@ -2504,6 +2507,16 @@ async function snsWithAi() {
     aiBusy = false; btn.disabled = false; btn.textContent = "✨ AIに投稿文を考えてもらう";
   }
 }
+// 思い出のある月（今月と先月以外）を新しい順に。値は「何か月前か」
+function renderMonthPick() {
+  const sel = $("monthPick"); if (!sel) return;
+  const now = new Date(), ym = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  const months = [...new Set(events.filter(e => !isPlan(e) && /^\d{4}-\d{2}/.test(e.date || "")).map(e => e.date.slice(0, 7)))].sort().reverse();
+  const opts = months.map(m => { const [y, mo] = m.split("-").map(Number); const ago = (now.getFullYear() - y) * 12 + (now.getMonth() + 1 - mo); return [ago, `${y}年${mo}月（${events.filter(e => !isPlan(e) && (e.date || "").startsWith(m)).length}件）`]; }).filter(([ago]) => ago >= 2);
+  const keep = sel.value;
+  sel.innerHTML = `<option value="">${opts.length ? "思い出のある月を選ぶ" : "前の月の思い出はまだありません"}</option>` + opts.map(([ago, l]) => `<option value="${ago}">${l}</option>`).join("");
+  sel.disabled = !opts.length; if (keep) sel.value = keep;
+}
 async function monthWithAi(offset) {
   if (aiBusy) return;
   const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - offset);
@@ -2511,7 +2524,7 @@ async function monthWithAi(offset) {
   const list = events.filter(e => (e.date || "").startsWith(ym) && !isPlan(e)).sort((a, b) => a.date < b.date ? -1 : 1).slice(0, 40)
     .map(e => ({ date: e.date, title: e.title || "", place: shortPlace(e.place), cat: catLabel(e.cat), memo: (e.memo || "").slice(0, 60), fav: !!e.fav }));
   if (!list.length) { toast(`${label}の思い出はまだありません`); return; }
-  const btns = [$("monthThis"), $("monthLast")];
+  const btns = [$("monthThis"), $("monthLast"), $("monthPick")];
   aiBusy = true; btns.forEach(b => b.disabled = true); $("monthNote").textContent = ""; $("monthText").textContent = `${label}をふりかえっています…`; $("monthOut").classList.remove("hidden");
   try {
     const out = await askAi({ mode: "month", month: label, records: list });
@@ -2921,6 +2934,7 @@ function renderList() {
     html = items.length ? items.map(card).join("") : `<p class="note center">この日の記録はありません</p>`;
   }
   $("monthAi").classList.toggle("hidden", view !== "mem");
+  if (view === "mem") renderMonthPick();
   $("listTitle").textContent = title;
   $("listCount").textContent = `${items.length}件`;
   $("listBox").innerHTML = notice + (waiting && !items.length ? "" : html);

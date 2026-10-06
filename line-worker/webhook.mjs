@@ -106,9 +106,10 @@ const HELP = [
   '　「10/12 14時 歯医者」→ 予定に入る',
   '　「昨日ゆかちゃんとランチ行った」→ 思い出に',
   '📍 位置情報を送る → その場所を「思い出」に記録',
-  '「今日」と送る → 今日の予定・記録',
-  '「また行きたい」と送る → また行きたいリスト',
+  '「今日」と送る → 今日の予定と、これからの予定（あと◯日）',
+  '「また行きたい」と送る → また行きたい・行きたいリスト（地図つき）',
   '「ふりかえり」と送る → 今月の思い出をAIがまとめる',
+  '　「先月」「8月のふりかえり」「2025年12月」のように前の月も',
   '',
   '写真やくわしい内容は、アプリで追加できます。',
   APP_URL,
@@ -163,22 +164,66 @@ async function setCategory(db, owner, data) {
   return [text(`「${cat.label || cat.name}」で記録しました。`)];
 }
 
+// 日付 → 「あと◯日」（今日を0として）
+const daysBetween = (a, b) => Math.round((Date.UTC(...b.split('-').map((x, i) => i === 1 ? x - 1 : +x)) - Date.UTC(...a.split('-').map((x, i) => i === 1 ? x - 1 : +x))) / 86400000);
+const addDay = (d, n) => { const [y, m, dd] = d.split('-').map(Number); const x = new Date(Date.UTC(y, m - 1, dd + n)); return `${x.getUTCFullYear()}-${pad(x.getUTCMonth() + 1)}-${pad(x.getUTCDate())}`; };
 async function listToday(db, owner, now) {
   const {date} = jstNow(now);
-  let q = db.collection(eventsOf(owner.scope));
-  if (owner.scope === 'personal') q = q.where('ownerUid', '==', owner.uid);
-  const docs = (await q.where('date', '==', date).select('date', 'time', 'title', 'place', 'cat').get()).docs.map(d => d.data()).sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
-  if (!docs.length) return [text('今日の予定・記録はまだありません。')];
-  return [text('📅 今日の予定・記録\n\n' + docs.map(e => `${e.time ? e.time + ' ' : ''}${e.title || e.place || e.cat || '記録'}${e.title && e.place ? '（' + e.place + '）' : ''}`).join('\n'))];
+  const base = () => { let q = db.collection(eventsOf(owner.scope)); if (owner.scope === 'personal') q = q.where('ownerUid', '==', owner.uid); return q; };
+  const days = Array.from({length: 31}, (_, i) => addDay(date, i));
+  let rows;
+  try { rows = (await Promise.all([days.slice(0, 16), days.slice(16)].map(part => base().where('date', 'in', part).select('date', 'time', 'title', 'place', 'cat', 'kind').limit(200).get()))).flatMap(r => r.docs).map(d => d.data()); }
+  catch { rows = (await base().where('date', '==', date).select('date', 'time', 'title', 'place', 'cat', 'kind').get()).docs.map(d => d.data()); }
+  const byTime = (a, b) => (a.date + String(a.time || '')).localeCompare(b.date + String(b.time || ''));
+  const name = e => `${e.title || e.place || e.cat || '記録'}${e.title && e.place ? '（' + e.place + '）' : ''}`;
+  const today = rows.filter(e => e.date === date).sort(byTime);
+  const next = rows.filter(e => e.date > date && e.kind !== 'memory' && e.kind !== 'wish').sort(byTime).slice(0, 8);
+  const parts = [today.length ? '📅 今日の予定・記録\n' + today.map(e => `${e.time ? e.time + ' ' : ''}${name(e)}`).join('\n') : '📅 今日の予定・記録はまだありません。'];
+  if (next.length) parts.push('🎉 これからの予定\n' + next.map(e => { const n = daysBetween(date, e.date); return `${n === 1 ? '明日' : `あと${n}日`}｜${jpDate(e.date)}${e.time ? ' ' + e.time : ''} ${name(e)}`; }).join('\n'));
+  else parts.push('これから30日の予定はまだありません。「10/12 14時 歯医者」のように送ると入ります。');
+  return [text(parts.join('\n\n'))];
 }
 
-async function listFavorites(db, owner) {
-  let q = db.collection(eventsOf(owner.scope));
-  if (owner.scope === 'personal') q = q.where('ownerUid', '==', owner.uid);
-  const docs = (await q.where('fav', '==', true).select('place', 'title', 'cat').limit(40).get()).docs.map(d => d.data());
-  if (!docs.length) return [text('「また行きたい」はまだありません。アプリで記録に♥をつけると、ここに出ます。')];
-  return [text('♥ また行きたい\n\n' + docs.map(e => '・' + (e.place || e.title || e.cat || '記録')).join('\n') + '\n\nほかはアプリで見られます。')];
+// また行きたい（♥）と行きたいリストを、地図・アプリのボタンつきのカードで
+const mapLink = e => Number.isFinite(e.lat) && Number.isFinite(e.lng) ? `https://www.google.com/maps/search/?api=1&query=${(+e.lat).toFixed(6)},${(+e.lng).toFixed(6)}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.place || e.title || '')}`;
+function placeCard(e, badge) {
+  const img = /^https:\/\//.test(e.imageUrl || '') ? e.imageUrl : '';
+  return {type: 'bubble', size: 'kilo',
+    ...(img ? {hero: {type: 'image', url: img, size: 'full', aspectRatio: '20:13', aspectMode: 'cover'}} : {}),
+    body: {type: 'box', layout: 'vertical', spacing: 'sm', contents: [
+      {type: 'text', text: badge, size: 'xs', color: '#ad4564', weight: 'bold'},
+      {type: 'text', text: clip(shortAddress(e.place) || e.title || '場所', 40), weight: 'bold', size: 'md', wrap: true},
+      ...(e.genre || e.cat ? [{type: 'text', text: clip(e.genre || e.cat, 30), size: 'xs', color: '#888888'}] : []),
+    ]},
+    footer: {type: 'box', layout: 'vertical', spacing: 'sm', contents: [
+      {type: 'button', style: 'primary', color: '#1f2d4a', height: 'sm', action: {type: 'uri', label: '🗺 地図で見る', uri: mapLink(e)}},
+      {type: 'button', style: 'secondary', height: 'sm', action: {type: 'uri', label: '📅 アプリで予定にする', uri: APP_URL + '?tab=find'}},
+    ]}};
 }
+async function listFavorites(db, owner) {
+  const base = () => { let q = db.collection(eventsOf(owner.scope)); if (owner.scope === 'personal') q = q.where('ownerUid', '==', owner.uid); return q; };
+  const [fav, wish] = await Promise.all([
+    base().where('fav', '==', true).select('place', 'title', 'cat', 'lat', 'lng').limit(40).get(),
+    base().where('kind', '==', 'wish').select('place', 'title', 'genre', 'lat', 'lng', 'imageUrl', 'status').limit(40).get().catch(() => ({docs: []})),
+  ]);
+  const favs = fav.docs.map(d => d.data()), wishes = wish.docs.map(d => d.data()).filter(w => w.status !== 'visited');
+  if (!favs.length && !wishes.length) return [text('「また行きたい」はまだありません。\n・行った思い出に ♥ を付ける\n・アプリの「探す」で「📌 ここ行きたい！」を押す\nと、ここに集まります。\n\n📖 使い方\n' + GUIDE_URL + '#wish')];
+  const seen = new Set(), cards = [];
+  for (const [e, badge] of [...wishes.map(w => [w, '📌 行きたいリスト']), ...favs.map(f => [f, '♥ また行きたい'])]) {
+    const k = String(e.place || e.title || ''); if (!k || seen.has(k)) continue; seen.add(k); cards.push(placeCard(e, badge));
+    if (cards.length >= 9) break;
+  }
+  cards.push({type: 'bubble', size: 'kilo', body: {type: 'box', layout: 'vertical', spacing: 'md', contents: [
+    {type: 'text', text: '📖 もっと楽しむコツ', weight: 'bold', size: 'md'},
+    {type: 'text', text: '行きたい場所を集めて、行く日の天気に合わせた「おでかけコース」にできます。', size: 'sm', wrap: true, color: '#555555'},
+  ]}, footer: {type: 'box', layout: 'vertical', spacing: 'sm', contents: [
+    {type: 'button', style: 'primary', color: '#ad4564', height: 'sm', action: {type: 'uri', label: '写真つきの使い方', uri: GUIDE_URL + '#wish'}},
+    {type: 'button', style: 'secondary', height: 'sm', action: {type: 'uri', label: 'アプリで探す', uri: APP_URL + '?tab=find'}},
+  ]}});
+  const list = [...seen].slice(0, 20).map(n => '・' + n).join('\n');
+  return [{type: 'flex', altText: `♥ また行きたい・行きたいリスト（${seen.size}か所）`, contents: {type: 'carousel', contents: cards}}, text(`♥ また行きたい・📌 行きたいリスト\n${list}`)];
+}
+
 
 const WEEK = ['日', '月', '火', '水', '木', '金', '土'];
 const jpDate = d => { const [y, m, dd] = d.split('-').map(Number); return `${m}月${dd}日(${WEEK[new Date(Date.UTC(y, m - 1, dd)).getUTCDay()]})`; };
@@ -224,6 +269,26 @@ async function undoRecord(db, owner, postback, now) {
   return [text('取り消しました。')];
 }
 
+// 「ふりかえり」「先月」「先々月」「3か月前」「8月のふりかえり」「2025年12月」→ 何か月前か（ふりかえりでなければ null）
+export function monthsAgoFrom(t, now) {
+  const s = String(t || '').normalize('NFKC').replace(/\s+/g, '').replace(/の?(ふりかえり|振り返り)$/, '').replace(/の/g, '');
+  const asked = /(ふりかえり|振り返り)/.test(String(t).normalize('NFKC'));
+  const j = new Date(now + 9 * 3600000), y = j.getUTCFullYear(), m = j.getUTCMonth() + 1;
+  if (asked && (s === '' || s === '今月')) return 0;
+  if (s === '今月') return 0;
+  if (s === '先月') return 1;
+  if (s === '先々月') return 2;
+  let x = s.match(/^(\d{1,2})(か|ヶ|ケ|カ)?月前$/); if (x) return Math.min(+x[1], 36);
+  if (s === '去年' || s === '昨年') return asked ? 12 : null;
+  x = s.match(/^(?:(\d{4})年|(去年|昨年))?(\d{1,2})月$/);
+  if (x && (asked || x[1] || x[2]) && +x[3] >= 1 && +x[3] <= 12) {
+    const yy = x[1] ? +x[1] : x[2] ? y - 1 : (+x[3] > m ? y - 1 : y); // 先の月なら去年のこと
+    const ago = (y - yy) * 12 + (m - +x[3]);
+    return ago >= 0 && ago <= 36 ? ago : null;
+  }
+  return null;
+}
+const monthQuick = ago => ({items: [ago + 1, ago + 2, ago + 3].filter(n => n <= 36).map(n => ({type: 'action', action: {type: 'message', label: n === 1 ? '先月' : n === 2 ? '先々月' : `${n}か月前`, text: n === 1 ? '先月のふりかえり' : n === 2 ? '先々月のふりかえり' : `${n}か月前のふりかえり`}}))});
 // 「ふりかえり」：その月の思い出をAIがまとめる
 async function lookBack(db, env, owner, monthsAgo, now) {
   if (!env.AI) return [text('ふりかえりは、いま準備中です。')];
@@ -241,13 +306,13 @@ async function lookBack(db, env, owner, monthsAgo, now) {
     .filter(e => String(e.date || '').startsWith(ym) && (e.kind === 'memory' || e.date < today) && (e.title || e.place))
     .sort((a, b) => a.date < b.date ? -1 : 1).slice(0, 40)
     .map(e => ({date:e.date, title:clip(e.title, 40), place:clip(shortAddress(e.place), 40), cat:clip(e.cat, 20), memo:clip(e.memo, 60), fav:!!e.fav}));
-  if (!rows.length) return [text(`${label}の思い出はまだありません。位置情報を送ったり、「昨日 ランチ行った」と送ったりすると記録できます。`)];
+  if (!rows.length) return [text(`${label}の思い出はまだありません。位置情報を送ったり、「昨日 ランチ行った」と送ったりすると記録できます。\n前の月も見られます👇`, monthQuick(monthsAgo))];
   const quota = await takeQuota(db, owner.uid, now);
   if (!quota.ok) return [text(AI_LIMIT)];
   let r;
   try { r = await monthText(env, label, rows); } catch (e) { r = {text:'', diag:'X:' + String(e?.message || '').replace(/[^\x20-\x7e]/g, '').slice(0, 30)}; }
   if (!r.text) { console.error('Hibiruka LINE look-back failed: ' + r.diag); return [text(`うまくまとめられませんでした。少し待ってもう一度送ってください。\n（${r.diag}）`)]; }
-  return [text(`✨ ${label}のふりかえり（${rows.length}件）\n\n${r.text}`)];
+  return [text(`✨ ${label}のふりかえり（${rows.length}件）\n\n${r.text}\n\n前の月もふりかえれます👇（「8月のふりかえり」のように送ってもOK）`, monthQuick(monthsAgo))];
 }
 
 // LINE gives "日本、〒386-0013 長野県…"; the country and postal code only add noise.
@@ -280,8 +345,8 @@ export async function handleEvent(db, env, ev, now = Date.now()) {
   if (/^(今日|きょう)(の予定)?$/.test(t)) return listToday(db, owner, now);
   if (/^また行きたい$/.test(t)) return listFavorites(db, owner);
   if (/^(使い方|説明書|ヘルプ|help)$/i.test(t)) return [text(HELP)];
-  const look = t.match(/^(今月|先月)?の?(ふりかえり|振り返り)$|^(今月|先月)$/);
-  if (look) return lookBack(db, env, owner, (look[1] || look[3]) === '先月' ? 1 : 0, now);
+  const ago = monthsAgoFrom(t, now);
+  if (ago !== null) return lookBack(db, env, owner, ago, now);
   if (env.AI && t.length >= 2 && t.length <= 200) return fromText(db, env, owner, ev, t, now);
   return [text('位置情報を送ると記録できます。「使い方」と送ると、できることを確認できます。')];
 }
