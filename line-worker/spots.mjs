@@ -8,6 +8,19 @@ const API = 'https://webservice.recruit.co.jp/hotpepper/gourmet/v1/';
 export const FILTERS = ['parking', 'private_room', 'child', 'non_smoking', 'free_food', 'free_drink', 'card', 'coupon', 'smoking'];
 export const BUDGETS = ['B009', 'B010', 'B011', 'B001', 'B002', 'B003', 'B008', 'B004', 'B005', 'B006', 'B012', 'B013', 'B014'];
 export const GENRES = { cafe: 'G014', sweets: 'G014', ramen: 'G013', yakiniku: 'G008', izakaya: 'G001', sushi: 'G004', lunch: '', dog: '', coupon: '' };
+// 使いすぎ防止：1人1日100回・全体1日3000回まで（数えるのはサーバーだけ。アプリからは見えない）
+export const SPOT_PER_USER_DAILY = 100, SPOT_TOTAL_DAILY = 3000;
+const jstDay = now => new Date(now + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, '');
+export async function takeSpotQuota(db, uid, now) {
+  const day = jstDay(now), col = db.collection('spotUsage');
+  const mine = col.doc(`${day}_${uid.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64)}`), all = col.doc(`${day}_total`);
+  const [m, a] = await Promise.all([mine.get(), all.get()]);
+  const used = m.exists ? Number(m.data().count) || 0 : 0, total = a.exists ? Number(a.data().count) || 0 : 0;
+  if (used >= SPOT_PER_USER_DAILY || total >= SPOT_TOTAL_DAILY) return false;
+  const at = new Date(now);
+  await db.commit([{ ref: mine, value: { count: used + 1, day, updatedAt: at } }, { ref: all, value: { count: total + 1, day, updatedAt: at } }]);
+  return true;
+}
 const json = (body, status, origin) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...cors(origin) } });
 const clean = (s, n) => String(s ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, n);
 const num = v => (typeof v === 'number' || (typeof v === 'string' && v.trim() !== '')) && Number.isFinite(Number(v)) ? Number(v) : NaN;
@@ -51,7 +64,7 @@ export function shopOut(s) {
     coupon: String(s.ktai_coupon) === '0', couponUrl: clean(couponUrl, 300), smoking: clean(s.non_smoking, 20),
   };
 }
-export async function handleSpots(request, env, { fetcher = fetch, now = Date.now } = {}) {
+export async function handleSpots(request, env, { fetcher = fetch, now = Date.now, db = null } = {}) {
   const origin = request.headers.get('origin') || '';
   if (request.method === 'OPTIONS') return new Response(null, { status: ORIGINS.includes(origin) ? 204 : 403, headers: cors(origin) });
   if (!ORIGINS.includes(origin)) return json({ error: 'origin' }, 403, origin);
@@ -62,8 +75,10 @@ export async function handleSpots(request, env, { fetcher = fetch, now = Date.no
   try { body = JSON.parse((await request.text()).slice(0, 2000)); } catch { return json({ error: 'input' }, 400, origin); }
   const q = buildQuery(body || {}, env.HOTPEPPER_API_KEY);
   if (!q) return json({ error: 'input' }, 400, origin);
+  if (db && !(await (async () => takeSpotQuota(await db(), uid, now()))().catch(() => true))) return json({ error: 'limit' }, 429, origin);
   let r;
-  try { r = await fetcher(API + '?' + q.toString(), { signal: AbortSignal.timeout(10000) }); } catch { return json({ error: 'upstream' }, 502, origin); }
+  // 同じ検索は1時間、Cloudflare（無料）にためて使い回す
+  try { r = await fetcher(API + '?' + q.toString(), { cf: { cacheTtl: 3600, cacheEverything: true }, signal: AbortSignal.timeout(10000) }); } catch { return json({ error: 'upstream' }, 502, origin); }
   if (!r.ok) { console.error('Hotpepper HTTP ' + r.status); return json({ error: 'upstream' }, 502, origin); }
   const data = await r.json().catch(() => ({}));
   if (data.results?.error) { console.error('Hotpepper error ' + String(data.results.error?.[0]?.code || '')); return json({ error: 'upstream' }, 502, origin); }
