@@ -533,6 +533,7 @@
   #firstRecordGuide, #savedNextSteps { background:#fff9f2; border-color:#ead5b9; }
   #firstRecordGuide h2, #savedNextSteps h2 { font-size:21px; }
   #firstRecordGuide .back-link, #savedNextSteps .back-link { background:none; border:0; padding:12px 0; cursor:pointer; }
+  .terms-link { margin:8px 0 0; font-size:13px; } .terms-link a { color:var(--rose, #a9536a); font-weight:700; }
 </style>
 </head>
 <body>
@@ -568,7 +569,7 @@
     <a class="btn sub" href="?signin=1">ログイン</a>
     <a class="back-link" href="../../guide/">使い方を見る</a>
     <p class="note">登録なしではじめられます。メールの登録はあとから設定でできます。</p>
-    <div class="disclaimer"><b>ご利用上の注意（免責事項）</b><p>本サービス（ヒビルカ）は、個人が無料で提供している試作開発アプリです。</p><ul><li>無料枠の範囲内で運用しているため、利用状況によっては通知の遅延・未達、一時的なアクセス制限、または予告のない機能変更・サービス停止が発生する場合があります。</li><li>本サービスのご利用により生じた損害等について、開発者は一切の責任を負いかねますのであらかじめご了承ください。</li></ul></div>
+    <div class="disclaimer"><b>ご利用上の注意（免責事項）</b><p>本サービス（ヒビルカ）は、個人が無料で提供している試作開発アプリです。</p><ul><li>無料枠の範囲内で運用しているため、利用状況によっては通知の遅延・未達、一時的なアクセス制限、または予告のない機能変更・サービス停止が発生する場合があります。</li><li>本サービスのご利用により生じた損害等について、開発者は一切の責任を負いかねますのであらかじめご了承ください。</li></ul><p class="terms-link"><a href="../../terms/" target="_blank" rel="noopener">📄 利用規約・プライバシーポリシー</a>　<a href="../../terms/#contact" target="_blank" rel="noopener">✉️ お問い合わせ</a></p></div>
     <details id="pinDetails" class="hidden"><summary>以前の記録を復元</summary>
     <h2 style="margin-top:0" id="pinTitle">暗証番号を入れてください</h2>
     <p id="pinText" style="text-align:left;font-size:15px">このブラウザに記録を引き継ぐため、設定済みの6けたの番号を入れてください。</p>
@@ -666,7 +667,7 @@
       <p>日付と内容があればOK。写真やLINEの設定は、あとからでも。</p>
       <div class="start-actions"><button class="btn" id="firstPlan" type="button">＋ 予定を入れる</button><button class="btn sub" id="firstMemory" type="button">思い出を残す</button></div>
       <button class="back-link" id="skipFirstRecord" type="button">あとで</button>
-      <div class="disclaimer"><b>ご利用上の注意（免責事項）</b><p>本サービス（ヒビルカ）は、個人が無料で提供している試作開発アプリです。</p><ul><li>無料枠の範囲内で運用しているため、利用状況によっては通知の遅延・未達、一時的なアクセス制限、または予告のない機能変更・サービス停止が発生する場合があります。</li><li>本サービスのご利用により生じた損害等について、開発者は一切の責任を負いかねますのであらかじめご了承ください。</li></ul></div>
+      <div class="disclaimer"><b>ご利用上の注意（免責事項）</b><p>本サービス（ヒビルカ）は、個人が無料で提供している試作開発アプリです。</p><ul><li>無料枠の範囲内で運用しているため、利用状況によっては通知の遅延・未達、一時的なアクセス制限、または予告のない機能変更・サービス停止が発生する場合があります。</li><li>本サービスのご利用により生じた損害等について、開発者は一切の責任を負いかねますのであらかじめご了承ください。</li></ul><p class="terms-link"><a href="../../terms/" target="_blank" rel="noopener">📄 利用規約・プライバシーポリシー</a>　<a href="../../terms/#contact" target="_blank" rel="noopener">✉️ お問い合わせ</a></p></div>
     </aside>
     <aside id="savedNextSteps" class="card hidden" aria-labelledby="savedNextTitle">
       <h2 id="savedNextTitle">最初の記録を保存しました</h2><p>次もすぐ開けるように、ホームにアイコンを置けます。</p>
@@ -937,7 +938,7 @@
       <p id="accountError" class="err" role="alert"></p>
       <button class="btn sub hidden" id="accountLogout" type="button">ログアウト</button>
     </div>
-    <div class="card" id="noticeCard"><div class="disclaimer"><b>ご利用上の注意（免責事項）</b><p>本サービス（ヒビルカ）は、個人が無料で提供している試作開発アプリです。</p><ul><li>無料枠の範囲内で運用しているため、利用状況によっては通知の遅延・未達、一時的なアクセス制限、または予告のない機能変更・サービス停止が発生する場合があります。</li><li>本サービスのご利用により生じた損害等について、開発者は一切の責任を負いかねますのであらかじめご了承ください。</li></ul></div></div>
+    <div class="card" id="noticeCard"><div class="disclaimer"><b>ご利用上の注意（免責事項）</b><p>本サービス（ヒビルカ）は、個人が無料で提供している試作開発アプリです。</p><ul><li>無料枠の範囲内で運用しているため、利用状況によっては通知の遅延・未達、一時的なアクセス制限、または予告のない機能変更・サービス停止が発生する場合があります。</li><li>本サービスのご利用により生じた損害等について、開発者は一切の責任を負いかねますのであらかじめご了承ください。</li></ul><p class="terms-link"><a href="../../terms/" target="_blank" rel="noopener">📄 利用規約・プライバシーポリシー</a>　<a href="../../terms/#contact" target="_blank" rel="noopener">✉️ お問い合わせ</a></p></div></div>
   </section>
 </div>
 
