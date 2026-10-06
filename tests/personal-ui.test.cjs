@@ -603,7 +603,7 @@ test('deals: local show-only coupons, Hotpepper coupon shops and travel coupons,
   shops=[];d.querySelector('[data-find="coupon"]').click();await settle();assert.match(d.getElementById('findNote').textContent,/クーポンのあるお店が見つかりませんでした/);
   // affiliate set up: links go through it and carry PR
   Object.assign(w.h.config.affiliate,{vcSid:'111',vcPid:'222',rakuten:'aa.bb'});w.renderTravelDeals();
-  links=[...d.querySelectorAll('#travelDeals a')];assert.equal(links[0].href,'https://hb.afl.rakuten.co.jp/hgc/aa.bb/?pc=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&link_type=hybrid_url');assert.equal(d.querySelectorAll('#travelDeals .pr').length,links.length);assert.match(links[0].rel,/sponsored/);
+  links=[...d.querySelectorAll('#travelDeals a')];assert.equal(links[0].href,'https://hb.afl.rakuten.co.jp/hgc/aa.bb/?pc=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&m=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&link_type=hybrid_url');assert.equal(d.querySelectorAll('#travelDeals .pr').length,links.length);assert.match(links[0].rel,/sponsored/);
   shops=[{id:'hp:J1',name:'森のごはん',lat:36.401,lng:138.251,url:'https://www.hotpepper.jp/strJ1/',coupon:true,couponUrl:'https://www.hotpepper.jp/strJ1/scoupon/'}];
   d.querySelector('[data-find="coupon"]').click();await settle();
   const c2=[...d.querySelectorAll('#findResults .spot a')].find(x=>x.textContent.includes('クーポンを見る'));
@@ -643,7 +643,7 @@ test('a search result list can be closed from the top or the bottom',async()=>{
 
 test('the real Rakuten affiliate ID is set, so travel links carry it and PR',async()=>{
  const a=app();try{const {w,d}=a;await w.h.startOwner();d.querySelector('.maintabs [data-tab="find"]').click();
-  const l=d.querySelector('#travelDeals a');assert.equal(l.href,'https://hb.afl.rakuten.co.jp/hgc/583df298.b5d045a3.583df299.c1b690a8/?pc=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&link_type=hybrid_url');
+  const l=d.querySelector('#travelDeals a');assert.equal(l.href,'https://hb.afl.rakuten.co.jp/hgc/583df298.b5d045a3.583df299.c1b690a8/?pc=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&m=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&link_type=hybrid_url');
   assert(l.querySelector('.pr'));assert.match(l.rel,/sponsored/);
  }finally{a.close();}
 });
@@ -673,7 +673,7 @@ test('area: choose a prefecture and city; food and outings search inside it, and
   assert(decodeURIComponent(d.querySelector('#eventSearch a').href).includes('長野県松本市 イベント'));
   const evLinks=[...d.querySelectorAll('#eventSearch a')];assert.equal(evLinks.length,3);
   assert.match(evLinks[2].textContent,/長野県の遊び・体験を予約/);assert(evLinks[2].querySelector('.pr'));
-  assert.equal(evLinks[2].href,'https://hb.afl.rakuten.co.jp/hgc/583df298.b5d045a3.583df299.c1b690a8/?pc='+encodeURIComponent('https://experiences.travel.rakuten.co.jp/destinations/nagano')+'&link_type=hybrid_url');
+  assert.equal(evLinks[2].href,'https://hb.afl.rakuten.co.jp/hgc/583df298.b5d045a3.583df299.c1b690a8/?pc='+encodeURIComponent('https://experiences.travel.rakuten.co.jp/destinations/nagano')+'&m='+encodeURIComponent('https://experiences.travel.rakuten.co.jp/destinations/nagano')+'&link_type=hybrid_url');
   assert.doesNotMatch(d.getElementById('eventSearch').textContent,/上田/);
   const gifts=[...d.querySelectorAll('#giftLinks a')].map(x=>x.textContent);
   assert.deepEqual(gifts.map(t=>t.replace('PR','')),['🍜 松本市のご当地グルメを調べる','🛒 松本市の名物をお取り寄せ','🎁 長野のお土産','🏡 松本市のふるさと納税']);
@@ -837,7 +837,7 @@ test('each plan card has its own ✏️ 直す button that opens the edit form d
 test('search words: OR runs each word, - removes matches, the same place twice is shown once, and routes open Google Maps',async()=>{
  const a=app();try{const {w,d}=a;await w.h.startOwner();
   Object.defineProperty(w.navigator,'geolocation',{value:{getCurrentPosition:(ok)=>ok({coords:{latitude:36.40,longitude:138.25}})},configurable:true});
-  const sent=[],opened=[];w.open=(u)=>opened.push(u);
+  const sent=[],opened=[];w.HTMLAnchorElement.prototype.click=function(){opened.push(this.href);};
   w.fetch=async(url,opt)=>{url=String(url);
    if(url.includes('/spots/search')){const b=JSON.parse(opt.body);sent.push(b);
     const shops=b.keyword.startsWith('そば')?[{id:'hp:1',name:'そば処 信州',lat:36.401,lng:138.251},{id:'hp:2',name:'チェーンそば',genre:'チェーン',lat:36.402,lng:138.251}]:[{id:'hp:3',name:'うどん亭',lat:36.403,lng:138.251},{id:'hp:1',name:'そば処 信州',lat:36.401,lng:138.251}];
