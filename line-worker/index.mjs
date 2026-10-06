@@ -42,7 +42,7 @@ export default {
   async fetch(request,env,ctx){
     const url=new URL(request.url);
     if(url.pathname==='/spots/search'&&['POST','OPTIONS'].includes(request.method)){
-      try{return await handleSpots(request,env);}
+      try{return await handleSpots(request,env,{db:async()=>firestore(await googleToken(env.FIREBASE_SERVICE_ACCOUNT),fetch,4)});}
       catch{console.error('Hibiruka spot search failed.');return new Response(JSON.stringify({error:'upstream'}),{status:502,headers:{'content-type':'application/json','access-control-allow-origin':'https://pocham4173.github.io',vary:'origin'}});}
     }
     if(url.pathname.startsWith('/push/')&&['GET','POST','OPTIONS'].includes(request.method)){

@@ -1645,6 +1645,7 @@ async function hotpepper(body) {
     const r = await fetch(CONFIG.spotsUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify(full), signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined });
     const out = await r.json().catch(() => ({}));
     if (r.status === 503) { hpReady = false; return null; }
+    if (r.status === 429) { toast("今日のお店検索はここまでです（1日100回）。地図のデータで探します。明日またどうぞ。"); return null; }
     if (!r.ok) return null;
     return (out.shops || []).map(h => ({ id: h.id, name: h.name, genre: h.genre, catchText: h.catch, budget: h.budget, address: h.address, access: h.access, hours: h.hours, lat: h.lat, lng: h.lng, website: h.url, photo: h.photo, smoking: h.smoking || "", coupon: !!h.coupon, couponUrl: h.couponUrl || "", source: "hp" }));
   } catch { return null; }

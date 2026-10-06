@@ -72,3 +72,19 @@ test('smoking OK search returns only shops where smoking is allowed', async () =
   const out = await (await handleSpots(req({kind: 'cafe', lat: 36.4, lng: 138.25, filters: ['smoking']}), env, s.deps)).json();
   assert.deepEqual(out.shops.map(x => x.id), ['hp:B', 'hp:C']);
 });
+test('search: 1 person 100 a day, then 429; same search is cached by Cloudflare', async () => {
+  resetKeyCache(); const s = setup(); const docs = new Map();
+  const db = {collection: c => ({doc: id => ({id: c + '/' + id})}),
+    commit: async ops => { for (const o of ops) docs.set(o.ref.id, o.value); }};
+  db.collection = c => ({doc: id => { const k = c + '/' + id; return {id: k, get: async () => ({exists: docs.has(k), data: () => docs.get(k)})}; }});
+  const deps = {...s.deps, db: async () => db};
+  const fetched = [];
+  deps.fetcher = async (url, o) => { if (url.includes('googleapis')) return s.deps.fetcher(url); fetched.push(o); return new Response(JSON.stringify({results: {shop: [shop]}})); };
+  assert.equal((await handleSpots(req({kind: 'cafe', lat: 36.4, lng: 138.25}), env, deps)).status, 200);
+  assert.equal(fetched[0].cf.cacheTtl, 3600);
+  docs.set('spotUsage/20261005_alice', {count: 100});
+  const r = await handleSpots(req({kind: 'cafe', lat: 36.4, lng: 138.25}), env, deps);
+  assert.equal(r.status, 429); assert.equal((await r.json()).error, 'limit');
+  // 数えられないとき（Firebaseの不調）でも検索は止めない
+  assert.equal((await handleSpots(req({kind: 'cafe', lat: 36.4, lng: 138.25}), env, {...deps, db: async () => { throw Error('x'); }})).status, 200);
+});
