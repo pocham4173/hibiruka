@@ -1865,14 +1865,18 @@ async function drawEvents() {
     if (!$("eventSearch")) return;
     const short = String(pref || "").replace(/(都|府|県)$/, ""), town = city || (findArea ? findArea.city : ""), local = town || short;
     $("giftWhere").textContent = local ? `行く場所：${town ? (pref || "") + town : pref}` : "① で行く場所を選ぶと、その土地のものが出ます";
-    $("giftLinks").innerHTML = (local ? `<a class="btn small sub" href="${google(`${local} ご当地グルメ 名物`)}" target="_blank" rel="noopener">🍜 ${esc(local)}のご当地グルメを調べる</a>`
-      + `<button type="button" class="btn small sub" data-local-food="${esc(local)}">🍽 ${esc(local)}の名物が食べられるお店</button>`
+    // 場所が分からないときは、全国の商品にならないように楽天のボタンは出さない
+    const area = town ? (pref || "") + town : (pref || short);
+    $("giftLinks").innerHTML = local
+      ? `<a class="btn small sub" href="${google(`${local} ご当地グルメ 名物`)}" target="_blank" rel="noopener">🍜 ${esc(local)}のご当地グルメを調べる</a>`
+        + `<button type="button" class="btn small sub" data-local-food="${esc(local)}">🍽 ${esc(local)}の名物が食べられるお店</button>`
+        + `<a class="btn small sub" href="${google(`${area} お土産 ランキング`)}" target="_blank" rel="noopener">🏆 ${esc(area)}のお土産ランキングを見る</a>`
+        + affButton(`https://search.rakuten.co.jp/search/mall/${encodeURIComponent(`${pref || town} お土産 人気`)}/`, "rakuten", `🎁 ${esc(pref || town)}の人気お土産を買う`, "btn small sub")
+        + affButton(`https://search.rakuten.co.jp/search/mall/${encodeURIComponent(`${local} 名物 お取り寄せ`)}/`, "rakuten", `🛒 ${esc(local)}の名物をお取り寄せ`, "btn small sub")
+        + affButton(`https://search.rakuten.co.jp/search/mall/${encodeURIComponent(`ふるさと納税 ${town || pref}`.trim())}/`, "rakuten", `🏡 ${esc(town || pref)}のふるさと納税`, "btn small sub")
       : `<button type="button" class="btn small" data-gift-where>🗾 行く場所を選ぶ</button>`
-      + `<a class="btn small sub" href="${google("近く ご当地グルメ 名物")}" target="_blank" rel="noopener">🍜 近くのご当地グルメを調べる</a>`
-      + `<button type="button" class="btn small sub" data-local-food="">🍽 近くの名物が食べられるお店</button>`)
-      + affButton(`https://search.rakuten.co.jp/search/mall/${encodeURIComponent(`${local || "ご当地"} 名物 お取り寄せ`)}/`, "rakuten", `🛒 ${esc(local || "ご当地")}の名物をお取り寄せ`, "btn small sub")
-      + affButton(`https://search.rakuten.co.jp/search/mall/${encodeURIComponent(`${short || "ご当地"} お土産`)}/`, "rakuten", `🎁 ${esc(short || "ご当地")}のお土産`, "btn small sub")
-      + affButton(`https://search.rakuten.co.jp/search/mall/${encodeURIComponent(`ふるさと納税 ${town || pref || ""}`.trim())}/`, "rakuten", `🏡 ${esc(town || pref || "")}${town || pref ? "の" : ""}ふるさと納税`, "btn small sub");
+        + `<a class="btn small sub" href="${google("近く ご当地グルメ 名物")}" target="_blank" rel="noopener">🍜 近くのご当地グルメを調べる</a>`
+        + `<button type="button" class="btn small sub" data-local-food="">🍽 近くの名物が食べられるお店</button>`;
     const slug = PREF_SLUG[pref], exp = `https://experiences.travel.rakuten.co.jp/${slug ? "destinations/" + slug : ""}`;
     $("eventSearch").innerHTML = `<a class="btn small sub" href="${google(`${word || "近く"} イベント ${m}月${d}日`)}" target="_blank" rel="noopener">🔍 ${esc(word || "近く")}の${esc(dayWord(day))}のイベント</a>`
       + `<a class="btn small sub" href="${google(`${word || "近く"} イベント ${m}月`)}" target="_blank" rel="noopener">🗓 ${esc(word || "近く")}の${m}月のイベント</a>`
