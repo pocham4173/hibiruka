@@ -1,4 +1,5 @@
 import { parseRecord, monthText, takeQuota } from './ai.mjs';
+import { isInquiryWord, inquiryStart, inquiryPick, inquiryReceive } from './inquiry.mjs';
 // LINEから届いたメッセージを受け取る係（Webhook）。
 // - LINEの署名を確かめたリクエストだけを処理する（それ以外は401）。
 // - アプリ側で作った使い捨ての連携番号を、LINEから送ってもらって本人をつなぐ。
@@ -112,6 +113,8 @@ const HELP = [
   '「ふりかえり」と送る → 今月の思い出をAIがまとめる',
   '　「先月」「8月のふりかえり」「2025年12月」のように前の月も',
   '',
+  '「お問い合わせ」と送る → 不具合・ご意見を送る',
+  '',
   '写真やくわしい内容は、アプリで追加できます。',
   APP_URL,
   '',
@@ -128,7 +131,9 @@ const GUEST_HELP = [
   GUIDE_URL,
   '',
   '▶ アプリを開く',
-  APP_URL
+  APP_URL,
+  '',
+  '✉️ 不具合・ご意見は「お問い合わせ」と送ってください'
 ].join('\n');
 const GUEST_CONNECT = 'この機能は、ヒビルカのアプリとつなぐと使えます。\nアプリの「設定」→「LINEから記録する」からつないでください。\n\n📖 使い方\n' + GUIDE_URL;
 
@@ -342,8 +347,11 @@ export async function handleEvent(db, env, ev, now = Date.now()) {
     const code = linkCodeFrom(msg.text);
     if (code && CODE.test(code)) return [text(await link(db, userId, code, now))];
   }
-  if (msg?.type === 'text' && /お問い?合わせ/.test(msg.text)) return [text('ご質問・ご要望は、このトークにそのまま送ってください。確認してお返事します。')];
+  // お問い合わせ（つながっていない人も使える）
+  if (ev.type === 'postback') { const pb = new URLSearchParams(ev.postback?.data || ''); if (pb.get('a') === 'inq') return inquiryPick(db, userId, pb.get('c'), now); }
+  if (msg?.type === 'text' && isInquiryWord(msg.text.normalize('NFKC').trim())) return inquiryStart();
   const owner = await resolveOwner(db, userId);
+  if (msg) { const got = await inquiryReceive(db, userId, msg, owner, now); if (got) return got; }
   if (!owner) {
     // つながっていない人。予定のお知らせを受け取っている友だちもここ。
     if (msg && msg.type !== 'text') return [text('ヒビルカのアプリとつなぐと、位置情報を送るだけで記録できます。\nアプリの「設定」→「LINEから記録する」からつないでください。\n' + APP_URL + '\n\n📖 使い方\n' + GUIDE_URL)];
