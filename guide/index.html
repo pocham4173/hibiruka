@@ -64,6 +64,7 @@
   .btnlike { display: inline-block; font-weight: 700; color: var(--navy); background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 0 7px; font-size: .92em; white-space: nowrap; }
   .btnlike.green { background: var(--green); color: #fff; border-color: var(--green); }
   .btnlike.navy { background: var(--navy); color: #fff; border-color: var(--navy); }
+  .btnlike.rose { background: var(--rose); color: #fff; border-color: var(--rose); }
 
   /* スマホの画面 */
   .phones { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
@@ -84,6 +85,13 @@
   .map .pic { height: 86px; background: linear-gradient(135deg,#dfe9d8 0 30%,#cfe0f2 30% 34%,#dfe9d8 34% 64%,#f3e1b8 64% 67%,#dfe9d8 67%); position: relative; }
   .map .pic::after { content: "📍"; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-60%); font-size: 26px; }
   .map .addr { padding: 6px 10px; font-size: 12px; background: #fdf6c9; }
+  .cards { display: flex; gap: 6px; overflow: hidden; }
+  .lcard { flex: 0 0 150px; background: #fff; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; gap: 3px; padding-bottom: 8px; font-size: 11.5px; }
+  .lcard .pic { height: 60px; background: linear-gradient(135deg, #f3d9b4, #e9b77f); }
+  .lcard .pic.p2 { background: linear-gradient(135deg, #d6ead1, #a9cfa0); }
+  .lcard small, .lcard b { padding: 0 8px; } .lcard small { color: #ad4564; font-weight: 700; } .lcard b { color: #1f2d4a; }
+  .lcard span { margin: 2px 8px 0; background: #1f2d4a; color: #fff; border-radius: 6px; text-align: center; padding: 3px 0; font-weight: 700; }
+  .lcard span.sub { background: #eef0f4; color: #1f2d4a; }
   .qr { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
   .qr span { background: #fff; border: 1px solid #c9d6ea; color: #2a64c5; border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 700; }
 
@@ -117,7 +125,7 @@
     <p class="lead">ヒビルカは、これからの予定と、行ってきた思い出を一緒に残せるアプリです。大切な人には、LINEで予定を届けられます。</p>
     <ul class="points">
       <li><span>🗓️</span>予定を入れて<br>LINEで届ける</li>
-      <li><span>📷</span>写真を入れると<br>日付と場所も</li>
+      <li><span>🔍</span>行きたい場所を<br>天気と一緒に探す</li>
       <li><span>✨</span>AIが思い出の<br>文章を作る</li>
     </ul>
     <ul class="toc" aria-label="もくじ">
@@ -129,6 +137,10 @@
       <li><a href="#line-record">LINEから記録</a></li>
       <li><a href="#look">見返す</a></li>
       <li><a href="#sns">SNSに投稿</a></li>
+      <li><a href="#find">スポットを探す</a></li>
+      <li><a href="#wish">行きたい・コース</a></li>
+      <li><a href="#deals">お得・イベント</a></li>
+      <li><a href="#notify">アプリの通知</a></li>
       <li><a href="#faq">よくある質問</a></li>
     </ul>
   </div>
@@ -171,7 +183,16 @@
         <p>最後に <span class="btnlike navy">予定を保存する</span> を押せば完成です。</p>
         <div class="tip"><b>ポイント</b>　「どこで？」を入れると、Googleマップやカレンダーにすぐ飛べるボタンが付きます。</div>
       </div>
-      <div class="phones"><figure class="phone"><div class="frame"><img src="img/02-plans.jpg" alt="これからの予定の一覧" loading="lazy"></div><figcaption>これからの予定</figcaption></figure></div>
+      <div class="phones"><figure class="phone"><div class="frame"><img src="img/02-plans.jpg" alt="これからの予定とカウントダウン" loading="lazy"></div><figcaption>「あと◯日」も出ます</figcaption></figure></div>
+    </div>
+    <div class="step with-shot left">
+      <div>
+        <h3><span class="n">3</span>楽しみな予定は「あと◯日」</h3>
+        <p>60日以内の予定は、いちばん上に <b>今日！・明日！・あと3日</b> のように近い順に3つ並びます。押すとその予定が開きます。</p>
+        <h3><span class="n">4</span>直したいときは「✏️ 直す」</h3>
+        <p>予定のカードの下にある <span class="btnlike">✏️ 直す</span> を押すと、すぐに直す画面が開きます。<span class="btnlike">くわしく・送る</span> からは、LINEで送る・消すなどができます。</p>
+      </div>
+      <div class="phones"><figure class="phone"><div class="frame"><img src="img/22-plan-cards.jpg" alt="直すボタンのある予定のカード" loading="lazy"></div><figcaption>カードの「✏️ 直す」</figcaption></figure></div>
     </div>
   </section>
 
@@ -195,6 +216,11 @@
           <li><b>いつ送る？</b>「前の日の朝 9:00」「当日の朝 7:00」「予定の1時間前」など。日付と時間を自由に決めることもできます</li>
         </ul>
         <p><span class="btnlike">この日時に送る</span> で予約完了。その時間になると、ヒビルカのLINEから相手に届きます。</p>
+        <ul>
+          <li><b>💬 ひとこと</b>　「楽しみにしてるね！」のような一言を添えられます（100文字まで）</li>
+          <li><b>📱 アプリ通知</b>　自分あてなら、LINEではなくスマホに直接届けることもできます（<a href="#notify">12章</a>）</li>
+        </ul>
+        <div class="tip"><b>無料で続けるために</b>　LINEのお知らせは、1人あたり月30通までです（1人に送ると1通）。送る画面に「今月あと◯通」と出ます。アプリ通知は数えません。</div>
       </div>
       <div class="phones two">
         <figure class="phone"><div class="frame"><img src="img/12-plan-detail.jpg" alt="予定の詳細画面" loading="lazy"></div><figcaption>予定を開いたところ</figcaption></figure>
@@ -272,9 +298,9 @@
         <div class="tip"><b>ポイント</b>　まちがえたときは、返事の下の「取り消す」を押せば消えます。</div>
         <h3 style="margin-top:14px"><span class="n">4</span>下のメニューから</h3>
         <ul>
-          <li><b>今日</b> → 今日の予定と記録</li>
-          <li><b>また行きたい</b> → ♥を付けた場所</li>
-          <li><b>ふりかえり</b> → 今月の思い出をAIがまとめて返事</li>
+          <li><b>今日</b> → 今日の予定と記録、<b>これからの予定（明日・あと◯日）</b></li>
+          <li><b>また行きたい</b> → 行きたいリストと♥の場所が、写真つきのカードで。「地図で見る」「アプリで予定にする」ボタン付き</li>
+          <li><b>ふりかえり</b> → 今月の思い出をAIがまとめて返事。<b>「先月」「8月のふりかえり」「2025年12月」</b>のように前の月も。返事の下のボタンでさらに前の月へ</li>
           <li><b>友だちに紹介</b> → ヒビルカのLINEを友だちに送れる</li>
         </ul>
       </div>
@@ -286,6 +312,10 @@
             <div class="qr"><span>遊び</span><span>食事</span><span>カフェ</span><span>旅行</span></div></div></div>
           <div class="msg me"><div class="bubble">遊び</div></div>
           <div class="msg"><div class="bubble">「遊び」で記録しました。</div></div>
+          <div class="msg me"><div class="bubble">今日</div></div>
+          <div class="msg"><div class="bubble">📅 今日の予定・記録<br>10:05 上田城跡公園<br><br>🎉 これからの予定<br>明日｜10月7日(水) 歯医者<br>あと3日｜10月9日(金) ランチ</div></div>
+          <div class="msg me"><div class="bubble">また行きたい</div></div>
+          <div class="msg"><div class="cards"><div class="lcard"><div class="pic"></div><small>📌 行きたいリスト</small><b>森のごはん屋</b><span>🗺 地図で見る</span><span class="sub">📅 アプリで予定にする</span></div><div class="lcard"><div class="pic p2"></div><small>♥ また行きたい</small><b>わんこカフェ</b><span>🗺 地図で見る</span><span class="sub">📅 アプリで予定にする</span></div></div></div>
         </div>
       </div>
     </div>
@@ -306,8 +336,17 @@
       <div>
         <h3><span class="n">2</span>AIでひと月をふりかえる</h3>
         <p>思い出のページのいちばん上にある <span class="btnlike navy">今月</span> <span class="btnlike">先月</span> を押すと、その月の思い出をAIがまとめてくれます。<span class="btnlike">コピー</span> で日記やSNSにも使えます。</p>
+        <p><b>ほかの月をふりかえる</b> から、思い出のある前の月（去年の夏など）も選べます。</p>
       </div>
       <div class="phones"><figure class="phone"><div class="frame"><img src="img/07-month.jpg" alt="AIのふりかえり" loading="lazy"></div><figcaption>ひと月のふりかえり</figcaption></figure></div>
+    </div>
+    <div class="step with-shot left">
+      <div>
+        <h3><span class="n">3</span>思い出マップ 🗺</h3>
+        <p>思い出のページの <span class="btnlike">思い出マップ</span> を押すと、今までの思い出が地図にピンで並びます。ピンを押すと写真と題名が出て、<span class="btnlike">開く</span> でその記録へ。</p>
+        <div class="tip"><b>ポイント</b>　位置情報のある写真を入れたり、LINEで位置情報を送ったりした思い出が地図に出ます。</div>
+      </div>
+      <div class="phones"><figure class="phone"><div class="frame"><img src="img/25-memory-map.jpg" alt="思い出マップ" loading="lazy"></div><figcaption>思い出マップ</figcaption></figure></div>
     </div>
   </section>
 
@@ -335,9 +374,119 @@
   </section>
 
   <!-- 9 -->
+  <!-- 9 -->
+  <section class="chapter" id="find">
+    <div class="chap-head"><div class="chap-no">9</div><h2>スポットを探す 🔍</h2></div>
+    <p class="chap-lead">「探す」のページで、行く場所と日を決めると、その日の天気に合わせてごはん屋さんやおでかけ先を探せます。</p>
+    <div class="step with-shot">
+      <div>
+        <h3><span class="n">1</span>どこに行く？ いつ行く？</h3>
+        <ul>
+          <li><b>📍 今いる場所</b>　今いるあたりで探す</li>
+          <li><b>🗾 県・市町村で選ぶ</b>　「埼玉県」だけでも、「長野県 松本市」のように市町村まででも</li>
+          <li><b>🗺 場所を指定</b>　「軽井沢駅」「松本城」のように名前で</li>
+        </ul>
+        <p>行く日は <b>今日・明日・今度の土曜・日曜</b> か、6日先までの日にちから選びます。</p>
+        <h3><span class="n">2</span>その日の天気とおすすめ</h3>
+        <p>選んだ場所・日の天気（気象庁の予報）が出て、雨なら屋内や温泉、晴れなら公園や道の駅、のようにおすすめが並びます。</p>
+        <h3><span class="n">3</span>行き方を調べる 🚃🚗</h3>
+        <p>「到着」に場所を入れて <span class="btnlike navy">🚃 電車で</span> <span class="btnlike">🚗 車で</span> を押すと、Googleマップで時間・乗りかえ・到着時刻がわかります。</p>
+      </div>
+      <div class="phones"><figure class="phone"><div class="frame"><img src="img/16-find-where.jpg" alt="どこに行く・いつ行く・天気" loading="lazy"></div><figcaption>行く場所・日・天気</figcaption></figure></div>
+    </div>
+    <div class="step with-shot left">
+      <div>
+        <h3><span class="n">4</span>何を探す？</h3>
+        <p>カフェ・ランチ・ラーメンなどのボタンを押すとすぐ探します。下の <b>お店の条件</b> で範囲（1km・3km・市内まるごと）、駐車場あり・個室・<b>🚬 喫煙OK</b>・クーポンあり、予算も選べます。</p>
+        <p>お出かけは、公園・屋内（雨の日）・温泉・道の駅・ドッグラン・<b>🚬 喫煙所</b>。</p>
+        <h3><span class="n">5</span>キーワード検索</h3>
+        <p>複数の単語をスペースで並べると、両方を含む結果を探しやすくなります（例：<b>上田駅 ランチ</b>）。</p>
+        <ul>
+          <li><b>OR</b>　どれか（例：そば OR うどん）</li>
+          <li><b>-（マイナス）</b>　その言葉を除く（例：カフェ -チェーン）</li>
+        </ul>
+      </div>
+      <div class="phones two"><figure class="phone"><div class="frame"><img src="img/17-find-what.jpg" alt="何を探すのボタンとお店の条件" loading="lazy"></div><figcaption>何を探す？</figcaption></figure><figure class="phone"><div class="frame"><img src="img/18-find-results.jpg" alt="探した結果" loading="lazy"></div><figcaption>その日の天気も出ます</figcaption></figure></div>
+    </div>
+  </section>
+
+  <!-- 10 -->
+  <section class="chapter" id="wish">
+    <div class="chap-head"><div class="chap-no">10</div><h2>行きたいリスト・また行きたい・おでかけコース</h2></div>
+    <p class="chap-lead">「行ってみたい」を集めておいて、行く日が決まったら1日のコースにできます。</p>
+    <div class="step with-shot">
+      <div>
+        <h3><span class="n">1</span>📌 行きたいリストに入れる</h3>
+        <p>探した場所の <span class="btnlike rose">📌 ここ行きたい！</span> を押すと、「探す」ページの下の <b>行きたいリスト</b> に入ります。予定に入れると「予定あり」、その日が過ぎると「行った」になり、<span class="btnlike">📝 思い出を残す</span> がすぐ押せます。</p>
+        <h3><span class="n">2</span>♥ また行きたい</h3>
+        <p>行ってよかった思い出には ♥ を。思い出のページの「また行きたい」に集まります。</p>
+        <div class="tip"><b>LINEでも</b>　LINEで「<b>また行きたい</b>」と送ると、行きたいリストと♥の場所が写真つきのカードで届きます。地図もすぐ開けます。</div>
+      </div>
+      <div class="phones"><figure class="phone"><div class="frame"><img src="img/19-wishlist.jpg" alt="行きたいリスト" loading="lazy"></div><figcaption>行きたいリスト</figcaption></figure></div>
+    </div>
+    <div class="step with-shot left">
+      <div>
+        <h3><span class="n">3</span>🧭 おでかけコースを作る</h3>
+        <ol>
+          <li>行きたい場所の <span class="btnlike">🧭 コースに入れる</span> を押す（行きたいリストからもOK）</li>
+          <li>「探す」の上の方の <span class="btnlike navy">🧭 コースを見る・作る</span> か、画面の下の「コース ◯か所 ▶ ひらく」を押す</li>
+          <li>↑↓で順番を入れ替え、時間を入れる。<span class="btnlike">📏 近い順に並べる</span> や <span class="btnlike">✨ AIに順番と時間を考えてもらう</span> も</li>
+          <li><span class="btnlike navy">📅 予定にまとめて入れる</span> で、全部の場所が時間つきの予定になります</li>
+        </ol>
+        <p>場所と場所の間には、車でかかる時間の目安と、電車・車の行き方のボタンが出ます。</p>
+      </div>
+      <div class="phones"><figure class="phone"><div class="frame"><img src="img/20-course.jpg" alt="おでかけコース" loading="lazy"></div><figcaption>AIが時間を入れたコース</figcaption></figure></div>
+    </div>
+  </section>
+
+  <!-- 11 -->
+  <section class="chapter" id="deals">
+    <div class="chap-head"><div class="chap-no">11</div><h2>お得・イベント・ご当地グルメ</h2></div>
+    <p class="chap-lead">行く場所に合わせて、クーポンやイベント、名物やお土産も探せます。</p>
+    <div class="step with-shot">
+      <div>
+        <h3><span class="n">1</span>🎟 クーポン</h3>
+        <ul>
+          <li><b>クーポンのあるお店を探す</b>　ホットペッパーのクーポンが使えるお店。カードの <span class="btnlike">🎟 クーポンを見る</span> から</li>
+          <li><b>地元のお店のクーポン</b>　画面をお店の人に見せるだけ。今の日時が秒まで動いて出るので、その場で開いた画面だとわかります</li>
+        </ul>
+      </div>
+      <div class="phones two"><figure class="phone"><div class="frame"><img src="img/21-coupons.jpg" alt="お得・クーポン" loading="lazy"></div><figcaption>お得・クーポン</figcaption></figure><figure class="phone"><div class="frame"><img src="img/24-coupon-ticket.jpg" alt="見せるだけクーポン" loading="lazy"></div><figcaption>見せるだけクーポン</figcaption></figure></div>
+    </div>
+    <div class="step with-shot left">
+      <div>
+        <h3><span class="n">2</span>🎪 イベント</h3>
+        <p>行く場所の「今日のイベント」「◯月のイベント」をすぐ調べられます。イベント名のキーワードでも探せます（例：上田 花火）。</p>
+        <h3><span class="n">3</span>🍜 ご当地グルメ・お土産</h3>
+        <p>行く場所の名物を調べたり、名物が食べられるお店を探したり。お取り寄せ・お土産・ふるさと納税は楽天市場で見られます。</p>
+        <div class="tip"><b>PRについて</b>　「PR」が付いたボタンは、楽天などの広告（アフィリエイト）のリンクです。ヒビルカを無料で続けるために使っています。</div>
+      </div>
+      <div class="phones"><figure class="phone"><div class="frame"><img src="img/23-events.jpg" alt="イベントとご当地グルメ" loading="lazy"></div><figcaption>イベント・ご当地グルメ</figcaption></figure></div>
+    </div>
+  </section>
+
+  <!-- 12 -->
+  <section class="chapter" id="notify">
+    <div class="chap-head"><div class="chap-no">12</div><h2>アプリの通知 📱</h2></div>
+    <p class="chap-lead">自分あての予定のお知らせを、LINEではなくスマホに直接届けます。</p>
+    <div class="step with-shot left">
+      <div>
+        <h3><span class="n">1</span>この端末で受け取る</h3>
+        <p>「設定」→「📱 この端末に通知」の <span class="btnlike navy">この端末で通知を受け取る</span> を押して、通知を「許可」します。<span class="btnlike">テスト通知を送る</span> で届くか確かめられます。</p>
+        <div class="tip"><b>iPhoneの人</b>　ヒビルカを「ホーム画面に追加」して、ホーム画面のアイコンから開いたときに使えます（iOS 16.4以降）。</div>
+        <h3><span class="n">2</span>予定を送るときに選ぶ</h3>
+        <p>予定の「LINEで予定を送る」で <b>📱 アプリ通知</b> を選ぶと、予約した時間にスマホへ届きます。LINEの月30通には数えません。</p>
+      </div>
+      <div class="phones"><figure class="phone"><div class="frame"><img src="img/26-notify.jpg" alt="この端末に通知" loading="lazy"></div><figcaption>設定の「この端末に通知」</figcaption></figure></div>
+    </div>
+  </section>
+
   <section class="chapter" id="faq">
     <div class="chap-head"><div class="chap-no">?</div><h2>よくある質問</h2></div>
     <details><summary>お金はかかりますか？</summary><p>かかりません。AIの文章作成も無料です（1人1日20回まで）。</p></details>
+    <details><summary>LINEのお知らせは何通でも送れますか？</summary><p>無料で続けるため、1人あたり月30通までです（1人に送ると1通）。自分あてなら「📱 アプリ通知」を使うと数えません。</p></details>
+    <details><summary>天気はどこまで先がわかりますか？</summary><p>気象庁の予報なので、今日から6日先までです。日本の中の場所だけです。</p></details>
+    <details><summary>「PR」が付いているのは何ですか？</summary><p>楽天などの広告（アフィリエイト）のリンクです。押して買い物や予約をすると、ヒビルカの運営に少しだけ報酬が入ります。値段は変わりません。</p></details>
     <details><summary>自分の記録は、ほかの人に見えますか？</summary><p>見えません。記録はあなた専用です。LINEで届けた予定だけが、選んだ相手に届きます。</p></details>
     <details><summary>LINEで届けたら、相手の通知はうるさくない？</summary><p>選んだ日時に1回届くだけです。届けたくない人は選ばなければ送られません。</p></details>
     <details><summary>機種を変えたら記録はどうなりますか？</summary><p>「設定」→「<b>機種変更・別の端末でも使う</b>」でメールアドレスとパスワードを登録しておくと、新しいスマホでもログインして同じ記録を見られます。</p></details>
