@@ -676,7 +676,7 @@ test('area: choose a prefecture and city; food and outings search inside it, and
   assert.equal(evLinks[2].href,'https://hb.afl.rakuten.co.jp/hgc/583df298.b5d045a3.583df299.c1b690a8/?pc='+encodeURIComponent('https://experiences.travel.rakuten.co.jp/destinations/nagano')+'&m='+encodeURIComponent('https://experiences.travel.rakuten.co.jp/destinations/nagano')+'&link_type=hybrid_url');
   assert.doesNotMatch(d.getElementById('eventSearch').textContent,/上田/);
   const gifts=[...d.querySelectorAll('#giftLinks a')].map(x=>x.textContent);
-  assert.deepEqual(gifts.map(t=>t.replace('PR','')),['🍜 松本市のご当地グルメを調べる','🛒 松本市の名物をお取り寄せ','🎁 長野のお土産','🏡 松本市のふるさと納税']);
+  assert.deepEqual(gifts.map(t=>t.replace('PR','')),['🍜 松本市のご当地グルメを調べる','🏆 長野県松本市のお土産ランキングを見る','🎁 長野県の人気お土産を買う','🛒 松本市の名物をお取り寄せ','🏡 松本市のふるさと納税']);
   assert.match(d.getElementById('giftWhere').textContent,/行く場所：長野県松本市/);
   assert(d.querySelector('#giftLinks [data-local-food="松本市"]'));
   // outings inside the city
