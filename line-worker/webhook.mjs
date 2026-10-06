@@ -107,7 +107,8 @@ const HELP = [
   '　「昨日ゆかちゃんとランチ行った」→ 思い出に',
   '📍 位置情報を送る → その場所を「思い出」に記録',
   '「今日」と送る → 今日の予定と、これからの予定（あと◯日）',
-  '「また行きたい」と送る → また行きたい・行きたいリスト（地図つき）',
+  '「また行きたい」と送る → おすすめ機能の説明（行きたいリスト・おでかけコース）',
+  '「行きたいリスト」と送る → あなたが集めた場所（地図つき）',
   '「ふりかえり」と送る → 今月の思い出をAIがまとめる',
   '　「先月」「8月のふりかえり」「2025年12月」のように前の月も',
   '',
@@ -222,7 +223,7 @@ async function listFavorites(db, owner) {
     base().where('kind', '==', 'wish').select('place', 'title', 'genre', 'lat', 'lng', 'imageUrl', 'status').limit(40).get().catch(() => ({docs: []})),
   ]);
   const favs = fav.docs.map(d => d.data()), wishes = wish.docs.map(d => d.data()).filter(w => w.status !== 'visited');
-  if (!favs.length && !wishes.length) return [{type: 'flex', altText: '✨ また行きたい・行きたいリストのおすすめ機能', contents: {type: 'carousel', contents: WISH_INTRO}}, text('「また行きたい」はまだありません。\n・行った思い出に ♥ を付ける\n・アプリの「探す」で「📌 ここ行きたい！」を押す\nと、ここに集まります。\n\n📖 使い方\n' + GUIDE_URL + '#wish')];
+  if (!favs.length && !wishes.length) return [text('「また行きたい」はまだありません。\n・行った思い出に ♥ を付ける\n・アプリの「探す」で「📌 ここ行きたい！」を押す\nと、ここに集まります。\n\n📖 使い方\n' + GUIDE_URL + '#wish')];
   const seen = new Set(), cards = [];
   for (const [e, badge] of [...wishes.map(w => [w, '📌 行きたいリスト']), ...favs.map(f => [f, '♥ また行きたい'])]) {
     const k = String(e.place || e.title || ''); if (!k || seen.has(k)) continue; seen.add(k); cards.push(placeCard(e, badge));
@@ -236,8 +237,7 @@ async function listFavorites(db, owner) {
     {type: 'button', style: 'secondary', height: 'sm', action: {type: 'uri', label: 'アプリで探す', uri: APP_URL + '?tab=find'}},
   ]}});
   const list = [...seen].slice(0, 20).map(n => '・' + n).join('\n');
-  return [{type: 'flex', altText: '✨ また行きたい・行きたいリストのおすすめ機能', contents: {type: 'carousel', contents: WISH_INTRO}},
-    {type: 'flex', altText: `♥ また行きたい・行きたいリスト（${seen.size}か所）`, contents: {type: 'carousel', contents: cards}}, text(`♥ また行きたい・📌 行きたいリスト\n${list}`)];
+  return [{type: 'flex', altText: `♥ また行きたい・行きたいリスト（${seen.size}か所）`, contents: {type: 'carousel', contents: cards}}, text(`♥ また行きたい・📌 行きたいリスト\n${list}`)];
 }
 
 
@@ -359,7 +359,10 @@ export async function handleEvent(db, env, ev, now = Date.now()) {
   if (msg.type !== 'text') return [];
   const t = msg.text.normalize('NFKC').trim();
   if (/^(今日|きょう)(の予定)?$/.test(t)) return listToday(db, owner, now);
-  if (/^また行きたい$/.test(t)) return listFavorites(db, owner);
+  // メニューの「また行きたい」は、まずおすすめ機能の説明。自分の場所の一覧はボタン（または「行きたいリスト」と送る）で
+  if (/^また行きたい$/.test(t)) return [{type: 'flex', altText: '✨ また行きたい・行きたいリストのおすすめ機能', contents: {type: 'carousel', contents: WISH_INTRO}},
+    text('♥ また行きたい・📌 行きたいリストは、行ってみたい場所を集めて、天気に合わせたおでかけコースにできる機能です。\n\nあなたが集めた場所は、下のボタンで見られます👇', {items: [{type: 'action', action: {type: 'message', label: '♥ わたしの場所を見る', text: 'わたしの行きたい場所'}}]})];
+  if (/^(わたしの|私の)?(行きたい場所|行きたいリスト)$/.test(t)) return listFavorites(db, owner);
   if (/^(使い方|説明書|ヘルプ|help)$/i.test(t)) return [text(HELP)];
   const ago = monthsAgoFrom(t, now);
   if (ago !== null) return lookBack(db, env, owner, ago, now);
