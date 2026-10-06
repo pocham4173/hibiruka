@@ -153,7 +153,31 @@ test('LINE addresses drop the country and postal code for the place name',async(
 test('strangers: plain text is ignored, contact gets an answer',async()=>{
   const db=memoryDb();
   assert.deepEqual(await handleEvent(db,{},msg({type:'text',text:'こんにちは'}),NOW),[]);
-  assert.match((await handleEvent(db,{},msg({type:'text',text:'お問い合わせ'}),NOW))[0].text,/そのまま送って/);
+  const start=(await handleEvent(db,{},msg({type:'text',text:'お問い合わせ'}),NOW))[0];
+  assert.match(start.text,/よくある質問/);assert.match(start.text,/個別のお返事はしていません/);
+  assert.ok(start.quickReply.items.some(i=>i.action.data==='a=inq&c=bug'));
+});
+test('inquiry: pick a kind, send one message, it is saved without the LINE id; 3 a day',async()=>{
+  const db=memoryDb(linked());
+  const pb=c=>({type:'postback',source:{type:'user',userId:U},replyToken:'r',postback:{data:'a=inq&c='+c}});
+  assert.match((await handleEvent(db,{},pb('bug'),NOW))[0].text,/どの画面で/);
+  const done=(await handleEvent(db,{},msg({type:'text',text:'今日の予定が出ません'}),NOW))[0].text;
+  assert.match(done,/受け付けました/);
+  const [q]=Object.values(db.data.inquiries);
+  assert.equal(q.kind,'bug');assert.equal(q.text,'今日の予定が出ません');assert.match(q.no,/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+  assert.equal(JSON.stringify(q).includes(U),false,'LINEのIDは保存しない');
+  // 次の文はふつうの記録・返事に戻る
+  assert.equal(await (async()=>{const r=await handleEvent(db,{},msg({type:'text',text:'使い方'}),NOW);return /このトークでできること/.test(r[0].text);})(),true);
+  // やめる
+  await handleEvent(db,{},pb('idea'),NOW);
+  assert.match((await handleEvent(db,{},msg({type:'text',text:'やめる'}),NOW))[0].text,/やめました/);
+  await handleEvent(db,{},pb('idea'),NOW);await handleEvent(db,{},msg({type:'text',text:'2つ目'}),NOW);
+  await handleEvent(db,{},pb('idea'),NOW);await handleEvent(db,{},msg({type:'text',text:'3つ目'}),NOW);
+  assert.match((await handleEvent(db,{},pb('idea'),NOW))[0].text,/1日3回まで/);
+  // 15分たったら待つのをやめる
+  const db2=memoryDb();await handleEvent(db2,{},pb('how'),NOW);
+  assert.deepEqual(await handleEvent(db2,{},msg({type:'text',text:'こんにちは'}),NOW+16*60000),[]);
+  assert.equal(db2.data.inquiries,undefined);
 });
 test('end-to-end: signed webhook replies via the reply API only',async()=>{
   const db=memoryDb(linked());const calls=[];

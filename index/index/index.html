@@ -938,6 +938,23 @@
       <p id="accountError" class="err" role="alert"></p>
       <button class="btn sub hidden" id="accountLogout" type="button">ログアウト</button>
     </div>
+    <div class="card" id="contactCard"><h2>✉️ お問い合わせ</h2>
+      <p class="note">先に「よくある質問」をご覧ください。解決しないときは、フォームかLINEで送れます。個別のお返事はしていませんが、すべて読んでいます。</p>
+      <a class="btn sub" href="../../guide/#faq" target="_blank" rel="noopener">❓ よくある質問</a>
+      <a class="btn sub" href="../../terms/#contact" target="_blank" rel="noopener" style="margin-top:8px">📝 お問い合わせフォーム</a>
+      <a class="btn line" id="contactLine" href="#" style="margin-top:8px">💬 LINEで送る</a>
+      <p class="note" style="margin-top:12px">問い合わせ番号：<b id="inqNo">…</b> <button class="btn small sub" type="button" id="inqCopy" style="display:inline-flex;width:auto;padding:4px 12px;margin-left:6px">コピー</button><br>不具合のときは、この番号も書いてください（あなたの記録の中身は、番号からは分かりません）。</p>
+    </div>
+    <div class="card hidden" id="deleteCard"><h2>🗑 アカウントと記録を削除</h2>
+      <p class="note">予定・思い出・写真・行きたい場所・友だち・LINEのつながり・通知の設定を、すべて消します。<b>消したものは元に戻せません。</b></p>
+      <button class="btn danger" id="deleteStart" type="button">削除の手続きをする</button>
+      <div id="deleteBox" class="hidden" style="margin-top:12px">
+        <div id="deletePassWrap" class="hidden"><label class="lbl" for="deletePass">本人確認のため、登録したパスワード</label><input id="deletePass" type="password" autocomplete="current-password"></div>
+        <label class="lbl" for="deleteWord">確認のため「削除」と入力してください</label><input id="deleteWord" type="text" autocomplete="off">
+        <button class="btn danger" id="deleteGo" type="button" disabled style="margin-top:12px">すべて削除する</button>
+        <p class="err" id="deleteErr" role="alert"></p>
+      </div>
+    </div>
     <div class="card" id="noticeCard"><div class="disclaimer"><b>ご利用上の注意（免責事項）</b><p>本サービス（ヒビルカ）は、個人が無料で提供している試作開発アプリです。</p><ul><li>無料枠の範囲内で運用しているため、利用状況によっては通知の遅延・未達、一時的なアクセス制限、または予告のない機能変更・サービス停止が発生する場合があります。</li><li>本サービスのご利用により生じた損害等について、開発者は一切の責任を負いかねますのであらかじめご了承ください。</li></ul><p class="terms-link"><a href="../../terms/" target="_blank" rel="noopener">📄 利用規約・プライバシーポリシー</a>　<a href="../../terms/#contact" target="_blank" rel="noopener">✉️ お問い合わせ</a></p></div></div>
   </section>
 </div>
@@ -1146,6 +1163,7 @@ const CONFIG = {
   spotsUrl: "https://hibiruka-line.okm-co.workers.dev/spots/search",
   pushUrl: "https://hibiruka-line.okm-co.workers.dev/push/",
   weatherUrl: "https://hibiruka-line.okm-co.workers.dev/weather",
+  accountUrl: "https://hibiruka-line.okm-co.workers.dev/account/delete",
   // アフィリエイト（登録ができたら値を入れるだけ。空のあいだは普通のリンクで開く）
   //   valuecommerce: バリューコマースの MyLink の sid と pid（ホットペッパーグルメのプログラム）
   //   rakuten: 楽天アフィリエイトID（例 "1a2b3c4d.5e6f7a8b.1a2b3c4e.5f6a7b8c"）
@@ -3366,9 +3384,59 @@ function setupAccount() {
     }catch(e){$("accountError").textContent=e.code==="auth/email-already-in-use" ? "このメールは登録済みです。別のメールを使ってください。今の記録は保存されています。" : "登録できませんでした。メールと通信を確認してください。";}
     finally{$("accountSave").disabled=false;}
   };
+  setupContact(user);
   $("accountLogout").onclick=async()=>{
     if(!auth.currentUser?.email || !confirm("ログアウトしますか？登録したメールとパスワードで戻れます。"))return;
     try{unsub.forEach(stop=>stop());unsub=[];await auth.signOut();location.assign("?intro=1");}catch{toast("ログアウトできませんでした。");}
+  };
+}
+/* ---------- お問い合わせ・アカウント削除 ---------- */
+// 問い合わせ番号：中身（ID）が分からない短い番号。LINEで送ったときも同じ番号になる
+async function inquiryNo(uid) {
+  const ABC = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const h = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("hibiruka:" + uid)));
+  const s = Array.from(h.slice(0, 8), b => ABC[b & 31]).join("");
+  return s.slice(0, 4) + "-" + s.slice(4);
+}
+function setupContact(user) {
+  $("contactLine").href = "https://line.me/R/oaMessage/" + encodeURIComponent(CONFIG.lineOaId) + "/?" + encodeURIComponent("お問い合わせ");
+  if (user && globalThis.crypto?.subtle) inquiryNo(user.uid).then(n => { $("inqNo").textContent = n; }).catch(() => { $("inqNo").textContent = "—"; });
+  $("inqCopy").onclick = () => navigator.clipboard?.writeText($("inqNo").textContent).then(() => toast("問い合わせ番号をコピーしました"), () => {});
+  // 削除は「あなた専用のヒビルカ」だけ（以前からの共有の記録は対象外）
+  $("deleteCard").classList.toggle("hidden", !personalMode);
+  const needPass = !!user?.email;
+  $("deletePassWrap").classList.toggle("hidden", !needPass);
+  $("deleteStart").onclick = () => { $("deleteBox").classList.remove("hidden"); $("deleteStart").classList.add("hidden"); $("deleteWord").focus(); };
+  $("deleteWord").oninput = () => { $("deleteGo").disabled = $("deleteWord").value.trim() !== "削除"; };
+  $("deleteGo").onclick = async () => {
+    $("deleteErr").textContent = "";
+    if ($("deleteWord").value.trim() !== "削除") return;
+    if (needPass && !$("deletePass").value) { $("deleteErr").textContent = "パスワードを入れてください。"; return; }
+    if (!confirm("本当にすべて削除しますか？\n消したものは元に戻せません。")) return;
+    const btn = $("deleteGo"); btn.disabled = true; btn.textContent = "削除しています…";
+    try {
+      // 先に本人確認（メール登録の人）。ここで失敗すれば何も消えない
+      if (needPass) await auth.currentUser.reauthenticateWithCredential(firebase.auth.EmailAuthProvider.credential(auth.currentUser.email, $("deletePass").value));
+      try { const reg = await navigator.serviceWorker?.getRegistration?.(); const sub = await reg?.pushManager?.getSubscription(); await sub?.unsubscribe(); } catch {}
+      for (let i = 0; i < 6; i++) {
+        const token = await auth.currentUser.getIdToken();
+        const r = await fetch(CONFIG.accountUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ confirm: "削除" }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) { const e = Error("account"); e.code = j.error || r.status; throw e; }
+        if (!j.more) break;
+      }
+      unsub.forEach(stop => stop()); unsub = [];
+      try { await auth.currentUser.delete(); } catch { await auth.signOut().catch(() => {}); }
+      try { await db.terminate(); await db.clearPersistence(); } catch {}
+      try { localStorage.clear(); sessionStorage.clear(); } catch {}
+      location.replace("./?intro=1&deleted=1");
+    } catch (e) {
+      const c = e?.code || "";
+      $("deleteErr").textContent = /wrong-password|invalid-credential|invalid-login/.test(c) ? "パスワードがちがいます。何も削除していません。"
+        : c === "auth/too-many-requests" ? "何度もまちがえたため、しばらく待ってからお試しください。何も削除していません。"
+        : `削除できませんでした（${c}）。通信を確認して、もう一度お試しください。`;
+      btn.disabled = false; btn.textContent = "すべて削除する";
+    }
   };
 }
 function setupSettings() {
@@ -3570,6 +3638,7 @@ function entryParams(search) {
 /* ---------- 入口 ---------- */
 const qs = entryParams(location.search);
 if (qs.has("intro")) startIntro();
+if (qs.get("deleted") === "1") setTimeout(() => toast("アカウントと記録をすべて削除しました。ご利用ありがとうございました。", 6000), 600);
 else if (qs.has("signin")) startLogin();
 else if (qs.has("invite")) startInvite(); else startOwner();
 </script>
