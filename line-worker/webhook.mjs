@@ -200,6 +200,21 @@ function placeCard(e, badge) {
       {type: 'button', style: 'secondary', height: 'sm', action: {type: 'uri', label: '📅 アプリで予定にする', uri: APP_URL + '?tab=find'}},
     ]}};
 }
+// 「また行きたい」を押したら、まずおすすめ機能の説明カード（写真つき）を見せる
+const GUIDE_IMG = 'https://pocham4173.github.io/hibiruka/guide/img/';
+const introCard = (img, badge, title, lines, uri, label) => ({type: 'bubble', size: 'kilo',
+  hero: {type: 'image', url: GUIDE_IMG + img, size: 'full', aspectRatio: '20:13', aspectMode: 'cover', action: {type: 'uri', uri: GUIDE_URL + '#wish'}},
+  body: {type: 'box', layout: 'vertical', spacing: 'sm', contents: [
+    {type: 'text', text: badge, size: 'xs', color: '#ad4564', weight: 'bold'},
+    {type: 'text', text: title, weight: 'bold', size: 'md', wrap: true},
+    ...lines.map(t => ({type: 'text', text: t, size: 'sm', color: '#555555', wrap: true})),
+  ]},
+  footer: {type: 'box', layout: 'vertical', contents: [{type: 'button', style: 'primary', color: '#1f2d4a', height: 'sm', action: {type: 'uri', label, uri}}]}});
+export const WISH_INTRO = [
+  introCard('line-wish-1.jpg', '✨ おすすめ機能 1', '📌 行きたいリスト', ['「探す」で見つけた場所の「ここ行きたい！」で集まります。', '予定に入れる → 行ったら思い出に、までつながります。'], APP_URL + '?tab=find', 'アプリで探してみる'),
+  introCard('line-wish-2.jpg', '✨ おすすめ機能 2', '🧭 おでかけコース', ['行きたい場所を「コースに入れる」で集めて、順番と時間を決めるだけ。', 'AIにおまかせも、予定にまとめて入れるのもワンタップ。'], APP_URL + '?tab=find', 'コースを作ってみる'),
+  introCard('line-wish-3.jpg', '✨ おすすめ機能 3', '☀️ 行く日の天気に合わせて', ['行く場所と日を選ぶと、その日の天気と、雨なら屋内・晴れなら公園などのおすすめが出ます。'], GUIDE_URL + '#find', '写真つきの使い方'),
+];
 async function listFavorites(db, owner) {
   const base = () => { let q = db.collection(eventsOf(owner.scope)); if (owner.scope === 'personal') q = q.where('ownerUid', '==', owner.uid); return q; };
   const [fav, wish] = await Promise.all([
@@ -207,11 +222,11 @@ async function listFavorites(db, owner) {
     base().where('kind', '==', 'wish').select('place', 'title', 'genre', 'lat', 'lng', 'imageUrl', 'status').limit(40).get().catch(() => ({docs: []})),
   ]);
   const favs = fav.docs.map(d => d.data()), wishes = wish.docs.map(d => d.data()).filter(w => w.status !== 'visited');
-  if (!favs.length && !wishes.length) return [text('「また行きたい」はまだありません。\n・行った思い出に ♥ を付ける\n・アプリの「探す」で「📌 ここ行きたい！」を押す\nと、ここに集まります。\n\n📖 使い方\n' + GUIDE_URL + '#wish')];
+  if (!favs.length && !wishes.length) return [{type: 'flex', altText: '✨ また行きたい・行きたいリストのおすすめ機能', contents: {type: 'carousel', contents: WISH_INTRO}}, text('「また行きたい」はまだありません。\n・行った思い出に ♥ を付ける\n・アプリの「探す」で「📌 ここ行きたい！」を押す\nと、ここに集まります。\n\n📖 使い方\n' + GUIDE_URL + '#wish')];
   const seen = new Set(), cards = [];
   for (const [e, badge] of [...wishes.map(w => [w, '📌 行きたいリスト']), ...favs.map(f => [f, '♥ また行きたい'])]) {
     const k = String(e.place || e.title || ''); if (!k || seen.has(k)) continue; seen.add(k); cards.push(placeCard(e, badge));
-    if (cards.length >= 9) break;
+    if (cards.length >= 8) break;
   }
   cards.push({type: 'bubble', size: 'kilo', body: {type: 'box', layout: 'vertical', spacing: 'md', contents: [
     {type: 'text', text: '📖 もっと楽しむコツ', weight: 'bold', size: 'md'},
@@ -221,7 +236,8 @@ async function listFavorites(db, owner) {
     {type: 'button', style: 'secondary', height: 'sm', action: {type: 'uri', label: 'アプリで探す', uri: APP_URL + '?tab=find'}},
   ]}});
   const list = [...seen].slice(0, 20).map(n => '・' + n).join('\n');
-  return [{type: 'flex', altText: `♥ また行きたい・行きたいリスト（${seen.size}か所）`, contents: {type: 'carousel', contents: cards}}, text(`♥ また行きたい・📌 行きたいリスト\n${list}`)];
+  return [{type: 'flex', altText: '✨ また行きたい・行きたいリストのおすすめ機能', contents: {type: 'carousel', contents: WISH_INTRO}},
+    {type: 'flex', altText: `♥ また行きたい・行きたいリスト（${seen.size}か所）`, contents: {type: 'carousel', contents: cards}}, text(`♥ また行きたい・📌 行きたいリスト\n${list}`)];
 }
 
 

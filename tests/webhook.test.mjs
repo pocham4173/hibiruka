@@ -92,7 +92,7 @@ test('today and favorites list only the owner\'s records',async()=>{
   const [today]=await handleEvent(db,{},msg({type:'text',text:'今日'}),NOW);
   assert.match(today.text,/09:00 朝カフェ\n18:00 夕食（駅前）/);assert.doesNotMatch(today.text,/他人/);
   const fav=await handleEvent(db,{},msg({type:'text',text:'また行きたい'}),NOW);
-  assert.equal(fav[0].type,'flex');assert.match(fav[1].text,/朝カフェ/);assert.doesNotMatch(JSON.stringify(fav),/他人/);
+  assert.equal(fav[0].type,'flex');assert.match(fav[0].altText,/おすすめ機能/);assert.equal(fav[1].type,'flex');assert.match(fav[2].text,/朝カフェ/);assert.doesNotMatch(JSON.stringify(fav),/他人/);
 });
 test('今日 also shows the coming plans with how many days are left',async()=>{
   const db=memoryDb({...linked(),personalEvents:{
@@ -112,7 +112,9 @@ test('また行きたい shows the wish list and ♥ places as cards with map an
     w:{ownerUid:'alice',kind:'wish',status:'wished',place:'森のカフェ',genre:'カフェ',lat:36.4,lng:138.25,imageUrl:'https://img.example/a.jpg'},
     v:{ownerUid:'alice',kind:'wish',status:'visited',place:'行った所'},
     f:{ownerUid:'alice',fav:true,place:'上田城跡公園',cat:'遊び'}}});
-  const [flex,list]=await handleEvent(db,{},msg({type:'text',text:'また行きたい'}),NOW);
+  const [intro,flex,list]=await handleEvent(db,{},msg({type:'text',text:'また行きたい'}),NOW);
+  assert.equal(intro.contents.contents.length,3);assert.match(intro.contents.contents[0].hero.url,/guide\/img\/line-wish-1\.jpg$/);assert.match(JSON.stringify(intro),/おでかけコース/);
+  for(const c of intro.contents.contents)assert.ok(c.footer.contents[0].action.label.length<=20);
   const cards=flex.contents.contents;assert.equal(cards.length,3);
   assert.equal(cards[0].hero.url,'https://img.example/a.jpg');assert.match(JSON.stringify(cards[0]),/📌 行きたいリスト.*森のカフェ/);
   assert.equal(cards[0].footer.contents[0].action.uri,'https://www.google.com/maps/search/?api=1&query=36.400000,138.250000');
@@ -250,4 +252,9 @@ test('LINE gets OK at once; the reply is sent afterwards, with the typing dots s
   await later[0];
   assert.equal(calls[0][0], 'https://api.line.me/v2/bot/chat/loading/start'); assert.equal(calls[0][1].chatId, U);
   assert.equal(calls[1][0], 'https://api.line.me/v2/bot/message/reply'); assert.match(calls[1][1].messages[0].text, /ふりかえり（1件）/);
+});
+
+test('また行きたい with nothing saved still shows the recommended features and how to start', async () => {
+  const [intro, t] = await handleEvent(memoryDb(linked()), {}, msg({type:'text', text:'また行きたい'}), NOW);
+  assert.equal(intro.type, 'flex'); assert.equal(intro.contents.contents.length, 3); assert.match(t.text, /ここ行きたい/);
 });
