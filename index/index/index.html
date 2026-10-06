@@ -104,6 +104,11 @@
   .cd .n b { font-size: 26px; margin: 0 2px; }
   .cd .t { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cd small { color: var(--muted); font-size: 11.5px; }
+  .search-tips { font-size: 11.5px; margin: -4px 0 10px; line-height: 1.6; }
+  .course-box { background: #f6f3fc; border: 1px solid #ddd3f3; border-radius: 14px; padding: 12px 14px; margin-top: 10px; }
+  .course-steps { margin: 0 0 8px; padding-left: 1.3em; font-size: 13px; line-height: 1.7; color: var(--ink, #2b2b2b); }
+  .course-inline { font-size: 13px; margin: 0 0 8px; color: var(--navy); }
+  .route-form input { margin-bottom: 4px; }
   .course-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 25; background: var(--navy); color: #fff; border: none; border-radius: 999px; padding: 12px 20px; font: inherit; font-weight: 800; box-shadow: 0 6px 18px rgba(31,45,74,.3); cursor: pointer; white-space: nowrap; }
   .course-item { display: flex; gap: 8px; align-items: flex-start; background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-bottom: 6px; }
   .course-item .no { flex: 0 0 26px; height: 26px; border-radius: 50%; background: var(--rose); color: #fff; font-weight: 900; display: flex; align-items: center; justify-content: center; }
@@ -733,7 +738,20 @@
       <div class="find-place hidden" id="findDayBox"><input type="date" id="findDayPick" aria-label="行く日を選ぶ"></div>
       <h3 class="find-h" style="margin-top:14px"><span class="find-n">3</span>その日の天気とおすすめ</h3>
       <div id="findWeather" class="find-weather" aria-live="polite"><div class="t">天気を調べています…</div></div>
-      <button type="button" class="find-deal-btn ai-plan-btn" id="courseOpen"><span>🧭</span><b>この日のおでかけコースを作る</b><small>行きたい場所を「➕ コース」で集めて、順番・時間・行き方をまとめます（AIもお手伝い）</small></button>
+      <div class="course-box">
+        <p class="find-subh" style="margin:0 0 6px">🧭 この日のおでかけコース</p>
+        <ol class="course-steps"><li>下の「何を探す？」で探して、行きたい所の <b>🧭 コースに入れる</b> を押す</li><li>ここの <b>コースを見る</b> で、順番と時間を決める（AIにおまかせもOK）</li><li><b>予定にまとめて入れる</b> を押す</li></ol>
+        <div id="courseInline"></div>
+        <button type="button" class="btn small" id="courseOpen">🧭 コースを見る・作る</button>
+      </div>
+      <div class="course-box">
+        <p class="find-subh" style="margin:0 0 6px">🚃 行き方を調べる<small>電車・車・歩き（Googleマップ）</small></p>
+        <form id="routeForm" class="route-form">
+          <label class="lbl" for="routeFrom">出発</label><input type="text" id="routeFrom" placeholder="空のときは今いる場所" autocomplete="off">
+          <label class="lbl" for="routeTo">到着</label><input type="text" id="routeTo" placeholder="例：松本城、軽井沢駅" autocomplete="off">
+          <div class="find-deal-links" style="margin-top:8px"><button type="submit" class="btn small" data-mode="transit">🚃 電車で</button><button type="submit" class="btn small sub" data-mode="driving">🚗 車で</button><button type="submit" class="btn small sub" data-mode="walking">🚶 歩いて</button></div>
+        </form>
+      </div>
       <p class="note" style="text-align:right;margin-top:4px;font-size:11px">出典：<a href="https://www.jma.go.jp/" target="_blank" rel="noopener">気象庁ホームページ</a>（天気予報）</p>
     </section>
     <section class="find-sec" aria-labelledby="findWhatTitle">
@@ -742,6 +760,7 @@
         <input type="search" id="findQ" placeholder="例：カフェ、ラーメン、上田駅 ランチ" enterkeyhint="search" autocomplete="off" aria-label="探したい場所やジャンル">
         <button class="btn small" type="submit">探す</button>
       </form>
+      <p class="note search-tips">🔎 探し方：<b>スペース</b>で区切ると全部ふくむ（例：上田駅 ランチ）／<b>OR</b>でどれか（例：そば OR うどん）／<b>-</b>で除く（例：カフェ -チェーン）</p>
       <div class="find-gt">🍽 食べる</div>
       <div class="find-tiles">
         <button type="button" class="find-tile" data-find="cafe"><span>☕</span>カフェ</button>
@@ -797,7 +816,7 @@
       </div>
       <div class="find-sub find-event" aria-labelledby="findEventTitle">
         <p class="find-subh" id="findEventTitle">🎪 イベント<small id="eventWhen"></small></p>
-        <form class="find-place" id="eventNameForm" style="margin:0 0 8px"><input type="search" id="eventNameQ" placeholder="イベント名で調べる（例：上田わっしょい）" enterkeyhint="search" aria-label="イベント名"><button type="submit" class="btn small">調べる</button></form>
+        <form class="find-place" id="eventNameForm" style="margin:0 0 8px"><input type="search" id="eventNameQ" placeholder="イベント名・ことばで調べる（例：花火 OR 祭り -中止）" enterkeyhint="search" aria-label="イベント名"><button type="submit" class="btn small">調べる</button></form>
         <div id="localEvents"></div>
         <div class="find-deal-links" id="eventSearch"></div>
       </div>
@@ -1667,13 +1686,13 @@ async function loadSpotData() {
 }
 let michiData = null;
 // 名前のないドッグランに、そばの施設の名前を付ける（例：綿半スーパーセンター上田店のドッグラン）
-const NEAR_NAMED = ['["name"]["railway"="station"]', '["name"]["shop"]', '["name"]["tourism"]', '["name"]["leisure"~"^(park|sports_centre|resort|garden|playground)$"]', '["name"]["amenity"~"^(cafe|restaurant|parking|community_centre|townhall|marketplace|veterinary)$"]'];
+const NEAR_NAMED = ['["name"]["railway"="station"]', '["name"]["shop"]', '["name"]["tourism"]["tourism"!~"^(information|artwork)$"]', '["name"]["leisure"~"^(park|sports_centre|resort|garden|playground)$"]', '["name"]["amenity"~"^(cafe|restaurant|parking|community_centre|townhall|marketplace|veterinary)$"]'];
 async function nameDogRuns(spots, base = "ドッグラン", fmt = n => `${n}のドッグラン`) {
   const plain = spots.filter(x => x.name === base).slice(0, 15);
   if (!plain.length) return spots;
   let els = [];
   try { els = await overpassRun(`[out:json][timeout:15];(${plain.map(x => NEAR_NAMED.map(f => `nwr${f}(around:300,${(+x.lat).toFixed(5)},${(+x.lng).toFixed(5)});`).join("")).join("")});out center 200;`); } catch { return spots; }
-  const named = els.map(e => [String(e.tags?.["name:ja"] || e.tags?.name || "").trim(), e.lat ?? e.center?.lat, e.lon ?? e.center?.lon]).filter(([n, lat]) => n && !/ドッグラン|喫煙/.test(n) && Number.isFinite(lat));
+  const named = els.map(e => [String(e.tags?.["name:ja"] || e.tags?.name || "").trim(), e.lat ?? e.center?.lat, e.lon ?? e.center?.lon]).filter(([n, lat]) => n && !/ドッグラン|喫煙|案内|看板|掲示|地図|マップ|トイレ|駐輪/.test(n) && Number.isFinite(lat));
   return spots.map(x => {
     if (x.name !== base) return x;
     let best = null, bd = 300;
@@ -1705,7 +1724,7 @@ function toggleCourse(s, btn) {
   if (!s || !Number.isFinite(+s.lat)) return;
   if (inCourse(s)) { course = course.filter(x => x.name !== s.name); toast(`「${s.name}」をコースから外しました`); }
   else { if (course.length >= 8) { toast("コースは8か所までです"); return; } course.push({ name: s.name, lat: +s.lat, lng: +s.lng, kind: s.kind || s.genre || "", address: s.address || "", wishId: s.wishId || null, catKeys: s.catKeys || [], time: "", note: "" }); toast(`🧭「${s.name}」をコースに入れました（${course.length}か所）`); }
-  if (btn) { const on = inCourse(s); btn.classList.toggle("on-course", on); btn.textContent = on ? (btn.dataset.courseWish ? "✓ コース" : "✓ コースに入っています") : "➕ コース"; }
+  if (btn) { const on = inCourse(s); btn.classList.toggle("on-course", on); btn.textContent = on ? "✓ コースに入っています" : "🧭 コースに入れる"; }
   saveCourse();
 }
 function renderCourseBar() {
@@ -1713,6 +1732,7 @@ function renderCourseBar() {
   try { course.length; } catch { return; } // 起動の途中（まだコースを読み込む前）
   const show = course.length && !$("tab-find").classList.contains("hidden") && $("courseSheet").classList.contains("hidden");
   bar.classList.toggle("hidden", !show); bar.textContent = `🧭 コース ${course.length}か所 ▶ ひらく`;
+  if ($("courseInline")) $("courseInline").innerHTML = course.length ? `<p class="course-inline">いまのコース：${course.map((x, i) => `${i + 1}. ${esc(x.name)}`).join(" → ")}</p>` : "";
 }
 // 候補：行く場所のまわり（40km以内）の行きたいリスト ＋ いま探して出ている場所
 function planCandidates() {
@@ -1723,7 +1743,7 @@ function planCandidates() {
   return out.slice(0, 12);
 }
 const courseDay = () => findDay || todayStr();
-const courseWhere = () => findArea ? findArea.city : findPlace ? findPlace.label : findCity.name || (findHere ? "今いる場所のまわり" : "上田駅のまわり");
+const courseWhere = () => findArea ? findArea.city || findArea.pref : findPlace ? findPlace.label : findCity.name || (findHere ? "今いる場所のまわり" : "上田駅のまわり");
 function openCourse() {
   const day = courseDay(), cands = planCandidates(), start = findHere;
   const minutes = (a, b) => Math.round(distanceM(a, b) / 1000 / 40 * 60); // 車でおよそ（時速40km）
@@ -1732,7 +1752,7 @@ function openCourse() {
     ${course.length ? course.map((x, i) => `${i ? `<div class="course-move">🚗 約${Math.max(5, minutes(course[i - 1], x))}分（目安）・<a href="${esc(dirUrl(x, { from: course[i - 1], mode: "transit" }))}" target="_blank" rel="noopener">🚃 電車の行き方</a>・<a href="${esc(dirUrl(x, { from: course[i - 1], mode: "driving" }))}" target="_blank" rel="noopener">🚗 車の行き方</a></div>` : start ? `<div class="course-move">📍 今いる場所から <a href="${esc(dirUrl(x, { from: start, mode: "transit" }))}" target="_blank" rel="noopener">🚃 電車</a>・<a href="${esc(dirUrl(x, { from: start, mode: "driving" }))}" target="_blank" rel="noopener">🚗 車</a></div>` : ""}
       <div class="course-item"><span class="no">${i + 1}</span><div class="body"><b>${esc(x.name)}</b>${x.kind ? `<small>${esc(x.kind)}</small>` : ""}${x.note ? `<small>💬 ${esc(x.note)}</small>` : ""}<input type="time" data-ctime="${i}" value="${esc(x.time || "")}" aria-label="${esc(x.name)}に着く時間"></div>
         <div class="ops"><button type="button" data-cup="${i}" aria-label="上へ" ${i ? "" : "disabled"}>↑</button><button type="button" data-cdown="${i}" aria-label="下へ" ${i < course.length - 1 ? "" : "disabled"}>↓</button><button type="button" data-cdel="${i}" aria-label="外す">✕</button></div></div>`).join("")
-      : '<p class="note">まだコースに場所がありません。探した場所や行きたいリストの「➕ コース」か、下の候補から入れてね。</p>'}
+      : '<p class="note">まだコースに場所がありません。下の候補を押すか、探した場所・行きたいリストの「🧭 コースに入れる」で入れてね。</p>'}
     ${cands.length ? `<p class="find-subh" style="margin:12px 0 6px">➕ 入れられる場所<small>行きたいリスト・探した場所から</small></p><div class="find-deal-links">${cands.map((x, i) => `<button type="button" class="btn small sub" data-cadd="${i}">➕ ${esc(x.name)}</button>`).join("")}</div>` : ""}
     ${course.length >= 2 ? `<div class="find-deal-links" style="margin-top:12px">
       <button type="button" class="btn small sub" id="courseSort">📏 近い順に並べる</button>
@@ -1757,7 +1777,7 @@ function openCourse() {
   $("courseSheet").onclick = x => { if (x.target.id === "courseSheet") closeSheets(); };
   $("courseSheet").classList.remove("hidden"); renderCourseBar();
 }
-function refreshCourseButtons() { if (findShown.length && $("findResults").innerHTML) $("findResults").querySelectorAll("[data-course]").forEach(b => { const on = inCourse(findShown[+b.dataset.course] || {}); b.classList.toggle("on-course", on); b.textContent = on ? "✓ コースに入っています" : "➕ コース"; }); renderWishes(); }
+function refreshCourseButtons() { if (findShown.length && $("findResults").innerHTML) $("findResults").querySelectorAll("[data-course]").forEach(b => { const on = inCourse(findShown[+b.dataset.course] || {}); b.classList.toggle("on-course", on); b.textContent = on ? "✓ コースに入っています" : "🧭 コースに入れる"; }); renderWishes(); }
 // 近い順：出発地（今いる場所 or 1番目）から、いちばん近い所へ順につなぐ
 function sortCourse() {
   let at = findHere || course[0], rest = course.slice(); const out = [];
@@ -1801,7 +1821,8 @@ async function loadMunicipalities() {
 }
 function renderOutIn() {
   const el = $("outIn"); if (!el) return;
-  const where = findArea ? `🗾 ${esc(findArea.pref + findArea.city)}の中` : findPlace ? `🗺 ${esc(findPlace.label)}のまわり` : "📍 今いる場所のまわり";
+  if ($("routeTo")) $("routeTo").placeholder = findPlace ? `空のときは「${findArea ? findArea.pref + (findArea.city || "") : findPlace.label}」` : "例：松本城、軽井沢駅";
+  const where = findArea ? (findArea.city ? `🗾 ${esc(findArea.pref + findArea.city)}の中` : `🗾 ${esc(findArea.pref)}（県の中心のまわり。市区町村を選ぶと絞れます）`) : findPlace ? `🗺 ${esc(findPlace.label)}のまわり` : "📍 今いる場所のまわり";
   el.innerHTML = `<span>探す場所：<b>${where}</b></span><button type="button" class="btn small sub" id="outChange">🗾 場所を指定する</button>`;
   // 「① どこに行く？」へ戻って、県・市町村の選択を開く
   $("outChange").onclick = () => { document.querySelector(".find-go").scrollIntoView({ block: "start", behavior: "smooth" }); if ($("findAreaBox").classList.contains("hidden")) $("whereArea").onclick(); };
@@ -1823,7 +1844,7 @@ async function drawEvents() {
   const here = findPlace || findHere || FIND_HOME;
   const all = await loadEvents(); if (!globalThis.document?.body || !$("localEvents")) return;
   const list = all.filter(e => e && e.title && isDay(e.from) && e.from <= last && (isDay(e.to) ? e.to : e.from) >= day)
-    .filter(e => findArea ? (e.city ? e.city === findArea.city : e.pref === findArea.pref) : !(Number.isFinite(e.lat) && Number.isFinite(e.lng)) || distanceM(here, e) < 60000)
+    .filter(e => findArea ? (findArea.city && e.city ? e.city === findArea.city : e.pref === findArea.pref) : !(Number.isFinite(e.lat) && Number.isFinite(e.lng)) || distanceM(here, e) < 60000)
     .sort((a, b) => a.from < b.from ? -1 : 1).slice(0, 10);
   box.innerHTML = list.map((e, i) => {
     const to = isDay(e.to) && e.to !== e.from ? e.to : "";
@@ -1985,8 +2006,18 @@ function findLoading(text, sub) {
   $("findResults").innerHTML = `<div class="find-loading" role="status"><span class="spinner" aria-hidden="true"></span><div>${esc(text)}<small>${esc(sub || "少しお待ちください")}</small></div></div>`;
 }
 let pendingFind = null;
+// OR検索：ことばごとに探して合わせる（どれも探せなかったら null）
+async function hpEach(list, run) {
+  const res = await Promise.all(list.map(w => run(w).catch(() => null)));
+  return res.every(r => r === null) ? null : res.flatMap(r => r || []);
+}
 async function findSpots({ key = "", words = "" } = {}) {
   if (findBusy) { pendingFind = { key, words }; return; } // 探している途中に押されたら、終わってから最新のものを探す
+  // 検索のことば：スペース＝ぜんぶ含む（AND）、「OR」か「|」＝どれか（OR）、先頭に「-」＝含まないもの（マイナス）
+  const minus = [];
+  if (words) words = words.replace(/　/g, " ").split(/\s+/).filter(Boolean).filter(t => /^[-－−].+/.test(t) ? (minus.push(t.slice(1)), false) : true).join(" ");
+  const ors = words ? words.split(/\s+(?:OR|ＯＲ)\s+|\s*[|｜]\s*/i).map(x => x.trim()).filter(Boolean) : [];
+  if (ors.length > 1) words = ors[0];
   findBusy = true;
   const note = $("findNote"), box = $("findResults");
   const pressed = key ? document.querySelector(`[data-find="${key}"]`) : document.querySelector("#findForm .btn");
@@ -1999,7 +2030,7 @@ async function findSpots({ key = "", words = "" } = {}) {
   try {
     // 何を探すか（ジャンル）と、どこで探すか（地名）を分ける
     let area = words.trim();
-    if (!key) for (const [re, k] of FIND_WORDS) if (re.test(area)) { key = k; area = area.replace(re, "").replace(/(の|で|近く|周辺|あたり)/g, " ").trim(); break; }
+    if (!key && ors.length < 2) for (const [re, k] of FIND_WORDS) if (re.test(area)) { key = k; area = area.replace(re, "").replace(/(の|で|近く|周辺|あたり)/g, " ").trim(); break; }
     let center = null, centerLabel = "", spots = [], usedHp = false, cityMode = false, rangeText = "";
     // 1) 飲食店はホットペッパー（速い・写真つき）
     if (FOOD.has(key) || (!key && words)) {
@@ -2008,7 +2039,7 @@ async function findSpots({ key = "", words = "" } = {}) {
       const base = findPlace || findHere || FIND_HOME;
       let hp;
       if (findArea && key && !area) hp = await hotpepper({ kind: key, keyword: findArea.pref + findArea.city, count: 100 }); // 県・市町村まるごと
-      else if (findArea && !key) hp = await hotpepper({ keyword: `${words} ${findArea.pref}${findArea.city}`, count: 100 });
+      else if (findArea && !key) hp = await hpEach(ors.length > 1 ? ors : [words], w => hotpepper({ keyword: `${w} ${findArea.pref}${findArea.city}`, count: 100 }));
       else if (key && area) hp = await hotpepper({ kind: key, keyword: area });                     // 「上田駅 カフェ」
       else if (key && findRange === "city") {                                                  // 市内まるごと
         const city = await cityOf(base) || (findHere ? "" : "上田市");
@@ -2016,10 +2047,9 @@ async function findSpots({ key = "", words = "" } = {}) {
       }
       else if (key) hp = await hotpepper({ kind: key, lat: base.lat, lng: base.lng, range: Number(findRange) }); // 近くのカフェ
       else {                                                                                    // 「スタバ」など：まず近く、なければ全国
-        hp = await hotpepper({ keyword: words, lat: base.lat, lng: base.lng, range: findRange === "city" ? 5 : Number(findRange) });
-        if (hp && !hp.length) hp = await hotpepper({ keyword: words });
+        hp = await hpEach(ors.length > 1 ? ors : [words], async w => { const r = await hotpepper({ keyword: w, lat: base.lat, lng: base.lng, range: findRange === "city" ? 5 : Number(findRange) }); return r && !r.length ? hotpepper({ keyword: w }) : r; });
       }
-      if (hp && hp.length) { spots = hp; usedHp = true; center = base; cityMode = !!findArea || !!(key && !area && findRange === "city" && findCity.name); centerLabel = key && area ? area : findArea ? findArea.city : cityMode ? findCity.name : findPlace ? findPlace.label : findHere ? "現在地" : FIND_HOME.label; }
+      if (hp && hp.length) { spots = hp; usedHp = true; center = base; cityMode = !!findArea || !!(key && !area && findRange === "city" && findCity.name); centerLabel = key && area ? area : findArea ? findArea.city || findArea.pref : cityMode ? findCity.name : findPlace ? findPlace.label : findHere ? "現在地" : FIND_HOME.label; }
     }
     // 2) それ以外（公園・温泉・道の駅など）や、ホットペッパーで見つからないときは地図データ
     // クーポンはホットペッパーのお店だけ（地図データにはクーポンがない）
@@ -2038,7 +2068,7 @@ async function findSpots({ key = "", words = "" } = {}) {
       const letter = { park: "p", onsen: "o", dog: "d", indoor: "p" }[key];
       const michi = key === "michi" ? await loadMichi() : null;
       const INDOOR = ["博物館・美術館", "ギャラリー", "水族館"];
-      const areaMode = !!(findArea && key && !area);
+      const areaMode = !!(findArea && findArea.city && key && !area); // 県ぜんたいは広すぎるので、県の中心のまわりで探す
       const ready = letter && !areaMode && inNagano(center) ? await loadSpotData() : null;
       if (michi) {
         // 道の駅は全国のデータから（近い順）
@@ -2071,14 +2101,19 @@ async function findSpots({ key = "", words = "" } = {}) {
     if (key === "smoke") { findLoading("喫煙所の場所を確かめています…", "そばのお店や駅の名前を調べています"); spots = await nameDogRuns(spots, "喫煙所", n => `喫煙所（${n}のそば）`); }
     const from = findPlace || findHere || center;
     const seen = new Set();
-    spots = spots.filter(s => !seen.has(s.id) && seen.add(s.id)).map(s => ({ ...s, dist: distanceM(from, s), catKeys: key ? FIND_CATS[key].cat : [] }))
+    if (minus.length) { const bad = minus.map(m => norm(m)); spots = spots.filter(x => !bad.some(b => norm(`${x.name} ${x.genre || ""} ${x.address || ""} ${x.catchText || ""}`).includes(b))); }
+    // 同じもの（同じID、または同じ名前で300m以内）は1つにまとめる
+    const kept = [];
+    for (const x of spots) { if (seen.has(x.id) || kept.some(k => k.name === x.name && distanceM(k, x) < 300)) continue; seen.add(x.id); kept.push(x); }
+    spots = kept.map(s => ({ ...s, dist: distanceM(from, s), catKeys: key ? FIND_CATS[key].cat : [] }))
       .sort((a, b) => a.dist - b.dist).slice(0, usedHp && findRange === "city" ? 60 : 30);
     findShown = spots;
     if (key === "smoke" && !findCity.pref && (findHere || findPlace)) await cityOf(findPlace || findHere).catch(() => "");
     const jt = key === "smoke" ? jtBox() : "";
     if (!spots.length) { box.innerHTML = jt + mineBox(mine); bindMine(); note.textContent = key === "smoke" ? "地図データでは近くの喫煙所が見つかりませんでした。下のJTの喫煙所マップで探せます。" : mine.length ? "自分の記録で見つかりました。お店や場所は見つかりませんでした。" : "見つかりませんでした。ことばを変えるか、地名を足してみてください（例：「上田駅 カフェ」）。"; return; }
+    const wordsNote = (ors.length > 1 ? `（${ors.join("・")}のどれか）` : "") + (minus.length ? `（${minus.join("・")}をふくまない）` : "");
     if (usedHp && !rangeText && !cityMode) rangeText = { "3": "1km以内", "5": "3km以内" }[findRange] || "";
-    note.textContent = `${centerLabel}${cityMode ? "で" : "のまわり"}${rangeText && !cityMode ? `（${rangeText}）で` : cityMode ? "" : "で"}${spots.length}件見つかりました${cityMode ? "（近い順）" : ""}${!findHere && centerLabel === FIND_HOME.label ? "（現在地が使えないため、上田駅を基準にしています）" : ""}。`;
+    note.textContent = `${centerLabel}${cityMode ? "で" : "のまわり"}${rangeText && !cityMode ? `（${rangeText}）で` : cityMode ? "" : "で"}${spots.length}件見つかりました${wordsNote}${cityMode ? "（近い順）" : ""}${!findHere && centerLabel === FIND_HOME.label ? "（現在地が使えないため、上田駅を基準にしています）" : ""}。`;
     box.innerHTML = jt + mineBox(mine) + spots.map((s, i) => spotCard(s, i)).join("") + (usedHp ? '<p class="note center hp-credit"><a href="https://webservice.recruit.co.jp/" target="_blank" rel="noopener">Powered by ホットペッパーグルメ Webサービス</a></p>' : "");
     bindMine();
     badgeWeather(spots);
@@ -2198,7 +2233,7 @@ function spotCard(s, i) {
     <div class="acts">
       <button type="button" class="btn small ${have ? "sub" : "rose"}" data-wish="${i}" ${have ? "disabled" : ""}>${have ? "✓ 行きたいリストにあります" : "📌 ここ行きたい！"}</button>
       <button type="button" class="btn small sub" data-plan="${i}">📅 予定に追加</button>
-      <button type="button" class="btn small sub ${inCourse(s) ? "on-course" : ""}" data-course="${i}">${inCourse(s) ? "✓ コースに入っています" : "➕ コース"}</button>
+      <button type="button" class="btn small sub ${inCourse(s) ? "on-course" : ""}" data-course="${i}">${inCourse(s) ? "✓ コースに入っています" : "🧭 コースに入れる"}</button>
       <a class="btn small ghost" href="${spotMapLink(s)}" target="_blank" rel="noopener">🗺 地図</a>
       <a class="btn small ghost" href="${esc(dirUrl(s, { from: findHere }))}" target="_blank" rel="noopener">🧭 行き方</a>
       ${s.source === "hp" && s.couponUrl ? affButton(s.couponUrl, "hp", s.coupon ? "🎟 クーポンを見る" : "🎟 クーポン・予約", "btn small rose-ghost") : ""}
@@ -2259,7 +2294,7 @@ function renderWishes() {
     return `<div class="spot${w.imageUrl ? " has-photo" : ""}">${w.imageUrl ? `<img class="spot-photo" src="${esc(w.imageUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}<div class="spot-body"><h3>${badge}${esc(w.place || w.title)}</h3>
       <div class="meta">${w.genre ? `<b>${esc(w.genre)}</b>　` : ""}${w.memo ? esc(w.memo) : ""}</div></div>
       <div class="acts">${main}
-        ${w.status !== "visited" && Number.isFinite(w.lat) ? `<button type="button" class="btn small sub ${inCourse({ name: w.place }) ? "on-course" : ""}" data-course-wish="${w.id}">${inCourse({ name: w.place }) ? "✓ コース" : "➕ コース"}</button>` : ""}
+        ${w.status !== "visited" && Number.isFinite(w.lat) ? `<button type="button" class="btn small sub ${inCourse({ name: w.place }) ? "on-course" : ""}" data-course-wish="${w.id}">${inCourse({ name: w.place }) ? "✓ コースに入っています" : "🧭 コースに入れる"}</button>` : ""}
         <a class="btn small ghost" href="${spotMapLink({ name: w.place, lat: w.lat, lng: w.lng })}" target="_blank" rel="noopener">🗺 地図</a>
         <button type="button" class="btn small ghost" data-wdel="${w.id}">消す</button></div></div>`;
   }).join("");
@@ -2282,9 +2317,21 @@ function closeFind() {
   $("findWhatTitle").scrollIntoView({ block: "start", behavior: "smooth" });
 }
 function setupFind() {
+  // 🚃 行き方を調べる（出発が空なら今いる場所。Googleマップで時間・乗りかえ・到着時刻がわかる）
+  let routeMode = "transit";
+  $("routeForm").querySelectorAll("[data-mode]").forEach(b => b.onclick = () => { routeMode = b.dataset.mode; });
+  $("routeForm").onsubmit = ev => {
+    ev.preventDefault();
+    const to = $("routeTo").value.trim() || (findPlace ? (findArea ? findArea.pref + (findArea.city || "") : findPlace.label) : "");
+    if (!to) { toast("到着する場所を入れてください"); $("routeTo").focus(); return; }
+    const q = new URLSearchParams({ api: "1", destination: to, travelmode: routeMode });
+    const from = $("routeFrom").value.trim(); if (from) q.set("origin", from);
+    window.open("https://www.google.com/maps/dir/?" + q.toString(), "_blank", "noopener");
+  };
   $("eventNameForm").onsubmit = ev => {
     ev.preventDefault(); const q = $("eventNameQ").value.trim(); if (!q) { $("eventNameQ").focus(); return; }
-    window.open(`https://www.google.com/search?q=${encodeURIComponent(`${q} イベント 日程 ${new Date().getFullYear()}`)}`, "_blank", "noopener");
+    // Googleの書き方（スペース＝AND、OR、-で除く）がそのまま使える
+    window.open(`https://www.google.com/search?q=${encodeURIComponent(`${q} イベント ${new Date().getFullYear()}`)}`, "_blank", "noopener");
   };
   $("courseOpen").onclick = openCourse; $("courseBar").onclick = openCourse; renderCourseBar();
   $("findCloseTop").onclick = closeFind; $("findCloseBottom").onclick = closeFind;
@@ -2321,23 +2368,27 @@ function setupFind() {
     const prefs = await loadMunicipalities(); if (!prefs) { toast("市町村の一覧を読めませんでした。少し待ってもう一度お試しください"); return; }
     if ($("areaPref").options.length <= 1) $("areaPref").innerHTML = '<option value="">都道府県</option>' + prefs.map(([p], i) => `<option value="${i}">${esc(p)}</option>`).join("");
   };
-  $("areaPref").onchange = async () => {
-    const prefs = await loadMunicipalities(), i = $("areaPref").value, c = $("areaCity");
-    c.disabled = i === ""; c.innerHTML = '<option value="">市区町村</option>' + (i === "" ? "" : prefs[+i][1].map(n => `<option>${esc(n)}</option>`).join(""));
-    if (i !== "") c.focus();
-  };
-  $("areaCity").onchange = async () => {
-    const prefs = await loadMunicipalities(), i = +$("areaPref").value, city = $("areaCity").value; if (!city || !prefs) return;
-    const pref = prefs[i][0];
+  // 都道府県だけでも決められる（市区町村はあとから絞り込み）
+  const applyArea = async (pref, city, iso) => {
     $("whereArea").textContent = "🗾 確認中…";
     try {
       const g = (await nominatim(`${pref}${city}`, null, 1))[0];
       if (!g) { toast("場所を見つけられませんでした。別の市町村で試してください"); $("whereArea").textContent = "🗾 県・市町村で選ぶ"; return; }
-      findPlace = { lat: Number(g.lat), lng: Number(g.lon), label: city }; findArea = { pref, city, iso: String(i + 1).padStart(2, "0") };
-      $("wherePick").textContent = "🗺 場所を指定"; $("whereArea").textContent = "🗾 " + city; $("findAreaBox").classList.add("hidden");
-      toast(`${pref}${city}の中で探します`);
+      findPlace = { lat: Number(g.lat), lng: Number(g.lon), label: city || pref }; findArea = { pref, city, iso };
+      $("wherePick").textContent = "🗺 場所を指定"; $("whereArea").textContent = "🗾 " + (city || pref);
+      if (city) $("findAreaBox").classList.add("hidden");
+      toast(city ? `${pref}${city}の中で探します` : `${pref}で探します（市区町村を選ぶと絞り込めます）`, 4000);
       placeChanged();
     } catch { toast("場所を調べられませんでした。少し待ってもう一度お試しください"); $("whereArea").textContent = "🗾 県・市町村で選ぶ"; }
+  };
+  $("areaPref").onchange = async () => {
+    const prefs = await loadMunicipalities(), i = $("areaPref").value, c = $("areaCity");
+    c.disabled = i === ""; c.innerHTML = `<option value="">${i === "" ? "市区町村" : "（県ぜんたい）"}</option>` + (i === "" ? "" : prefs[+i][1].map(n => `<option>${esc(n)}</option>`).join(""));
+    if (i !== "") await applyArea(prefs[+i][0], "", String(+i + 1).padStart(2, "0"));
+  };
+  $("areaCity").onchange = async () => {
+    const prefs = await loadMunicipalities(), i = +$("areaPref").value; if (!prefs || $("areaPref").value === "") return;
+    await applyArea(prefs[i][0], $("areaCity").value, String(i + 1).padStart(2, "0"));
   };
   renderOutIn();
   const optsChanged = () => {

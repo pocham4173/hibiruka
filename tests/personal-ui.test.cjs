@@ -833,3 +833,31 @@ test('each plan card has its own ✏️ 直す button that opens the edit form d
   assert(!d.getElementById('tab-rec').classList.contains('hidden'));assert.equal(d.getElementById('fTitle').value,'信州医療センター');assert(d.getElementById('detailSheet').classList.contains('hidden'));
  }finally{a.close();}
 });
+
+test('search words: OR runs each word, - removes matches, the same place twice is shown once, and routes open Google Maps',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  Object.defineProperty(w.navigator,'geolocation',{value:{getCurrentPosition:(ok)=>ok({coords:{latitude:36.40,longitude:138.25}})},configurable:true});
+  const sent=[],opened=[];w.open=(u)=>opened.push(u);
+  w.fetch=async(url,opt)=>{url=String(url);
+   if(url.includes('/spots/search')){const b=JSON.parse(opt.body);sent.push(b);
+    const shops=b.keyword.startsWith('そば')?[{id:'hp:1',name:'そば処 信州',lat:36.401,lng:138.251},{id:'hp:2',name:'チェーンそば',genre:'チェーン',lat:36.402,lng:138.251}]:[{id:'hp:3',name:'うどん亭',lat:36.403,lng:138.251},{id:'hp:1',name:'そば処 信州',lat:36.401,lng:138.251}];
+    return{ok:true,status:200,json:async()=>({shops})};}
+   if(url.includes('municipalities.json'))return{ok:true,json:async()=>({prefs:Array.from({length:47},(_,i)=>[i===10?'埼玉県':`県${i}`,['さいたま市大宮区']])})};
+   if(url.includes('nominatim'))return{ok:true,json:async()=>[{lat:'35.857',lon:'139.649'}]};
+   return{ok:true,json:async()=>[]};};
+  const settle=async()=>{for(let i=0;i<4;i++)await new Promise(r=>setTimeout(r,20));};
+  d.querySelector('.maintabs [data-tab="find"]').click();
+  d.getElementById('findQ').value='そば OR うどん -チェーン';d.getElementById('findForm').dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();
+  assert.deepEqual(sent.map(b=>b.keyword).sort(),['そば','うどん'].sort());
+  const names=[...d.querySelectorAll('#findResults .spot h3')].map(h=>h.textContent);
+  assert.deepEqual(names.sort(),['うどん亭','そば処 信州'].sort(),'OR merged, minus removed, duplicates once');
+  assert.match(d.getElementById('findNote').textContent,/そば・うどんのどれか.*チェーンをふくまない/);
+  // prefecture only
+  await d.getElementById('whereArea').onclick();const ps=d.getElementById('areaPref');ps.value='10';await ps.onchange();await settle();
+  assert.equal(d.getElementById('whereArea').textContent,'🗾 埼玉県');assert.match(d.getElementById('outIn').textContent,/埼玉県（県の中心のまわり/);
+  assert.equal(d.getElementById('areaCity').options[0].textContent,'（県ぜんたい）');
+  // routes
+  d.getElementById('routeTo').value='松本城';d.querySelector('#routeForm [data-mode="driving"]').click();d.getElementById('routeForm').dispatchEvent(new w.Event('submit',{cancelable:true}));
+  const u=new URL(opened.at(-1));assert.equal(u.searchParams.get('destination'),'松本城');assert.equal(u.searchParams.get('travelmode'),'driving');assert.equal(u.searchParams.get('origin'),null,'from where I am');
+ }finally{a.close();}
+});
