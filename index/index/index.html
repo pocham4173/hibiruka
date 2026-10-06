@@ -1866,7 +1866,10 @@ async function drawEvents() {
     const short = String(pref || "").replace(/(都|府|県)$/, ""), town = city || (findArea ? findArea.city : ""), local = town || short;
     $("giftWhere").textContent = local ? `行く場所：${town ? (pref || "") + town : pref}` : "① で行く場所を選ぶと、その土地のものが出ます";
     $("giftLinks").innerHTML = (local ? `<a class="btn small sub" href="${google(`${local} ご当地グルメ 名物`)}" target="_blank" rel="noopener">🍜 ${esc(local)}のご当地グルメを調べる</a>`
-      + `<button type="button" class="btn small sub" data-local-food="${esc(local)}">🍽 ${esc(local)}の名物が食べられるお店</button>` : "")
+      + `<button type="button" class="btn small sub" data-local-food="${esc(local)}">🍽 ${esc(local)}の名物が食べられるお店</button>`
+      : `<button type="button" class="btn small" data-gift-where>🗾 行く場所を選ぶ</button>`
+      + `<a class="btn small sub" href="${google("近く ご当地グルメ 名物")}" target="_blank" rel="noopener">🍜 近くのご当地グルメを調べる</a>`
+      + `<button type="button" class="btn small sub" data-local-food="">🍽 近くの名物が食べられるお店</button>`)
       + affButton(`https://search.rakuten.co.jp/search/mall/${encodeURIComponent(`${local || "ご当地"} 名物 お取り寄せ`)}/`, "rakuten", `🛒 ${esc(local || "ご当地")}の名物をお取り寄せ`, "btn small sub")
       + affButton(`https://search.rakuten.co.jp/search/mall/${encodeURIComponent(`${short || "ご当地"} お土産`)}/`, "rakuten", `🎁 ${esc(short || "ご当地")}のお土産`, "btn small sub")
       + affButton(`https://search.rakuten.co.jp/search/mall/${encodeURIComponent(`ふるさと納税 ${town || pref || ""}`.trim())}/`, "rakuten", `🏡 ${esc(town || pref || "")}${town || pref ? "の" : ""}ふるさと納税`, "btn small sub");
@@ -1876,8 +1879,18 @@ async function drawEvents() {
       + affButton(exp, "rakuten", `🎟 ${esc(slug ? pref : "全国")}の遊び・体験を予約`, "btn small sub");
   };
   // 探している場所（県・市町村／指定した場所／今いる市町村）のイベント
-  $("giftLinks").onclick = ev => { const b = ev.target.closest("[data-local-food]"); if (b) { lastFind = { words: `${b.dataset.localFood} 名物` }; findSpots(lastFind); } };
+  $("giftLinks").onclick = ev => {
+    if (ev.target.closest("[data-gift-where]")) return $("outChange")?.onclick();
+    const b = ev.target.closest("[data-local-food]"); if (b) { lastFind = { words: `${b.dataset.localFood} 名物`.trim() }; findSpots(lastFind); }
+  };
   if (findArea) return draw(findArea.pref + findArea.city, findArea.pref, findArea.city);
+  // 「今いる場所」のときは、位置情報がもう許可されていれば静かに確かめて、その市町村のものを出す
+  if (!findPlace && !findHere) {
+    draw("", "");
+    const ok = await navigator.permissions?.query({ name: "geolocation" }).then(x => x.state === "granted", () => false);
+    if (ok && !findPlace && !findArea && !findHere) findHere = await hereNow();
+    if (!globalThis.document?.body || findArea) return;
+  }
   const at = findPlace || findHere;
   draw(findPlace ? findPlace.label : "", "");
   if (at) { const city = await cityOf(at).catch(() => ""); if (day === (findDay || todayStr())) draw(findPlace ? findPlace.label : city, findCity.pref, city); }
