@@ -1170,7 +1170,7 @@ const CONFIG = {
   //   valuecommerce: バリューコマースの MyLink の sid と pid（ホットペッパーグルメのプログラム）
   //   rakuten: 楽天アフィリエイトID（例 "1a2b3c4d.5e6f7a8b.1a2b3c4e.5f6a7b8c"）
   // バリューコマース（ホットペッパー）：提携の承認が来たら vcOn を true にする
-  affiliate: { vcSid: "3783775", vcPid: "892722088", vcOn: false, vcAsoview: "892722093", vcJalan: "892722096", vcJalanAct: "892722097", vcTabelog: "892722098", rakuten: "583df298.b5d045a3.583df299.c1b690a8" },
+  affiliate: { vcSid: "3783775", vcPid: "892722088", vcOn: false, vcAsoview: "892722093", vcJalan: "892722096", vcJalanAct: "892722097", vcTabelog: "892722098", vcIkyu: "892722099", rakuten: "583df298.b5d045a3.583df299.c1b690a8" },
   defaultOwnerName: "理絵"
 };
 /* ========================================================= */
@@ -1945,6 +1945,8 @@ function affLink(url, kind) {
   if (kind === "jalanAct" && a.vcSid && a.vcJalanAct && /^https:\/\/www\.jalan\.net\/activity\//.test(url)) return { href: `https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=${encodeURIComponent(a.vcSid)}&pid=${encodeURIComponent(a.vcJalanAct)}&vc_url=${encodeURIComponent(url)}`, pr: true };
   // 食べログ
   if (kind === "tabelog" && a.vcSid && a.vcTabelog && /^https:\/\/tabelog\.com\//.test(url)) return { href: `https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=${encodeURIComponent(a.vcSid)}&pid=${encodeURIComponent(a.vcTabelog)}&vc_url=${encodeURIComponent(url)}`, pr: true };
+  // 一休.com
+  if (kind === "ikyu" && a.vcSid && a.vcIkyu && /^https:\/\/www\.ikyu\.com\//.test(url)) return { href: `https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=${encodeURIComponent(a.vcSid)}&pid=${encodeURIComponent(a.vcIkyu)}&vc_url=${encodeURIComponent(url)}`, pr: true };
   if (kind === "rakuten" && a.rakuten) return { href: `https://hb.afl.rakuten.co.jp/hgc/${encodeURIComponent(a.rakuten)}/?pc=${encodeURIComponent(url)}&m=${encodeURIComponent(url)}&link_type=hybrid_url`, pr: true };
   return { href: url, pr: false };
 }
@@ -1972,7 +1974,8 @@ async function renderTravelDeals() {
     const pref = findArea ? findArea.pref : findPlace ? "" : findCity.pref, no = recruitPref(pref);
     const jalan = no > 0 ? [`🏆 じゃらんの${pref}の宿ランキング`, `https://www.jalan.net/ranking/yado/KEN_${String(no).padStart(2, "0")}0000.html`] : ["🏨 じゃらんで宿を探す", "https://www.jalan.net/"];
     $("travelDeals").innerHTML = [...TRAVEL_DEALS, stay].map(([l, u]) => affButton(u, "rakuten", esc(l), "btn small sub")).join("")
-      + affButton(jalan[1], "jalan", esc(jalan[0]), "btn small sub");
+      + affButton(jalan[1], "jalan", esc(jalan[0]), "btn small sub")
+      + affButton("https://www.ikyu.com/", "ikyu", "✨ 特別な日の宿（一休.com）", "btn small sub");
   };
   if (findPlace) return draw(findPlace.label);
   draw(findCity.name || "");
