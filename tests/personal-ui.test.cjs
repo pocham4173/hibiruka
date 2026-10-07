@@ -602,12 +602,19 @@ test('deals: local show-only coupons, Hotpepper coupon shops and travel coupons,
   const btn=[...card.querySelectorAll('a')].find(x=>x.textContent.includes('クーポンを見る'));assert.equal(btn.href,'https://www.hotpepper.jp/strJ1/scoupon/');assert(!btn.querySelector('.pr'));
   shops=[];d.querySelector('[data-find="coupon"]').click();await settle();assert.match(d.getElementById('findNote').textContent,/クーポンのあるお店が見つかりませんでした/);
   // affiliate set up: links go through it and carry PR
-  Object.assign(w.h.config.affiliate,{vcSid:'111',vcPid:'222',rakuten:'aa.bb'});w.renderTravelDeals();
+  Object.assign(w.h.config.affiliate,{vcSid:'111',vcPid:'222',vcOn:true,rakuten:'aa.bb'});w.renderTravelDeals();
   links=[...d.querySelectorAll('#travelDeals a')];assert.equal(links[0].href,'https://hb.afl.rakuten.co.jp/hgc/aa.bb/?pc=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&m=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&link_type=hybrid_url');assert.equal(d.querySelectorAll('#travelDeals .pr').length,links.length);assert.match(links[0].rel,/sponsored/);
   shops=[{id:'hp:J1',name:'森のごはん',lat:36.401,lng:138.251,url:'https://www.hotpepper.jp/strJ1/',coupon:true,couponUrl:'https://www.hotpepper.jp/strJ1/scoupon/'}];
   d.querySelector('[data-find="coupon"]').click();await settle();
   const c2=[...d.querySelectorAll('#findResults .spot a')].find(x=>x.textContent.includes('クーポンを見る'));
-  assert.equal(c2.href,'https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=111&pid=222&vc_url='+encodeURIComponent('https://www.hotpepper.jp/strJ1/scoupon/'));assert(c2.querySelector('.pr'));
+  // ホットペッパーの決まり：クーポンのページは広告リンクにしない。お店のページだけ広告（vos つき）
+  assert.equal(c2.href,'https://www.hotpepper.jp/strJ1/scoupon/');assert(!c2.querySelector('.pr'));
+  const s2=[...d.querySelectorAll('#findResults .spot a')].find(x=>x.textContent.includes('ホットペッパーで見る'));
+  assert.equal(s2.href,'https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=111&pid=222&vc_url='+encodeURIComponent('https://www.hotpepper.jp/strJ1/?vos=nhppvccp99002'));assert(s2.querySelector('.pr'));assert.match(s2.rel,/sponsored/);
+  // 承認前（vcOn:false）はふつうのリンク
+  w.h.config.affiliate.vcOn=false;d.querySelector('[data-find="coupon"]').click();await settle();
+  assert.equal([...d.querySelectorAll('#findResults .spot a')].find(x=>x.textContent.includes('ホットペッパーで見る')).href,'https://www.hotpepper.jp/strJ1/');
+  assert.match(d.querySelector('#tab-find .ad-note').textContent,/広告（アフィリエイト）が含まれます/);
   // the coupon filter chip goes to Hotpepper too
   assert(d.querySelector('[data-filter="coupon"]'));
  }finally{a.close();}

@@ -167,7 +167,7 @@
   .find-deal-btn small { flex-basis: 100%; color: var(--muted); font-size: 12px; padding-left: 34px; }
   .find-deal-links { display: flex; flex-wrap: wrap; gap: 6px; }
   .find-deal-links a { text-decoration: none; }
-  .pr { display: inline-block; font-size: 10px; font-weight: 700; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 4px; vertical-align: 1px; }
+  .pr { display: inline-block; font-size: 11px; font-weight: 700; color: var(--rose, #a9536a); border: 1px solid currentColor; border-radius: 4px; padding: 0 4px; margin-left: 4px; vertical-align: 1px; }
   .coupon-card { display: flex; gap: 12px; align-items: center; width: 100%; text-align: left; background: #fffaf0; border: 2px dashed #e8b96a; border-radius: 14px; padding: 12px 14px; margin-bottom: 8px; cursor: pointer; font: inherit; color: var(--ink, #2b2b2b); }
   .coupon-card .ic { font-size: 28px; }
   .coupon-card b { display: block; color: var(--navy); }
@@ -533,6 +533,7 @@
   #firstRecordGuide, #savedNextSteps { background:#fff9f2; border-color:#ead5b9; }
   #firstRecordGuide h2, #savedNextSteps h2 { font-size:21px; }
   #firstRecordGuide .back-link, #savedNextSteps .back-link { background:none; border:0; padding:12px 0; cursor:pointer; }
+  .ad-note { font-size: 12px; color: var(--text); background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; margin: 0 0 12px; line-height: 1.6; }
   .terms-link { margin:8px 0 0; font-size:13px; } .terms-link a { color:var(--rose, #a9536a); font-weight:700; }
 </style>
 </head>
@@ -719,6 +720,7 @@
   <section id="tab-find" class="wrap hidden">
     <div class="eyebrow">ここ行きたい！</div>
     <h2 style="margin-top:4px">スポットを探す</h2>
+    <p class="ad-note">#PR この画面には広告（アフィリエイト）が含まれます。「PR」の付いたリンクから予約・購入されると、ヒビルカに報酬が入ることがあります（値段は変わりません）。</p>
     <section class="find-sec find-go" aria-label="行く場所と日">
       <h3 class="find-h"><span class="find-n">1</span>どこに行く？</h3>
       <div class="find-where" role="group" aria-label="探す場所">
@@ -1167,7 +1169,8 @@ const CONFIG = {
   // アフィリエイト（登録ができたら値を入れるだけ。空のあいだは普通のリンクで開く）
   //   valuecommerce: バリューコマースの MyLink の sid と pid（ホットペッパーグルメのプログラム）
   //   rakuten: 楽天アフィリエイトID（例 "1a2b3c4d.5e6f7a8b.1a2b3c4e.5f6a7b8c"）
-  affiliate: { vcSid: "", vcPid: "", rakuten: "583df298.b5d045a3.583df299.c1b690a8" },
+  // バリューコマース（ホットペッパー）：提携の承認が来たら vcOn を true にする
+  affiliate: { vcSid: "3783775", vcPid: "892722088", vcOn: false, rakuten: "583df298.b5d045a3.583df299.c1b690a8" },
   defaultOwnerName: "理絵"
 };
 /* ========================================================= */
@@ -1924,7 +1927,11 @@ async function drawEvents() {
 function affLink(url, kind) {
   const a = CONFIG.affiliate || {};
   if (!/^https:\/\//.test(url || "")) return { href: "", pr: false };
-  if (kind === "hp" && a.vcSid && a.vcPid) return { href: `https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=${encodeURIComponent(a.vcSid)}&pid=${encodeURIComponent(a.vcPid)}&vc_url=${encodeURIComponent(url)}`, pr: true };
+  // ホットペッパーのお店のページだけ（クーポンのページへの広告リンクは、ホットペッパーの決まりで禁止）。vos はホットペッパー指定の目印
+  if (kind === "hp" && a.vcOn && a.vcSid && a.vcPid && /^https:\/\/www\.hotpepper\.jp\//.test(url) && !/coupon/i.test(url)) {
+    const u = new URL(url); u.searchParams.set("vos", "nhppvccp99002");
+    return { href: `https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=${encodeURIComponent(a.vcSid)}&pid=${encodeURIComponent(a.vcPid)}&vc_url=${encodeURIComponent(u.toString())}`, pr: true };
+  }
   if (kind === "rakuten" && a.rakuten) return { href: `https://hb.afl.rakuten.co.jp/hgc/${encodeURIComponent(a.rakuten)}/?pc=${encodeURIComponent(url)}&m=${encodeURIComponent(url)}&link_type=hybrid_url`, pr: true };
   return { href: url, pr: false };
 }
@@ -2277,7 +2284,7 @@ function spotCard(s, i) {
       <button type="button" class="btn small sub ${inCourse(s) ? "on-course" : ""}" data-course="${i}">${inCourse(s) ? "✓ コースに入っています" : "🧭 コースに入れる"}</button>
       <a class="btn small ghost" href="${spotMapLink(s)}" target="_blank" rel="noopener">🗺 地図</a>
       <a class="btn small ghost" href="${esc(dirUrl(s, { from: findHere }))}" target="_blank" rel="noopener">🧭 行き方</a>
-      ${s.source === "hp" && s.couponUrl ? affButton(s.couponUrl, "hp", s.coupon ? "🎟 クーポンを見る" : "🎟 クーポン・予約", "btn small rose-ghost") : ""}
+      ${s.source === "hp" && s.couponUrl ? affButton(s.couponUrl, "plain", s.coupon ? "🎟 クーポンを見る" : "🎟 クーポン・予約", "btn small rose-ghost") : ""}
       ${s.website && /^https?:\/\//.test(s.website) ? (s.source === "hp" ? affButton(s.website, "hp", "🔗 ホットペッパーで見る", "btn small ghost") : `<a class="btn small ghost" href="${esc(s.website)}" target="_blank" rel="noopener">🔗 お店のページ</a>`) : ""}
     </div></div>`;
 }
