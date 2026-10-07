@@ -579,7 +579,7 @@ test('deals: local show-only coupons, Hotpepper coupon shops and travel coupons,
    return{ok:true,json:async()=>[]};};
   const settle=async()=>{for(let i=0;i<3;i++)await new Promise(r=>setTimeout(r,20));};
   d.querySelector('.maintabs [data-tab="find"]').click();await settle();
-  w.h.config.affiliate.rakuten='';w.renderTravelDeals();
+  w.h.config.affiliate.rakuten='';w.h.config.affiliate.vcJalan='';w.renderTravelDeals();
   const cards=d.querySelectorAll('#localCoupons .coupon-card');assert.equal(cards.length,1,'expired, hidden and broken ones are left out');
   assert.match(cards[0].textContent,/おやつ1個サービス.*わんこカフェ/s);
   cards[0].click();const sheet=d.getElementById('couponSheet');assert(!sheet.classList.contains('hidden'));
@@ -587,12 +587,12 @@ test('deals: local show-only coupons, Hotpepper coupon shops and travel coupons,
   d.getElementById('couponClose').click();assert(sheet.classList.contains('hidden'));
   // travel links: plain while no ID
   let links=[...d.querySelectorAll('#travelDeals a')];assert.equal(links[0].href,'https://travel.rakuten.co.jp/coupon/');assert(!d.querySelector('#travelDeals .pr'));
-  assert.equal(links.at(-1).textContent,'🔍 宿を探す（全国）');
+  const stayLink=()=>links.find(x=>x.textContent.startsWith('🔍'));assert.equal(stayLink().textContent,'🔍 宿を探す（全国）');
   d.getElementById('wherePick').click();d.getElementById('findPlaceQ').value='軽井沢駅';
   const f0=w.fetch;w.fetch=async(url,opt)=>String(url).includes('nominatim')?{ok:true,json:async()=>[{lat:'36.3428',lon:'138.6353'}]}:f0(url,opt);
   d.getElementById('findPlaceForm').dispatchEvent(new w.Event('submit',{cancelable:true}));await settle();w.fetch=f0;
-  links=[...d.querySelectorAll('#travelDeals a')];assert.equal(links.at(-1).textContent,'🔍 軽井沢駅の宿を探す');
-  assert.equal(links.at(-1).href,'https://kw.travel.rakuten.co.jp/keyword/Search.do?charset=utf-8&f_query='+encodeURIComponent('軽井沢駅'));
+  links=[...d.querySelectorAll('#travelDeals a')];assert.equal(stayLink().textContent,'🔍 軽井沢駅の宿を探す');
+  assert.equal(stayLink().href,'https://kw.travel.rakuten.co.jp/keyword/Search.do?charset=utf-8&f_query='+encodeURIComponent('軽井沢駅'));
   assert(!links.some(x=>/長野県の宿/.test(x.textContent)));
   d.querySelector('[data-where="here"]').click();await settle();
   // Hotpepper coupon shops
@@ -602,7 +602,7 @@ test('deals: local show-only coupons, Hotpepper coupon shops and travel coupons,
   const btn=[...card.querySelectorAll('a')].find(x=>x.textContent.includes('クーポンを見る'));assert.equal(btn.href,'https://www.hotpepper.jp/strJ1/scoupon/');assert(!btn.querySelector('.pr'));
   shops=[];d.querySelector('[data-find="coupon"]').click();await settle();assert.match(d.getElementById('findNote').textContent,/クーポンのあるお店が見つかりませんでした/);
   // affiliate set up: links go through it and carry PR
-  Object.assign(w.h.config.affiliate,{vcSid:'111',vcPid:'222',vcOn:true,rakuten:'aa.bb'});w.renderTravelDeals();
+  Object.assign(w.h.config.affiliate,{vcSid:'111',vcPid:'222',vcOn:true,vcJalan:'333',rakuten:'aa.bb'});w.renderTravelDeals();
   links=[...d.querySelectorAll('#travelDeals a')];assert.equal(links[0].href,'https://hb.afl.rakuten.co.jp/hgc/aa.bb/?pc=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&m=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&link_type=hybrid_url');assert.equal(d.querySelectorAll('#travelDeals .pr').length,links.length);assert.match(links[0].rel,/sponsored/);
   shops=[{id:'hp:J1',name:'森のごはん',lat:36.401,lng:138.251,url:'https://www.hotpepper.jp/strJ1/',coupon:true,couponUrl:'https://www.hotpepper.jp/strJ1/scoupon/'}];
   d.querySelector('[data-find="coupon"]').click();await settle();
@@ -679,6 +679,11 @@ test('area: choose a prefecture and city; food and outings search inside it, and
   const ev=d.getElementById('localEvents').textContent;assert.match(ev,/松本の秋まつり/);assert.doesNotMatch(ev,/上田のまつり|終わった/);
   assert(decodeURIComponent(d.querySelector('#eventSearch a').href).includes('長野県松本市 イベント'));
   const evLinks=[...d.querySelectorAll('#eventSearch a')];assert.equal(evLinks.length,4);
+  // じゃらん：長野県の宿ランキング（KEN_160000、vos つき、PR）
+  w.renderTravelDeals();await new Promise(r=>setTimeout(r,30));
+  const jl=[...d.querySelectorAll('#travelDeals a')].find(x=>x.textContent.includes('じゃらん'));
+  assert.match(jl.textContent,/じゃらんの長野県の宿ランキング/);assert(jl.querySelector('.pr'));
+  assert.equal(jl.href,'https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=3783775&pid=892722096&vc_url='+encodeURIComponent('https://www.jalan.net/ranking/yado/KEN_160000.html?vos=njalvccp99000'));
   // アソビュー：長野県は prf16（中部は独自の番号）
   assert.match(evLinks[2].textContent,/長野県の遊び・体験（アソビュー）/);assert(evLinks[2].querySelector('.pr'));
   assert.equal(evLinks[2].href,'https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=3783775&pid=892722093&vc_url='+encodeURIComponent('https://www.asoview.com/location/prf160000/'));

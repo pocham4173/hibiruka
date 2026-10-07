@@ -830,7 +830,7 @@
         <div class="find-deal-links" id="giftLinks"></div>
       </div>
       <div class="find-sub find-deal" aria-labelledby="findTripTitle">
-        <p class="find-subh" id="findTripTitle">🏨 旅のクーポン<small>楽天トラベル</small></p>
+        <p class="find-subh" id="findTripTitle">🏨 旅のクーポン・宿<small>楽天トラベル・じゃらん</small></p>
         <div class="find-deal-links" id="travelDeals"></div>
       </div>
     </section>
@@ -1170,7 +1170,7 @@ const CONFIG = {
   //   valuecommerce: バリューコマースの MyLink の sid と pid（ホットペッパーグルメのプログラム）
   //   rakuten: 楽天アフィリエイトID（例 "1a2b3c4d.5e6f7a8b.1a2b3c4e.5f6a7b8c"）
   // バリューコマース（ホットペッパー）：提携の承認が来たら vcOn を true にする
-  affiliate: { vcSid: "3783775", vcPid: "892722088", vcOn: false, vcAsoview: "892722093", rakuten: "583df298.b5d045a3.583df299.c1b690a8" },
+  affiliate: { vcSid: "3783775", vcPid: "892722088", vcOn: false, vcAsoview: "892722093", vcJalan: "892722096", rakuten: "583df298.b5d045a3.583df299.c1b690a8" },
   defaultOwnerName: "理絵"
 };
 /* ========================================================= */
@@ -1900,9 +1900,7 @@ async function drawEvents() {
       : `<button type="button" class="btn small" data-gift-where>🗾 行く場所を選ぶ</button>`
         + `<a class="btn small sub" href="${google("近く ご当地グルメ 名物")}" target="_blank" rel="noopener">🍜 近くのご当地グルメを調べる</a>`
         + `<button type="button" class="btn small sub" data-local-food="">🍽 近くの名物が食べられるお店</button>`;
-    // アソビューの県の番号（中部だけ並びが独自：山梨15 長野16 新潟17 富山18 石川19 福井20 静岡21 岐阜22）
-    const prefs = Object.keys(PREF_SLUG), ASO = { "山梨県": 15, "長野県": 16, "新潟県": 17, "富山県": 18, "石川県": 19, "福井県": 20, "静岡県": 21, "岐阜県": 22 };
-    const aNo = pref ? (ASO[pref] || prefs.indexOf(pref) + 1) : 0;
+    const aNo = recruitPref(pref);
     const aso = aNo > 0 ? `https://www.asoview.com/location/prf${String(aNo).padStart(2, "0")}0000/` : "https://www.asoview.com/";
     const slug = PREF_SLUG[pref], exp = `https://experiences.travel.rakuten.co.jp/${slug ? "destinations/" + slug : ""}`;
     $("eventSearch").innerHTML = `<a class="btn small sub" href="${google(`${word || "近く"} イベント ${m}月${d}日`)}" target="_blank" rel="noopener">🔍 ${esc(word || "近く")}の${esc(dayWord(day))}のイベント</a>`
@@ -1939,6 +1937,8 @@ function affLink(url, kind) {
   }
   // アソビュー（即時提携・バリューコマース）
   if (kind === "asoview" && a.vcSid && a.vcAsoview && /^https:\/\/www\.asoview\.com\//.test(url)) return { href: `https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=${encodeURIComponent(a.vcSid)}&pid=${encodeURIComponent(a.vcAsoview)}&vc_url=${encodeURIComponent(url)}`, pr: true };
+  // じゃらんnet（宿）。vos はじゃらん指定の目印
+  if (kind === "jalan" && a.vcSid && a.vcJalan && /^https:\/\/www\.jalan\.net\//.test(url)) { const u = new URL(url); u.searchParams.set("vos", "njalvccp99000"); return { href: `https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=${encodeURIComponent(a.vcSid)}&pid=${encodeURIComponent(a.vcJalan)}&vc_url=${encodeURIComponent(u.toString())}`, pr: true }; }
   if (kind === "rakuten" && a.rakuten) return { href: `https://hb.afl.rakuten.co.jp/hgc/${encodeURIComponent(a.rakuten)}/?pc=${encodeURIComponent(url)}&m=${encodeURIComponent(url)}&link_type=hybrid_url`, pr: true };
   return { href: url, pr: false };
 }
@@ -1953,11 +1953,20 @@ const TRAVEL_DEALS = [
 // 3つ目は「行く場所」の宿：場所を指定していればその名前、今いる場所なら市町村名で楽天トラベルを検索
 const travelSearch = q => `https://kw.travel.rakuten.co.jp/keyword/Search.do?charset=utf-8&f_query=${encodeURIComponent(q)}`;
 let travelSeq = 0;
+// アソビュー・じゃらんの県の番号（中部だけ並びが独自：山梨15 長野16 新潟17 富山18 石川19 福井20 静岡21 岐阜22。ほかは全国地方公共団体コード）
+function recruitPref(pref) {
+  const ODD = { "山梨県": 15, "長野県": 16, "新潟県": 17, "富山県": 18, "石川県": 19, "福井県": 20, "静岡県": 21, "岐阜県": 22 };
+  return pref ? (ODD[pref] || Object.keys(PREF_SLUG).indexOf(pref) + 1) : 0;
+}
 async function renderTravelDeals() {
   const seq = ++travelSeq, draw = (name) => {
     if (seq !== travelSeq || !$("travelDeals")) return;
     const stay = name ? [`🔍 ${name}の宿を探す`, travelSearch(name)] : ["🔍 宿を探す（全国）", "https://travel.rakuten.co.jp/"];
-    $("travelDeals").innerHTML = [...TRAVEL_DEALS, stay].map(([l, u]) => affButton(u, "rakuten", esc(l), "btn small sub")).join("");
+    // じゃらん：県の宿ランキング（毎日更新）。県が分からないときはトップ
+    const pref = findArea ? findArea.pref : findPlace ? "" : findCity.pref, no = recruitPref(pref);
+    const jalan = no > 0 ? [`🏆 じゃらんの${pref}の宿ランキング`, `https://www.jalan.net/ranking/yado/KEN_${String(no).padStart(2, "0")}0000.html`] : ["🏨 じゃらんで宿を探す", "https://www.jalan.net/"];
+    $("travelDeals").innerHTML = [...TRAVEL_DEALS, stay].map(([l, u]) => affButton(u, "rakuten", esc(l), "btn small sub")).join("")
+      + affButton(jalan[1], "jalan", esc(jalan[0]), "btn small sub");
   };
   if (findPlace) return draw(findPlace.label);
   draw(findCity.name || "");
