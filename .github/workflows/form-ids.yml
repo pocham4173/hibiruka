@@ -18,5 +18,5 @@ jobs:
             const m=h.match(/FB_PUBLIC_LOAD_DATA_ = (.*?);<\/script>/s);
             if(!m){console.log("not found",r.status);process.exit(1);}
             const d=JSON.parse(m[1]);
-            for(const q of d[1][1]){const t=q[1];const a=q[4]||[];for(const x of a){console.log("Q:",t,"| entry."+x[0],"| required:",x[2],"| options:",JSON.stringify((x[1]||[]).map(o=>o[0])));}}
+            for(const q of d[1][1]){const t=q[1];const a=q[4]||[];for(const x of a){console.log("::notice::Q="+t+" entry."+x[0]+" req="+x[2]+" opts="+JSON.stringify((x[1]||[]).map(o=>o[0])));}}
           })();'
