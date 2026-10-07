@@ -679,6 +679,8 @@ test('area: choose a prefecture and city; food and outings search inside it, and
   const ev=d.getElementById('localEvents').textContent;assert.match(ev,/松本の秋まつり/);assert.doesNotMatch(ev,/上田のまつり|終わった/);
   assert(decodeURIComponent(d.querySelector('#eventSearch a').href).includes('長野県松本市 イベント'));
   const evLinks=[...d.querySelectorAll('#eventSearch a')];assert.equal(evLinks.length,5);
+  const tb=[...d.querySelectorAll('#giftLinks a')].find(x=>x.textContent.includes('食べログ'));
+  assert.equal(tb.href,'https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=3783775&pid=892722098&vc_url='+encodeURIComponent('https://tabelog.com/nagano/rstLst/?SrtT=rt'));
   // じゃらん：長野県の宿ランキング（KEN_160000、vos つき、PR）
   w.renderTravelDeals();await new Promise(r=>setTimeout(r,30));
   const jl=[...d.querySelectorAll('#travelDeals a')].find(x=>x.textContent.includes('じゃらん'));
@@ -693,7 +695,7 @@ test('area: choose a prefecture and city; food and outings search inside it, and
   assert.equal(evLinks[4].href,'https://hb.afl.rakuten.co.jp/hgc/583df298.b5d045a3.583df299.c1b690a8/?pc='+encodeURIComponent('https://experiences.travel.rakuten.co.jp/destinations/nagano')+'&m='+encodeURIComponent('https://experiences.travel.rakuten.co.jp/destinations/nagano')+'&link_type=hybrid_url');
   assert.doesNotMatch(d.getElementById('eventSearch').textContent,/上田/);
   const gifts=[...d.querySelectorAll('#giftLinks a')].map(x=>x.textContent);
-  assert.deepEqual(gifts.map(t=>t.replace('PR','')),['🍜 松本市のご当地グルメを調べる','🏆 長野県松本市のお土産ランキングを見る','🎁 長野県の人気お土産を買う','🛒 松本市の名物をお取り寄せ','🏡 松本市のふるさと納税']);
+  assert.deepEqual(gifts.map(t=>t.replace('PR','')),['🍜 松本市のご当地グルメを調べる','🏆 長野県松本市のお土産ランキングを見る','🍴 食べログの長野県の人気店ランキング','🎁 長野県の人気お土産を買う','🛒 松本市の名物をお取り寄せ','🏡 松本市のふるさと納税']);
   assert.match(d.getElementById('giftWhere').textContent,/行く場所：長野県松本市/);
   assert(d.querySelector('#giftLinks [data-local-food="松本市"]'));
   // outings inside the city
