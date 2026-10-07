@@ -1170,7 +1170,7 @@ const CONFIG = {
   //   valuecommerce: バリューコマースの MyLink の sid と pid（ホットペッパーグルメのプログラム）
   //   rakuten: 楽天アフィリエイトID（例 "1a2b3c4d.5e6f7a8b.1a2b3c4e.5f6a7b8c"）
   // バリューコマース（ホットペッパー）：提携の承認が来たら vcOn を true にする
-  affiliate: { vcSid: "3783775", vcPid: "892722088", vcOn: false, rakuten: "583df298.b5d045a3.583df299.c1b690a8" },
+  affiliate: { vcSid: "3783775", vcPid: "892722088", vcOn: false, vcAsoview: "892722093", rakuten: "583df298.b5d045a3.583df299.c1b690a8" },
   defaultOwnerName: "理絵"
 };
 /* ========================================================= */
@@ -1900,10 +1900,15 @@ async function drawEvents() {
       : `<button type="button" class="btn small" data-gift-where>🗾 行く場所を選ぶ</button>`
         + `<a class="btn small sub" href="${google("近く ご当地グルメ 名物")}" target="_blank" rel="noopener">🍜 近くのご当地グルメを調べる</a>`
         + `<button type="button" class="btn small sub" data-local-food="">🍽 近くの名物が食べられるお店</button>`;
+    // アソビューの県の番号（中部だけ並びが独自：山梨15 長野16 新潟17 富山18 石川19 福井20 静岡21 岐阜22）
+    const prefs = Object.keys(PREF_SLUG), ASO = { "山梨県": 15, "長野県": 16, "新潟県": 17, "富山県": 18, "石川県": 19, "福井県": 20, "静岡県": 21, "岐阜県": 22 };
+    const aNo = pref ? (ASO[pref] || prefs.indexOf(pref) + 1) : 0;
+    const aso = aNo > 0 ? `https://www.asoview.com/location/prf${String(aNo).padStart(2, "0")}0000/` : "https://www.asoview.com/";
     const slug = PREF_SLUG[pref], exp = `https://experiences.travel.rakuten.co.jp/${slug ? "destinations/" + slug : ""}`;
     $("eventSearch").innerHTML = `<a class="btn small sub" href="${google(`${word || "近く"} イベント ${m}月${d}日`)}" target="_blank" rel="noopener">🔍 ${esc(word || "近く")}の${esc(dayWord(day))}のイベント</a>`
       + `<a class="btn small sub" href="${google(`${word || "近く"} イベント ${m}月`)}" target="_blank" rel="noopener">🗓 ${esc(word || "近く")}の${m}月のイベント</a>`
-      + affButton(exp, "rakuten", `🎟 ${esc(slug ? pref : "全国")}の遊び・体験を予約`, "btn small sub");
+      + affButton(aso, "asoview", `🎡 ${esc(aNo > 0 ? pref : "全国")}の遊び・体験（アソビュー）`, "btn small sub")
+      + affButton(exp, "rakuten", `🎟 ${esc(slug ? pref : "全国")}の遊び・体験（楽天）`, "btn small sub");
   };
   // 探している場所（県・市町村／指定した場所／今いる市町村）のイベント
   $("giftLinks").onclick = ev => {
@@ -1932,6 +1937,8 @@ function affLink(url, kind) {
     const u = new URL(url); u.searchParams.set("vos", "nhppvccp99002");
     return { href: `https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=${encodeURIComponent(a.vcSid)}&pid=${encodeURIComponent(a.vcPid)}&vc_url=${encodeURIComponent(u.toString())}`, pr: true };
   }
+  // アソビュー（即時提携・バリューコマース）
+  if (kind === "asoview" && a.vcSid && a.vcAsoview && /^https:\/\/www\.asoview\.com\//.test(url)) return { href: `https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=${encodeURIComponent(a.vcSid)}&pid=${encodeURIComponent(a.vcAsoview)}&vc_url=${encodeURIComponent(url)}`, pr: true };
   if (kind === "rakuten" && a.rakuten) return { href: `https://hb.afl.rakuten.co.jp/hgc/${encodeURIComponent(a.rakuten)}/?pc=${encodeURIComponent(url)}&m=${encodeURIComponent(url)}&link_type=hybrid_url`, pr: true };
   return { href: url, pr: false };
 }
