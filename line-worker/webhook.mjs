@@ -339,7 +339,8 @@ async function lookBack(db, env, owner, monthsAgo, now) {
 // LINE gives "日本、〒386-0013 長野県…"; the country and postal code only add noise.
 export const shortAddress = s => String(s || '').replace(/^日本[、,]\s*/, '').replace(/^〒?\s*\d{3}-?\d{4}\s*/, '').trim();
 
-export async function handleEvent(db, env, ev, now = Date.now()) {
+// fetcher：Googleフォームへ届けるときに使う（テストで直接呼ぶときは渡さない＝フォームへは送らない）
+export async function handleEvent(db, env, ev, now = Date.now(), fetcher = null) {
   const userId = ev.source?.type === 'user' ? ev.source.userId : null;
   if (!userId || !/^U[0-9a-f]{32}$/i.test(userId)) return [];
   const msg = ev.type === 'message' ? ev.message : null;
@@ -351,7 +352,7 @@ export async function handleEvent(db, env, ev, now = Date.now()) {
   if (ev.type === 'postback') { const pb = new URLSearchParams(ev.postback?.data || ''); if (pb.get('a') === 'inq') return inquiryPick(db, userId, pb.get('c'), now); }
   if (msg?.type === 'text' && isInquiryWord(msg.text.normalize('NFKC').trim())) return inquiryStart();
   const owner = await resolveOwner(db, userId);
-  if (msg) { const got = await inquiryReceive(db, userId, msg, owner, now); if (got) return got; }
+  if (msg) { const got = await inquiryReceive(db, userId, msg, owner, now, { fetcher }); if (got) return got; }
   if (!owner) {
     // つながっていない人。予定のお知らせを受け取っている友だちもここ。
     if (msg && msg.type !== 'text') return [text('ヒビルカのアプリとつなぐと、位置情報を送るだけで記録できます。\nアプリの「設定」→「LINEから記録する」からつないでください。\n' + APP_URL + '\n\n📖 使い方\n' + GUIDE_URL)];
@@ -399,7 +400,7 @@ export async function handleWebhook(request, env, {db, fetcher = fetch, now = Da
     for (const ev of events) {
       try {
         if (env.AI && ev.type === 'message' && ev.message?.type === 'text') await showTyping(env, ev, fetcher);
-        const messages = await handleEvent(database, env, ev, now());
+        const messages = await handleEvent(database, env, ev, now(), fetcher);
         await reply(env.LINE_CHANNEL_ACCESS_TOKEN, ev.replyToken, messages, fetcher);
       } catch {
         console.error('Hibiruka webhook event failed.'); // 本文・名前・トークンは出さない

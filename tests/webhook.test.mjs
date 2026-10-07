@@ -166,13 +166,18 @@ test('inquiry: pick a kind, send one message, it is saved without the LINE id; 3
   const [q]=Object.values(db.data.inquiries);
   assert.equal(q.kind,'bug');assert.equal(q.text,'今日の予定が出ません');assert.match(q.no,/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
   assert.equal(JSON.stringify(q).includes(U),false,'LINEのIDは保存しない');
+  // 本番（fetcher あり）では同じ内容をGoogleフォームにも届ける
+  const posted=[];const ff=async(u,o)=>{posted.push([u,o.body]);return new Response('');};
+  await handleEvent(db,{},pb('ad'),NOW,ff);await handleEvent(db,{},msg({type:'text',text:'PRの表示について'}),NOW,ff);
+  assert.equal(posted.length,1);assert.match(posted[0][0],/formResponse$/);
+  const body=new URLSearchParams(posted[0][1]);assert.equal(body.get('entry.1764692148'),'広告（PR）について');assert.equal(body.get('entry.317546293'),'PRの表示について');
+  assert.equal(body.get('entry.673106725'),'LINEから');assert.equal(body.get('entry.879427435'),'確認しました');assert.match(body.get('entry.620971036'),/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
   // 次の文はふつうの記録・返事に戻る
   assert.equal(await (async()=>{const r=await handleEvent(db,{},msg({type:'text',text:'使い方'}),NOW);return /このトークでできること/.test(r[0].text);})(),true);
   // やめる
   await handleEvent(db,{},pb('idea'),NOW);
   assert.match((await handleEvent(db,{},msg({type:'text',text:'やめる'}),NOW))[0].text,/やめました/);
   await handleEvent(db,{},pb('idea'),NOW);await handleEvent(db,{},msg({type:'text',text:'2つ目'}),NOW);
-  await handleEvent(db,{},pb('idea'),NOW);await handleEvent(db,{},msg({type:'text',text:'3つ目'}),NOW);
   assert.match((await handleEvent(db,{},pb('idea'),NOW))[0].text,/1日3回まで/);
   // 15分たったら待つのをやめる
   const db2=memoryDb();await handleEvent(db2,{},pb('how'),NOW);
