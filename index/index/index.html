@@ -1170,7 +1170,7 @@ const CONFIG = {
   //   valuecommerce: バリューコマースの MyLink の sid と pid（ホットペッパーグルメのプログラム）
   //   rakuten: 楽天アフィリエイトID（例 "1a2b3c4d.5e6f7a8b.1a2b3c4e.5f6a7b8c"）
   // バリューコマース（ホットペッパー）：提携の承認が来たら vcOn を true にする
-  affiliate: { vcSid: "3783775", vcPid: "892722088", vcOn: false, vcAsoview: "892722093", vcJalan: "892722096", vcJalanAct: "892722097", rakuten: "583df298.b5d045a3.583df299.c1b690a8" },
+  affiliate: { vcSid: "3783775", vcPid: "892722088", vcOn: false, vcAsoview: "892722093", vcJalan: "892722096", vcJalanAct: "892722097", vcTabelog: "892722098", rakuten: "583df298.b5d045a3.583df299.c1b690a8" },
   defaultOwnerName: "理絵"
 };
 /* ========================================================= */
@@ -1894,6 +1894,7 @@ async function drawEvents() {
       ? `<a class="btn small sub" href="${google(`${local} ご当地グルメ 名物`)}" target="_blank" rel="noopener">🍜 ${esc(local)}のご当地グルメを調べる</a>`
         + `<button type="button" class="btn small sub" data-local-food="${esc(local)}">🍽 ${esc(local)}の名物が食べられるお店</button>`
         + `<a class="btn small sub" href="${google(`${area} お土産 ランキング`)}" target="_blank" rel="noopener">🏆 ${esc(area)}のお土産ランキングを見る</a>`
+        + (PREF_SLUG[pref] ? affButton(`https://tabelog.com/${PREF_SLUG[pref]}/rstLst/?SrtT=rt`, "tabelog", `🍴 食べログの${esc(pref)}の人気店ランキング`, "btn small sub") : "")
         + affButton(`https://search.rakuten.co.jp/search/mall/${encodeURIComponent(`${pref || town} お土産 人気`)}/`, "rakuten", `🎁 ${esc(pref || town)}の人気お土産を買う`, "btn small sub")
         + affButton(`https://search.rakuten.co.jp/search/mall/${encodeURIComponent(`${local} 名物 お取り寄せ`)}/`, "rakuten", `🛒 ${esc(local)}の名物をお取り寄せ`, "btn small sub")
         + affButton(`https://search.rakuten.co.jp/search/mall/${encodeURIComponent(`ふるさと納税 ${town || pref}`.trim())}/`, "rakuten", `🏡 ${esc(town || pref)}のふるさと納税`, "btn small sub")
@@ -1942,6 +1943,8 @@ function affLink(url, kind) {
   if (kind === "jalan" && a.vcSid && a.vcJalan && /^https:\/\/www\.jalan\.net\//.test(url)) { const u = new URL(url); u.searchParams.set("vos", "njalvccp99000"); return { href: `https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=${encodeURIComponent(a.vcSid)}&pid=${encodeURIComponent(a.vcJalan)}&vc_url=${encodeURIComponent(u.toString())}`, pr: true }; }
   // じゃらん 遊び・体験予約
   if (kind === "jalanAct" && a.vcSid && a.vcJalanAct && /^https:\/\/www\.jalan\.net\/activity\//.test(url)) return { href: `https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=${encodeURIComponent(a.vcSid)}&pid=${encodeURIComponent(a.vcJalanAct)}&vc_url=${encodeURIComponent(url)}`, pr: true };
+  // 食べログ
+  if (kind === "tabelog" && a.vcSid && a.vcTabelog && /^https:\/\/tabelog\.com\//.test(url)) return { href: `https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=${encodeURIComponent(a.vcSid)}&pid=${encodeURIComponent(a.vcTabelog)}&vc_url=${encodeURIComponent(url)}`, pr: true };
   if (kind === "rakuten" && a.rakuten) return { href: `https://hb.afl.rakuten.co.jp/hgc/${encodeURIComponent(a.rakuten)}/?pc=${encodeURIComponent(url)}&m=${encodeURIComponent(url)}&link_type=hybrid_url`, pr: true };
   return { href: url, pr: false };
 }
