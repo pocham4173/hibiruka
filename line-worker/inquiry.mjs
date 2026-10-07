@@ -5,7 +5,7 @@ import { inquiryNo } from './account.mjs';
 export const FAQ_URL = 'https://pocham4173.github.io/hibiruka/guide/#faq';
 export const CONTACT_URL = 'https://pocham4173.github.io/hibiruka/terms/#contact';
 // Googleフォーム（作ったら入れる）。entry の番号は「事前入力したURLを取得」で分かる
-export const FORM = { url: '', entry: { kind: '', text: '', device: '', when: '', no: '', agree: '' } };
+export const FORM = { url: 'https://docs.google.com/forms/d/e/1FAIpQLSfUJmj_ja4CkWWw0naho5ML6O4T3MzVJXsnzDG_RRwLUoIIvA/formResponse', entry: { kind: 'entry.1764692148', text: 'entry.317546293', device: 'entry.673106725', when: 'entry.456326230', no: 'entry.620971036', agree: 'entry.879427435' } };
 export const AGREE = '確認しました'; // フォームの「同意」の選択肢と同じ文字
 export const KINDS = { bug: '🐞 不具合（うまく動かない）', how: '❓ 使い方がわからない', idea: '💡 ご意見・ほしい機能', ad: '🏷 広告（PR）について', other: '✉️ その他' };
 const PER_DAY = 3, WAIT_MIN = 15, MAX_LEN = 1000;
@@ -46,7 +46,7 @@ export async function inquiryPick(db, userId, c, now) {
 }
 
 // お問い合わせの内容を待っている人か（待っていれば受け付けて返事を返す。待っていなければ null）
-export async function inquiryReceive(db, userId, msg, owner, now, { fetcher = fetch } = {}) {
+export async function inquiryReceive(db, userId, msg, owner, now, { fetcher = null } = {}) {
   const ref = db.collection('lineInquiry').doc(userId);
   const s = await ref.get();
   if (!s.exists) return null;
@@ -59,7 +59,7 @@ export async function inquiryReceive(db, userId, msg, owner, now, { fetcher = fe
   const id = `${jstDay(now)}-${Math.random().toString(36).slice(2, 10)}`;
   await db.set(db.collection('inquiries').doc(id), { via: 'line', kind: st.kind, text: body.slice(0, MAX_LEN), no, status: 'new', createdAt: new Date(now) });
   await db.set(ref, { kind: '', until: new Date(0), day: st.day, count: (Number(st.count) || 0) + 1 });
-  await toForm({ kind: KINDS[st.kind], text: body.slice(0, MAX_LEN), device: 'LINEから', when: new Date(now + 9 * 3600e3).toISOString().slice(0, 16).replace('T', ' '), no, agree: AGREE }, fetcher);
+  if (fetcher) await toForm({ kind: KINDS[st.kind].replace(/^\S+\s/, ''), text: body.slice(0, MAX_LEN), device: 'LINEから', when: new Date(now + 9 * 3600e3).toISOString().slice(0, 16).replace('T', ' '), no, agree: AGREE }, fetcher);
   return [text(`お問い合わせを受け付けました。ありがとうございます😊\n受付番号：${id.toUpperCase()}\n\nすべて読んでいます。個別のお返事はしていませんが、改善はアプリのお知らせや「よくある質問」でお知らせします。\n${FAQ_URL}`)];
 }
 

@@ -33,3 +33,9 @@ test('google form: only a real form URL, only entry.N fields', async () => {
   assert.equal(await toForm({text:'あ',kind:'k'},f,{url:'https://docs.google.com/forms/d/e/1FAIpQ/formResponse',entry:{text:'entry.12',kind:'bad'}}),true);
   assert.equal(calls.length,1);assert.equal(calls[0][1],'entry.12=%E3%81%82');
 });
+test('LINE inquiry goes to the real form with plain option text', async () => {
+  const {FORM, KINDS}=await import('../line-worker/inquiry.mjs');
+  assert.match(FORM.url,/^https:\/\/docs\.google\.com\/forms\/d\/e\/[\w-]+\/formResponse$/);
+  for(const v of Object.values(FORM.entry))assert.match(v,/^entry\.\d+$/);
+  assert.deepEqual(Object.values(KINDS).map(k=>k.replace(/^\S+\s/,'')),['不具合（うまく動かない）','使い方がわからない','ご意見・ほしい機能','広告（PR）について','その他']);
+});
