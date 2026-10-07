@@ -678,9 +678,12 @@ test('area: choose a prefecture and city; food and outings search inside it, and
   // events: only Matsumoto, upcoming
   const ev=d.getElementById('localEvents').textContent;assert.match(ev,/松本の秋まつり/);assert.doesNotMatch(ev,/上田のまつり|終わった/);
   assert(decodeURIComponent(d.querySelector('#eventSearch a').href).includes('長野県松本市 イベント'));
-  const evLinks=[...d.querySelectorAll('#eventSearch a')];assert.equal(evLinks.length,3);
-  assert.match(evLinks[2].textContent,/長野県の遊び・体験を予約/);assert(evLinks[2].querySelector('.pr'));
-  assert.equal(evLinks[2].href,'https://hb.afl.rakuten.co.jp/hgc/583df298.b5d045a3.583df299.c1b690a8/?pc='+encodeURIComponent('https://experiences.travel.rakuten.co.jp/destinations/nagano')+'&m='+encodeURIComponent('https://experiences.travel.rakuten.co.jp/destinations/nagano')+'&link_type=hybrid_url');
+  const evLinks=[...d.querySelectorAll('#eventSearch a')];assert.equal(evLinks.length,4);
+  // アソビュー：長野県は prf16（中部は独自の番号）
+  assert.match(evLinks[2].textContent,/長野県の遊び・体験（アソビュー）/);assert(evLinks[2].querySelector('.pr'));
+  assert.equal(evLinks[2].href,'https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=3783775&pid=892722093&vc_url='+encodeURIComponent('https://www.asoview.com/location/prf160000/'));
+  assert.match(evLinks[3].textContent,/長野県の遊び・体験（楽天）/);assert(evLinks[3].querySelector('.pr'));
+  assert.equal(evLinks[3].href,'https://hb.afl.rakuten.co.jp/hgc/583df298.b5d045a3.583df299.c1b690a8/?pc='+encodeURIComponent('https://experiences.travel.rakuten.co.jp/destinations/nagano')+'&m='+encodeURIComponent('https://experiences.travel.rakuten.co.jp/destinations/nagano')+'&link_type=hybrid_url');
   assert.doesNotMatch(d.getElementById('eventSearch').textContent,/上田/);
   const gifts=[...d.querySelectorAll('#giftLinks a')].map(x=>x.textContent);
   assert.deepEqual(gifts.map(t=>t.replace('PR','')),['🍜 松本市のご当地グルメを調べる','🏆 長野県松本市のお土産ランキングを見る','🎁 長野県の人気お土産を買う','🛒 松本市の名物をお取り寄せ','🏡 松本市のふるさと納税']);
