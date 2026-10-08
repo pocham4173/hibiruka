@@ -39,3 +39,13 @@ test('LINE inquiry goes to the real form with plain option text', async () => {
   for(const v of Object.values(FORM.entry))assert.match(v,/^entry\.\d+$/);
   assert.deepEqual(Object.values(KINDS).map(k=>k.replace(/^\S+\s/,'')),['不具合（うまく動かない）','使い方がわからない','ご意見・ほしい機能','広告（PR）について','その他']);
 });
+test('firestore transaction set: creates only if still missing, updates only if unchanged', async () => {
+  const {firestore}=await import('../line-worker/firestore.mjs');
+  const bodies=[];let exists=false;
+  const f=async(url,opt)=>{if(opt?.body){bodies.push(JSON.parse(opt.body));return new Response('{}');}return exists?new Response(JSON.stringify({name:'x/lineUsage/a',fields:{count:{integerValue:'2'}},updateTime:'2026-10-08T00:00:00Z'})):new Response('',{status:404});};
+  const db=firestore('t',f,4);const ref=db.collection('lineUsage').doc('a');
+  await db.runTransaction(async tx=>{await tx.get(ref);tx.set(ref,{count:1});});
+  assert.deepEqual(bodies[0].writes[0].currentDocument,{exists:false});
+  exists=true;await db.runTransaction(async tx=>{const s=await tx.get(ref);tx.set(ref,{count:s.data().count+1});});
+  assert.deepEqual(bodies[1].writes[0].currentDocument,{updateTime:'2026-10-08T00:00:00Z'});assert.equal(bodies[1].writes[0].update.fields.count.integerValue,'3');
+});

@@ -2926,7 +2926,12 @@ function sendRows(e) {
   return (e.sends || []).slice().sort((a, b) => a.at < b.at ? -1 : 1).map(x => {
     const names = (x.friendIds || []).map(id => recipientName(id)).filter(Boolean).join("・") || "（削除された人）";
     const said = x.note ? `<br>💬 ${esc(x.note)}` : "";
-    if (x.status === "sent") return `<div class="sendrow"><span class="tag sent">✓ ${fmtAt(x.at)} ${esc(names)}へLINE送信済み${said}</span></div>`;
+    const lineOnly = (x.friendIds || []).every(id => id !== PUSH_SELF), appOnly = (x.friendIds || []).every(id => id === PUSH_SELF);
+    const how = appOnly ? "アプリ通知" : lineOnly ? "LINE" : "LINE・アプリ通知";
+    // 片方だけ届いたときは、全部「送信済み」に見せない
+    if (x.status === "sent" && x.pushResult === "fail") return `<div class="sendrow"><span class="tag fail">⚠️ ${fmtAt(x.at)} LINEは送信済み・アプリ通知は届けられませんでした${x.error ? `<br>${esc(x.error)}` : ""}${said}</span></div>`;
+    if (x.status === "sent") return `<div class="sendrow"><span class="tag sent">✓ ${fmtAt(x.at)} ${esc(names)}へ${how}送信済み${said}</span></div>`;
+    if (x.status === "fail" && x.pushResult === "ok" && !appOnly) return `<div class="sendrow"><span class="tag fail">⚠️ ${fmtAt(x.at)} アプリ通知は届きました・LINEは送れませんでした${x.error ? `<br>${esc(x.error)}` : ""}${said}</span></div>`;
     if (x.status === "fail") return `<div class="sendrow"><span class="tag fail">⚠️ ${fmtAt(x.at)} ${esc(names)}へ送れませんでした${x.error ? `<br>${esc(x.error)}` : ""}${said}</span></div>`;
     return `<div class="sendrow"><span class="tag wait">🔔 ${fmtAt(x.at)} ${esc(names)}へLINEで送る予定${said}</span><button class="x-btn" data-cancel="${e.id}|${x.id}">取消</button></div>`;
   }).join("");
@@ -3251,6 +3256,7 @@ function openSend(id, ev) {
   const e = ev || events.find(x => x.id === id); if (!e) return;
   sendFor = { id, e }; sendWho = new Set();
   renderPush().then(() => { if (!$("sendSheet").classList.contains("hidden")) renderSendWho(); }).catch(() => {});
+  loadLineServer().catch(() => {});
   $("sNote").value = ""; $("sNoteCount").textContent = "0/100";
   $("sNote").oninput = () => { $("sNoteCount").textContent = `${[...$("sNote").value].length}/100`; };
   // 「誰と？」に入れたLINEの人を最初から選んでおく
@@ -3334,7 +3340,18 @@ async function pushTest() {
 const LINE_MONTHLY = 30;
 function lineUsedThisMonth() {
   const ym = todayStr().slice(0, 7);
-  return events.reduce((n, e) => n + (e.sends || []).filter(x => String(x.at || "").startsWith(ym) && x.status !== "fail").reduce((m, x) => m + (x.friendIds || []).filter(id => id !== PUSH_SELF).length, 0), 0);
+  const local = events.reduce((n, e) => n + (e.sends || []).filter(x => String(x.at || "").startsWith(ym) && x.status !== "fail").reduce((m, x) => m + (x.friendIds || []).filter(id => id !== PUSH_SELF).length, 0), 0);
+  // サーバーが数えた「今月送った数」と、画面で数えた「予約中も含めた数」の多いほう
+  return Math.max(local, lineServer.month === ym.replace("-", "") ? lineServer.used : 0);
+}
+// サーバーの控え：自分の今月の数（lineUsage）と、ヒビルカ全体の残り（lineQuota）
+let lineServer = { used: 0, month: "", left: -1 };
+async function loadLineServer() {
+  if (!personalMode || !myUid) return;
+  const ym = todayStr().slice(0, 7).replace("-", "");
+  const [u, q] = await Promise.all([db.collection("lineUsage").doc(`${ym}_${myUid}`).get().catch(() => null), db.collection("lineQuota").doc("current").get().catch(() => null)]);
+  lineServer = { used: u?.exists ? Number(u.data().count) || 0 : 0, month: ym, left: q?.exists && q.data().month === ym && Number(q.data().left) >= 0 ? Number(q.data().left) : -1 };
+  if ($("sQuota") && sendFor) renderSendWho();
 }
 function recipientName(id) { return id === PUSH_SELF ? "📱 アプリ通知" : id === selfFriendId ? '自分' : friends.find(f => f.id === id)?.name; }
 function renderSendWho() {
@@ -3349,15 +3366,20 @@ function renderSendWho() {
   $("sWhoNote").textContent = chips.length ? `選んだ人にだけ届きます。${pushReady && personalMode ? "「📱 アプリ通知」はLINEの通数を使わずに自分の端末へ届きます。" : "自分と友だちを一緒に選べます。"}` : "自分のLINEを登録するか、設定から相手を招待してください。";
   $("sSelfSetup").classList.toggle("hidden", joined.some(f => f.id === selfFriendId));
   $("sSelfSetup").onclick = () => { closeSheets(); goTab("set"); $("selfLineCard").scrollIntoView({behavior:"smooth"}); };
-  const left = Math.max(0, LINE_MONTHLY - lineUsedThisMonth()), lineCount = [...sendWho].filter(id => id !== PUSH_SELF).length;
-  $("sQuota").textContent = `📮 LINEは今月あと${left}通送れます（1人に送ると1通・無料で続けるため月${LINE_MONTHLY}通まで。アプリ通知は数えません）`;
+  const mine = Math.max(0, LINE_MONTHLY - lineUsedThisMonth()), all = lineServer.left;
+  const left = all >= 0 ? Math.min(mine, all) : mine, lineCount = [...sendWho].filter(id => id !== PUSH_SELF).length;
+  $("sQuota").textContent = all >= 0 && all < mine
+    ? (all === 0 ? "📮 ヒビルカ全体の今月のLINE無料送信の枠がなくなりました。来月1日からまた送れます。「📱 アプリ通知」は今も使えます" : `📮 ヒビルカ全体の今月のLINE無料送信は、残り${all}通です（アプリ通知は数えません）`)
+    : `📮 LINEは今月あと${left}通送れます（1人に送ると1通・無料で続けるため月${LINE_MONTHLY}通まで。アプリ通知は数えません）`;
   $("sOkBtn").disabled = $("sNowBtn").disabled = sendWho.size === 0 || sending || left < lineCount;
 }
 let sending = false;
 async function addSend(now) {
   if (sending) return;
   if (!sendFor || !sendWho.size) { toast("送る人を選んでください"); return; }
-  if (lineUsedThisMonth() + [...sendWho].filter(id => id !== PUSH_SELF).length > LINE_MONTHLY) { toast(`今月のLINE送信は${LINE_MONTHLY}通までです。来月1日からまた送れます`, 5000); return; }
+  const wantLine = [...sendWho].filter(id => id !== PUSH_SELF).length;
+  if (lineUsedThisMonth() + wantLine > LINE_MONTHLY) { toast(`今月のLINE送信は${LINE_MONTHLY}通までです。来月1日からまた送れます`, 5000); return; }
+  if (wantLine && lineServer.left >= 0 && lineServer.left < wantLine) { toast("ヒビルカ全体の今月のLINE無料送信の枠がなくなりました。「📱 アプリ通知」は使えます", 6000); return; }
   let at;
   if (now) at = localStr(new Date());
   else {

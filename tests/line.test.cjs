@@ -24,12 +24,13 @@ test('retry key is stable for a reservation and different for another', () => {
   assert.ok(buildText({date:'2026-09-28',title:'予定',memo:'a'.repeat(6000)},'テスト').length<=5000);
 });
 
-function fixture({lineMessage='',validate=false,status=200,accepted=false,expired=false,revoked=false,recovery=false,personal=false,foreign=false}={}) {
+function fixture({lineMessage='',validate=false,status=200,accepted=false,expired=false,revoked=false,recovery=false,personal=false,foreign=false,quotaLeft=Infinity,usedThisMonth=0}={}) {
   const records={config:{app:{selfFriendId:'self'}},events:{event:{date:expired?'2020-01-01':'2099-01-01',time:'12:00',kind:'plan',title:'テストの予定',sends:[{id:'send',friendIds:['self'],at:'2020-01-01T10:00',status:'wait'}],nextSendAt:'2020-01-01T10:00'}},friends:{self:{status:revoked?'pending':'joined',lineUserId:'U'+'a'.repeat(32)},other:{status:'joined',lineUserId:'U'+'b'.repeat(32)}}};
-  records.personalEvents={}; records.personalFriends={};
+  records.personalEvents={}; records.personalFriends={}; records.lineUsage={}; records.lineQuota={};
+  const month=new Date(Date.now()+9*3600000).toISOString().slice(0,7).replace('-','');if(usedThisMonth)records.lineUsage[month+'_owner-A']={ownerUid:'owner-A',count:usedThisMonth};
   if(personal){records.personalEvents.event={...records.events.event,ownerUid:'owner-A'};records.events={};records.personalFriends.self={...records.friends.self,ownerUid:foreign?'owner-B':'owner-A'};}
   const clone=x=>structuredClone(x), calls=[];
-  const ref=(collection,id)=>({id,collection,parent:{id:collection},get:async()=>snap(collection,id)});
+  const ref=(collection,id)=>({id,collection,parent:{id:collection},get:async()=>snap(collection,id),set:async v=>{records[collection][id]=clone(v);}});
   const snap=(c,id)=>({id,ref:ref(c,id),exists:!!records[c][id],data:()=>clone(records[c][id])});
   const db = {
     collection: c => ({
@@ -39,11 +40,13 @@ function fixture({lineMessage='',validate=false,status=200,accepted=false,expire
     }),
     runTransaction: async fn => fn({
       get:r=>Promise.resolve(snap(r.collection,r.id)),
-      update:(r,data)=>Object.assign(records[r.collection][r.id],clone(data))
+      update:(r,data)=>Object.assign(records[r.collection][r.id],clone(data)),
+      set:(r,data)=>{records[r.collection][r.id]=clone(data);}
     })
   };
   const exports={};
   const context={exports,module:{exports},require:name=>name==='firebase-admin'?{initializeApp:()=>{},credential:{cert:x=>x},firestore:()=>db}:name==='./service-account.cjs'?{parseServiceAccount}:require(name),Date,AbortSignal,console:{log:()=>{},error:()=>{}},process:{env:{FIREBASE_SERVICE_ACCOUNT:json,LINE_CHANNEL_ACCESS_TOKEN:'fake-test-token',VALIDATE_ONLY:String(validate),...(recovery?{RECOVER_SELF_AT:'2020-01-01T10:00'}:{})}},fetch:async(url,options)=>{
+    if(/\/message\/quota/.test(url))return url.endsWith('/consumption')?{ok:true,json:async()=>({totalUsage:Number.isFinite(quotaLeft)?200-quotaLeft:0})}:{ok:true,json:async()=>(Number.isFinite(quotaLeft)?{type:'limited',value:200}:{type:'none'})};
     calls.push({url,options});return url.endsWith('/info')?{ok:true,json:async()=>({basicId:'@626hnkgo'})}:{ok:status===200,status,json:async()=>({message:lineMessage}),headers:new Headers(accepted?{'x-line-accepted-request-id':'accepted'}:{})};
   }};
   vm.createContext(context);vm.runInContext(fs.readFileSync(require.resolve('../scripts/line-engine.cjs'),'utf8'),context);
@@ -71,8 +74,32 @@ test('temporary error keeps reservation; accepted retry conflict is completed',a
 });
 test('monthly free allowance used up: the plan is marked with a clear message and not retried; other 429s retry',async()=>{
   const f=fixture({status:429,lineMessage:'You have reached your monthly limit.'});await f.main();
-  const s=f.records.events.event.sends[0];assert.equal(s.status,'fail');assert.match(s.error,/今月のLINE無料送信の上限/);
+  const s=f.records.events.event.sends[0];assert.equal(s.status,'fail');assert.match(s.error,/今月のLINE無料送信の枠/);
   const g=fixture({status:429,lineMessage:'Too Many Requests'});await g.main();assert.equal(g.records.events.event.sends[0].status,'wait');
+});
+test('LINE allowance is managed by the server: whole account, per person, refunds and partial success',async()=>{
+  // 公式アカウント全体の残りが足りない → LINEに送らず理由を残す
+  let f=fixture({quotaLeft:0});await f.main();
+  assert.equal(f.calls.filter(x=>x.url.endsWith('/multicast')).length,0);assert.equal(f.records.events.event.sends[0].status,'fail');assert.match(f.records.events.event.sends[0].error,/全体の今月/);
+  assert.equal(f.records.lineQuota.current.left,0,'画面用に全体の残りを控える');
+  // 1人30通：送る前に予約。使い切っていれば送らない
+  f=fixture({personal:true,usedThisMonth:30});await f.engine.runSender({db:f.db,token:'t'});
+  assert.equal(f.calls.filter(x=>x.url.endsWith('/multicast')).length,0);assert.match(f.records.personalEvents.event.sends[0].error,/1人30通/);
+  f=fixture({personal:true,usedThisMonth:3});await f.engine.runSender({db:f.db,token:'t'});
+  const u=Object.values(f.records.lineUsage)[0];assert.equal(u.count,4,'送った1通を数える');assert.equal(f.records.personalEvents.event.sends[0].reserved,1);
+  // 一時的な失敗→再送では数え直さない、最後に失敗したら戻す
+  f=fixture({personal:true,status:500});await f.engine.runSender({db:f.db,token:'t'});
+  assert.equal(Object.values(f.records.lineUsage)[0].count,1);const s0=f.records.personalEvents.event.sends[0];assert.equal(s0.status,'wait');
+  s0.leaseUntil=0;s0.attempts=5;await f.engine.runSender({db:f.db,token:'t'});
+  assert.equal(f.records.personalEvents.event.sends[0].status,'fail');assert.equal(Object.values(f.records.lineUsage)[0].count,0,'送れなかった分は戻す');
+  // LINEは届いたがアプリ通知が失敗 → 送信済みでも、アプリ通知の失敗を書き添える
+  f=fixture({personal:true});f.records.personalEvents.event.sends[0].friendIds=['push:self','self'];
+  await f.engine.runSender({db:f.db,token:'t',push:async()=>0});
+  const p=f.records.personalEvents.event.sends[0];assert.equal(p.status,'sent');assert.equal(p.pushResult,'fail');assert.match(p.error,/アプリの通知/);
+  // アプリ通知は届いたがLINEが失敗 → 失敗、アプリ通知は届いたと分かる
+  f=fixture({personal:true,status:400});f.records.personalEvents.event.sends[0].friendIds=['push:self','self'];
+  await f.engine.runSender({db:f.db,token:'t',push:async()=>1});
+  assert.equal(f.records.personalEvents.event.sends[0].status,'fail');assert.equal(f.records.personalEvents.event.sends[0].pushResult,'ok');
 });
 test('app notification: push:self goes to the owner devices without LINE; mixed sends use both; failure is explained',async()=>{
   let f=fixture({personal:true});f.records.personalEvents.event.sends[0].friendIds=['push:self'];f.records.personalEvents.event.sends[0].note='傘を忘れずに';
