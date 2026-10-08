@@ -13,7 +13,7 @@ jobs:
       - run: |
           node -e '
           (async()=>{
-            const r=await fetch("https://docs.google.com/forms/d/e/1FAIpQLSfUJmj_ja4CkWWw0naho5ML6O4T3MzVJXsnzDG_RRwLUoIIvA/viewform");
+            const r=await fetch("https://docs.google.com/forms/d/e/1FAIpQLScw0231bhasTV6md3E5i2vE6bXYS_JPLdI_48D_VkucxXsiXQ/viewform");
             const h=await r.text();
             const m=h.match(/FB_PUBLIC_LOAD_DATA_ = (.*?);<\/script>/s);
             if(!m){console.log("not found",r.status);process.exit(1);}
