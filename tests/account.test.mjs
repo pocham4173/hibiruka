@@ -49,3 +49,27 @@ test('firestore transaction set: creates only if still missing, updates only if 
   exists=true;await db.runTransaction(async tx=>{const s=await tx.get(ref);tx.set(ref,{count:s.data().count+1});});
   assert.deepEqual(bodies[1].writes[0].currentDocument,{updateTime:'2026-10-08T00:00:00Z'});assert.equal(bodies[1].writes[0].update.fields.count.integerValue,'3');
 });
+test('AI quota under 25 requests at once: every allowed request is counted, never more than the daily limit', async () => {
+  const {firestore}=await import('../line-worker/firestore.mjs');
+  const {takeQuota,PER_USER_DAILY}=await import('../line-worker/ai.mjs');
+  // 本物の Firestore REST に近い偽物：読むと updateTime、書くときに前提条件（存在しない／同じ updateTime）を確かめる
+  const store=new Map();let clock=0;const wait=()=>new Promise(r=>setTimeout(r,Math.random()*15));
+  const fetcher=async(url,opt)=>{
+    await wait();
+    const path=decodeURIComponent(url.split('/documents/')[1]||'');
+    if(!opt?.body){const d=store.get(path);return d?new Response(JSON.stringify({name:'x/'+path,fields:d.fields,updateTime:d.t})):new Response('',{status:404});}
+    const {writes}=JSON.parse(opt.body);
+    for(const w of writes){const p=w.update.name.split('/documents/')[1],d=store.get(p),pre=w.currentDocument||{};
+      if(pre.exists===false&&d)return new Response(JSON.stringify({error:{status:'ALREADY_EXISTS'}}),{status:409});
+      if(pre.updateTime&&(!d||d.t!==pre.updateTime))return new Response(JSON.stringify({error:{status:'FAILED_PRECONDITION'}}),{status:400});}
+    for(const w of writes){const p=w.update.name.split('/documents/')[1];store.set(p,{fields:w.update.fields,t:'t'+(++clock)});}
+    return new Response('{}');
+  };
+  const db=firestore('tok',fetcher,4);const NOW=Date.parse('2026-10-08T03:00:00Z');
+  const results=await Promise.all(Array.from({length:25},()=>takeQuota(firestore('tok',fetcher,4),'alice',NOW)));
+  const ok=results.filter(r=>r.ok).length;
+  const mine=[...store.entries()].find(([k])=>k.startsWith('aiUsage/')&&k.endsWith('_alice'));
+  const counted=mine?Number(mine[1].fields.count.integerValue):0;
+  assert.equal(counted,ok,'許可した数＝数えた数');assert.ok(ok<=PER_USER_DAILY);assert.ok(ok>=1);
+  console.log('# parallel ok', ok, 'counted', counted);void db;
+});

@@ -1819,10 +1819,11 @@ const courseDay = () => findDay || todayStr();
 const courseWhere = () => findArea ? findArea.city || findArea.pref : findPlace ? findPlace.label : findCity.name || (findHere ? "今いる場所のまわり" : "上田駅のまわり");
 function openCourse() {
   const day = courseDay(), cands = planCandidates(), start = findHere;
-  const minutes = (a, b) => Math.round(distanceM(a, b) / 1000 / 40 * 60); // 車でおよそ（時速40km）
+  // 移動時間は無料では正確に出せないので、直線距離だけを出して、時間は地図で確かめてもらう
+  const km = (a, b) => { const d = distanceM(a, b) / 1000; return d < 1 ? "1km未満" : `約${d < 10 ? d.toFixed(1) : Math.round(d)}km`; };
   $("courseBody").innerHTML = `<h2 style="margin:0 0 4px">🧭 ${esc(dayWord(day))}のおでかけコース</h2>
     <p class="note" style="margin:0 0 10px">${esc(courseWhere())}${lastWx ? "・" + esc(lastWx) : ""}　<a href="#" id="courseDay">行く日・場所を変える</a></p>
-    ${course.length ? course.map((x, i) => `${i ? `<div class="course-move">🚗 約${Math.max(5, minutes(course[i - 1], x))}分（目安）・<a href="${esc(dirUrl(x, { from: course[i - 1], mode: "transit" }))}" target="_blank" rel="noopener">🚃 電車の行き方</a>・<a href="${esc(dirUrl(x, { from: course[i - 1], mode: "driving" }))}" target="_blank" rel="noopener">🚗 車の行き方</a></div>` : start ? `<div class="course-move">📍 今いる場所から <a href="${esc(dirUrl(x, { from: start, mode: "transit" }))}" target="_blank" rel="noopener">🚃 電車</a>・<a href="${esc(dirUrl(x, { from: start, mode: "driving" }))}" target="_blank" rel="noopener">🚗 車</a></div>` : ""}
+    ${course.length ? course.map((x, i) => `${i ? `<div class="course-move">📏 直線で${km(course[i - 1], x)}（時間は地図で確認）・<a href="${esc(dirUrl(x, { from: course[i - 1], mode: "transit" }))}" target="_blank" rel="noopener">🚃 電車の行き方</a>・<a href="${esc(dirUrl(x, { from: course[i - 1], mode: "driving" }))}" target="_blank" rel="noopener">🚗 車の行き方</a></div>` : start ? `<div class="course-move">📍 今いる場所から <a href="${esc(dirUrl(x, { from: start, mode: "transit" }))}" target="_blank" rel="noopener">🚃 電車</a>・<a href="${esc(dirUrl(x, { from: start, mode: "driving" }))}" target="_blank" rel="noopener">🚗 車</a></div>` : ""}
       <div class="course-item"><span class="no">${i + 1}</span><div class="body"><b>${esc(x.name)}</b>${x.kind ? `<small>${esc(x.kind)}</small>` : ""}${x.note ? `<small>💬 ${esc(x.note)}</small>` : ""}<input type="time" data-ctime="${i}" value="${esc(x.time || "")}" aria-label="${esc(x.name)}に着く時間"></div>
         <div class="ops"><button type="button" data-cup="${i}" aria-label="上へ" ${i ? "" : "disabled"}>↑</button><button type="button" data-cdown="${i}" aria-label="下へ" ${i < course.length - 1 ? "" : "disabled"}>↓</button><button type="button" data-cdel="${i}" aria-label="外す">✕</button></div></div>`).join("")
       : '<p class="note">まだコースに場所がありません。下の候補を押すか、探した場所・行きたいリストの「🧭 コースに入れる」で入れてね。</p>'}
@@ -1861,17 +1862,26 @@ async function aiCourse() {
   const msg = $("courseMsg"), btn = $("courseAi"); btn.disabled = true; msg.textContent = "✨ AIが順番と時間を考えています…（10秒ほど）";
   try {
     const token = await auth.currentUser.getIdToken(), day = courseDay();
-    const r = await fetch(CONFIG.aiUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ mode: "plan", date: day, dayText: fmtDate(day), area: courseWhere(), weather: lastWx, spots: course.map(x => ({ name: x.name, kind: x.kind })) }) });
+    // 先に地図の上で近い順に並べ、前の場所からの直線距離も渡す（AIには順番を変えさせない）
+    sortCourse();
+    const spots = course.map((x, i) => ({ name: x.name, kind: x.kind, km: i ? Math.round(distanceM(course[i - 1], x) / 100) / 10 : 0 }));
+    const r = await fetch(CONFIG.aiUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + token }, body: JSON.stringify({ mode: "plan", date: day, dayText: fmtDate(day), area: courseWhere(), weather: lastWx, spots }) });
     const out = await r.json().catch(() => ({}));
     if (!r.ok || !Array.isArray(out.steps)) throw new Error(out.error === "limit" ? "AIは1日20回までです。また明日使ってください。" : out.error === "busy" ? "今日はAIがとても混んでいます。また明日お試しください。" : "うまく作れませんでした。少し待ってもう一度お試しください。");
     const used = out.steps.map(st => { const x = course.find(c => c.name === st.name); return x && { ...x, time: st.time, note: st.note }; }).filter(Boolean);
     course = [...used, ...course.filter(c => !used.some(u => u.name === c.name))]; saveCourse(); openCourse();
-    $("courseMsg").textContent = `✨ AIが順番と時間を入れました。時間は自由に直せます${leftNote(out)}`;
+    $("courseMsg").textContent = `✨ AIが近い順に時間を入れました。営業時間・道の混み具合は調べていないので、時間は目安です。地図で確かめて、自由に直してください${leftNote(out)}`;
   } catch (e) { msg.textContent = e.message; btn.disabled = false; }
 }
 async function saveCourseAsPlans() {
   const day = courseDay(), btn = $("courseSave");
   if (day < todayStr()) { toast("過ぎた日には入れられません"); return; }
+  // 保存の前に時刻を確かめる：ありえない時刻・同じ時刻・順番の逆戻り
+  const times = course.map(x => x.time || "");
+  if (times.some(t => t && !/^([01]\d|2[0-3]):[0-5]\d$/.test(t))) { toast("時刻の形が正しくない場所があります。直してから入れてください"); return; }
+  const set = times.filter(Boolean);
+  if (new Set(set).size !== set.length) { toast("同じ時刻の場所があります。時間をずらしてから入れてください", 5000); return; }
+  if (set.some((t, i) => i && t < set[i - 1]) && !confirm("時刻が上から順になっていません。このまま入れますか？")) return;
   btn.disabled = true; btn.textContent = "入れています…";
   try {
     const batch = db.batch();

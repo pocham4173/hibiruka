@@ -1,7 +1,7 @@
 // 探す：ホットペッパーグルメ（無料のWebサービス）でお店を探す。
 // キーはWorkerの中だけに置き、アプリ（公開ページ）には出さない。使えるのはヒビルカの利用者だけ。
 // キーは GitHub Secrets の HOTPEPPER_API_KEY（2026-10-05 登録）から配置のたびに渡す。
-import { verifyIdToken, cors } from './ai.mjs';
+import { verifyIdToken, cors, takeDaily } from './ai.mjs';
 const ORIGINS = ['https://pocham4173.github.io'];
 const API = 'https://webservice.recruit.co.jp/hotpepper/gourmet/v1/';
 // ジャンル（ホットペッパーのジャンルコード）
@@ -10,17 +10,7 @@ export const BUDGETS = ['B009', 'B010', 'B011', 'B001', 'B002', 'B003', 'B008', 
 export const GENRES = { cafe: 'G014', sweets: 'G014', ramen: 'G013', yakiniku: 'G008', izakaya: 'G001', sushi: 'G004', lunch: '', dog: '', coupon: '' };
 // 使いすぎ防止：1人1日100回・全体1日3000回まで（数えるのはサーバーだけ。アプリからは見えない）
 export const SPOT_PER_USER_DAILY = 100, SPOT_TOTAL_DAILY = 3000;
-const jstDay = now => new Date(now + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, '');
-export async function takeSpotQuota(db, uid, now) {
-  const day = jstDay(now), col = db.collection('spotUsage');
-  const mine = col.doc(`${day}_${uid.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64)}`), all = col.doc(`${day}_total`);
-  const [m, a] = await Promise.all([mine.get(), all.get()]);
-  const used = m.exists ? Number(m.data().count) || 0 : 0, total = a.exists ? Number(a.data().count) || 0 : 0;
-  if (used >= SPOT_PER_USER_DAILY || total >= SPOT_TOTAL_DAILY) return false;
-  const at = new Date(now);
-  await db.commit([{ ref: mine, value: { count: used + 1, day, updatedAt: at } }, { ref: all, value: { count: total + 1, day, updatedAt: at } }]);
-  return true;
-}
+export const takeSpotQuota = async (db, uid, now) => (await takeDaily(db, 'spotUsage', uid, now, SPOT_PER_USER_DAILY, SPOT_TOTAL_DAILY)).ok;
 const json = (body, status, origin) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...cors(origin) } });
 const clean = (s, n) => String(s ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, n);
 const num = v => (typeof v === 'number' || (typeof v === 'string' && v.trim() !== '')) && Number.isFinite(Number(v)) ? Number(v) : NaN;

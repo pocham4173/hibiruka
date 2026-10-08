@@ -56,7 +56,8 @@ export function firestore(accessToken, fetcher=fetch, limit=4){
       return refs.map(r=>snapshot(byName.get(root+'/'+r.path),r.parent.id,r.id));
     },
     runTransaction:async callback=>{
-      for(let attempt=0;attempt<3;attempt++){
+      for(let attempt=0;attempt<5;attempt++){
+        if(attempt)await new Promise(r=>setTimeout(r,20+Math.random()*80*attempt)); // ぶつかったら少し待ってやり直す
         const reads=new Map(),writes=[];
         const result=await callback({get:async r=>{const s=await r.get();reads.set(r.path,s);return s;},update:(r,value)=>{
           const old=reads.get(r.path);if(!old?.exists||!old.updateTime)throw Error('Read before update required');
@@ -67,7 +68,7 @@ export function firestore(accessToken, fetcher=fetch, limit=4){
           writes.push({update:{name:root+'/'+r.path,fields:fields(value)},currentDocument:old.exists&&old.updateTime?{updateTime:old.updateTime}:{exists:false}});
         }});
         if(!writes.length)return result;
-        try{await call(':commit',{writes});return result;}catch(e){if((![409,412].includes(e.status)&&!['ABORTED','FAILED_PRECONDITION'].includes(e.code))||attempt===2)throw e;}
+        try{await call(':commit',{writes});return result;}catch(e){if((![409,412].includes(e.status)&&!['ABORTED','FAILED_PRECONDITION','ALREADY_EXISTS'].includes(e.code))||attempt===4)throw e;}
       }
     },
     heartbeat:async value=>call(':commit',{writes:[{update:{name:root+'/schedulerStatus/cloudflare',fields:fields(value)}}]}),

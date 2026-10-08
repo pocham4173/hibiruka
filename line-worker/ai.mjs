@@ -72,7 +72,9 @@ export const PROMPTS = {
 行く日・場所・天気と、候補の場所の一覧から、1日のおでかけプランを作ります。
 # 書き方
 - 候補の一覧にある場所だけを使う。場所の名前は一覧の名前をそのまま書く。一覧にない店や施設を作らない。
-- 3〜5か所。移動しやすい順（近いものどうしを続ける）に並べ、食事の時間（お昼は11:30〜13:00ごろ）にはごはんの場所を入れる。
+- 候補は、地図の上で近い順（移動しやすい順）にすでに並べてある。この順番は変えずに、3〜5か所を選ぶ。食事の時間（お昼は11:30〜13:00ごろ）にはごはんの場所が来るように選ぶ。
+- 時刻は 8:00〜21:00 の間で、前の場所より後の時刻にする（同じ時刻にしない）。移動の時間も考えて、1か所1時間〜2時間くらいあける。
+- 営業時間・定休日・混み具合は分からないので、決めつけて書かない。
 - 雨や雪の予報なら屋内の場所を中心に、晴れなら外の場所も入れる。暑い日・寒い日も考える。
 - 1行に1か所、「時刻｜場所の名前｜ひとこと（15〜30文字、やわらかい口調）」の形で書く。時刻は 10:00 のような24時間の形。
 - 前置き・まとめ・説明は書かない。
@@ -129,7 +131,7 @@ const recordLines = (r, today) => [
 ].join('\n');
 export function userMessage(input, today, mode = 'diary') {
   if (mode === 'plan') {
-    return `行く日=${input.dayText} / 場所=${input.area || 'わからない'} / 天気=${input.weather || 'わからない'}\n候補（この中からだけ選ぶ）:\n<候補>\n${input.spots.map(x => `${x.name}（${x.kind || '場所'}）`).join('\n')}\n</候補>`;
+    return `行く日=${input.dayText} / 場所=${input.area || 'わからない'} / 天気=${input.weather || 'わからない'}\n候補（近い順。この中からだけ、この順番で選ぶ）:\n<候補>\n${input.spots.map((x, i) => `${x.name}（${x.kind || '場所'}）${i && x.km != null ? `　前の場所から直線で約${x.km}km` : ''}`).join('\n')}\n</候補>`;
   }
   if (mode === 'month') {
     const rows = input.records.map(r => `- ${r.date} ${r.title || r.place || ''}${r.place && r.title ? '（' + r.place + '）' : ''}${r.cat ? ' [' + r.cat + ']' : ''}${r.fav ? ' ♥また行きたい' : ''}${r.memo ? ' メモ: ' + r.memo : ''}`);
@@ -175,17 +177,25 @@ const keepLines = (s, n) => String(s ?? '').replace(/<think>[\s\S]*?<\/think>/g,
 const unquote = s => s.replace(/^[「『"]|[」』"]$/g, '').trim();
 
 // Counts are kept server-side only (aiUsage is not readable or writable by app users).
-export async function takeQuota(db, uid, now) {
-  const day = jstDay(now), col = db.collection('aiUsage');
+// 1日の回数を数える（本人と全体）。トランザクションで読んで書くので、同時に何件来ても数え漏れ・数えすぎがない。
+// 混み合って数えられなかったときは「使えない」側に倒す（無料枠を超えないため）。
+export async function takeDaily(db, colName, uid, now, perUser, total) {
+  const day = jstDay(now), col = db.collection(colName);
   const mine = col.doc(`${day}_${uid.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64)}`), all = col.doc(`${day}_total`);
-  const [m, a] = await Promise.all([mine.get(), all.get()]);
-  const used = m.exists ? Number(m.data().count) || 0 : 0, total = a.exists ? Number(a.data().count) || 0 : 0;
-  if (used >= PER_USER_DAILY) return { ok: false, reason: 'user', left: 0 };
-  if (total >= TOTAL_DAILY) return { ok: false, reason: 'total', left: PER_USER_DAILY - used };
-  const at = new Date(now);
-  await db.commit([{ ref: mine, value: { count: used + 1, day, updatedAt: at } }, { ref: all, value: { count: total + 1, day, updatedAt: at } }]);
-  return { ok: true, left: PER_USER_DAILY - used - 1 };
+  try {
+    return await db.runTransaction(async tx => {
+      const [m, a] = [await tx.get(mine), await tx.get(all)];
+      const used = m.exists ? Number(m.data().count) || 0 : 0, sum = a.exists ? Number(a.data().count) || 0 : 0;
+      if (used >= perUser) return { ok: false, reason: 'user', left: 0 };
+      if (sum >= total) return { ok: false, reason: 'total', left: perUser - used };
+      const at = new Date(now);
+      tx.set(mine, { count: used + 1, day, updatedAt: at });
+      tx.set(all, { count: sum + 1, day, updatedAt: at });
+      return { ok: true, left: perUser - used - 1 };
+    });
+  } catch { return { ok: false, reason: 'total', left: 0 }; }
 }
+export const takeQuota = (db, uid, now) => takeDaily(db, 'aiUsage', uid, now, PER_USER_DAILY, TOTAL_DAILY);
 
 export async function handleAi(request, env, { db, fetcher = fetch, now = Date.now } = {}) {
   const origin = request.headers.get('origin') || '';
@@ -200,7 +210,7 @@ export async function handleAi(request, env, { db, fetcher = fetch, now = Date.n
   const mode = PROMPTS[body?.mode] ? body.mode : 'diary';
   let input;
   if (mode === 'plan') {
-    const spots = (Array.isArray(body.spots) ? body.spots : []).slice(0, 14).map(x => ({ name: clean(x?.name, 40), kind: clean(x?.kind, 20) })).filter(x => x.name);
+    const spots = (Array.isArray(body.spots) ? body.spots : []).slice(0, 14).map(x => ({ name: clean(x?.name, 40), kind: clean(x?.kind, 20), km: Number.isFinite(+x?.km) && +x.km >= 0 && +x.km < 500 ? Math.round(+x.km * 10) / 10 : null })).filter(x => x.name);
     input = { date: clean(body.date, 10), dayText: clean(body.dayText, 20), area: clean(body.area, 30), weather: clean(body.weather, 40), spots };
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date) || spots.length < 2) return json({ error: 'input' }, 400, origin);
   } else if (mode === 'month') {
@@ -238,18 +248,30 @@ export async function handleAi(request, env, { db, fetcher = fetch, now = Date.n
 
 // 「10:00｜場所｜ひとこと」の行を読み、候補にある場所だけを残す（AIが作った店は使わない）
 const fold = t => String(t || '').normalize('NFKC').replace(/\s+/g, '').toLowerCase();
+// 時刻は 6:00〜22:00 の本当にある時刻だけ（25:80 や 99:99 は捨てる）
+export const okTime = (h, m) => Number.isInteger(h) && Number.isInteger(m) && h >= 6 && h <= 22 && m >= 0 && m <= 59 && !(h === 22 && m > 0);
+const toMin = t => +t.slice(0, 2) * 60 + +t.slice(3);
+const toTime = n => `${pad(Math.floor(n / 60))}:${pad(n % 60)}`;
 export function planSteps(raw, spots) {
-  const out = [], used = new Set();
+  const got = [], used = new Set();
   for (const line of String(raw || '').split('\n')) {
     const m = line.normalize('NFKC').match(/(\d{1,2}):(\d{2})\s*[|｜]\s*(.+?)\s*[|｜]\s*(.*)$/);
-    if (!m) continue;
+    if (!m || !okTime(+m[1], +m[2])) continue;
     const name = fold(m[3].replace(/[「」『』]/g, ''));
-    const spot = spots.find(x => fold(x.name) === name) || spots.find(x => name.length >= 2 && (fold(x.name).includes(name) || name.includes(fold(x.name))));
-    if (!spot || used.has(spot.name)) continue;
-    used.add(spot.name);
-    out.push({ time: `${m[1].padStart(2, '0')}:${m[2]}`, name: spot.name, note: unquote(m[4]).slice(0, 40) });
+    const idx = spots.findIndex(x => fold(x.name) === name) >= 0 ? spots.findIndex(x => fold(x.name) === name) : spots.findIndex(x => name.length >= 2 && (fold(x.name).includes(name) || name.includes(fold(x.name))));
+    if (idx < 0 || used.has(idx)) continue;
+    used.add(idx);
+    got.push({ idx, time: `${m[1].padStart(2, '0')}:${m[2]}`, name: spots[idx].name, note: unquote(m[4]).slice(0, 40) });
   }
-  return out.sort((a, b) => a.time < b.time ? -1 : 1).slice(0, 6);
+  // 場所の順番は候補の順（近い順）のまま。時刻は早い順に割り当て、同じ時刻や逆戻りは30分ずつ後ろへ（22:00をこえる所は入れない）
+  const times = got.map(x => toMin(x.time)).sort((a, b) => a - b), out = [];
+  let last = -1;
+  got.sort((a, b) => a.idx - b.idx).slice(0, 6).forEach((x, k) => {
+    let t = Math.max(times[k], last + 30);
+    if (t > 22 * 60) return;
+    last = t; out.push({ time: toTime(t), name: x.name, note: x.note });
+  });
+  return out;
 }
 
 /* ---------- LINE: 話しかけるだけで記録 ---------- */

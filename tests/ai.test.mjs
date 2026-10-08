@@ -17,7 +17,8 @@ function idToken(claims = {}, kid = 'k1', key = privateKey) {
 function memoryDb() {
   const data = {};
   const ref = (c, id) => ({path: c + '/' + id, get: async () => ({exists: (c + '/' + id) in data, data: () => data[c + '/' + id]})});
-  return {data, collection: c => ({doc: id => ref(c, id)}), commit: async ops => { for (const o of ops) data[o.ref.path] = o.value; }};
+  return {data, collection: c => ({doc: id => ref(c, id)}), commit: async ops => { for (const o of ops) data[o.ref.path] = o.value; },
+    runTransaction: async fn => { const w = []; const r = await fn({get: x => x.get(), set: (x, v) => w.push([x, v]), update: (x, v) => w.push([x, v])}); for (const [x, v] of w) data[x.path] = v; return r; }};
 }
 function setup({fail = null, aiText = 'ゆっくり呼吸をして、肩が軽くなった一日。'} = {}) {
   const calls = [], runs = [];
@@ -128,6 +129,15 @@ test('answers are read from any shape; thinking is turned off and an empty answe
   assert.match((await runText(empty, [], 800, 0.7)).diag, /^E:length:content\.reasoning_content/);
 });
 
+test('outing plan: impossible times are dropped, places keep the nearby order, times never go backwards or repeat', async () => {
+  const {planSteps} = await import('../line-worker/ai.mjs');
+  const spots = [{name: 'A公園'}, {name: 'Bカフェ'}, {name: 'C美術館'}, {name: 'D温泉'}];
+  assert.deepEqual(planSteps('25:80｜A公園｜x\n99:99｜Bカフェ｜y\n24:00｜C美術館｜z\n05:59｜D温泉｜w', spots), [], '25:80・99:99・24:00・朝早すぎは入れない');
+  // AIが逆の順に並べても、場所は近い順（候補の順）、時刻は早い順に
+  assert.deepEqual(planSteps('15:00｜A公園｜a\n10:00｜C美術館｜c', spots).map(x => x.time + x.name), ['10:00A公園', '15:00C美術館']);
+  // 同じ時刻は30分ずつ後ろへ、22:00をこえるものは入れない
+  assert.deepEqual(planSteps('12:00｜A公園｜a\n12:00｜Bカフェ｜b\n21:50｜C美術館｜c\n22:00｜D温泉｜d', spots).map(x => x.time), ['12:00', '12:30', '21:50']);
+});
 test('outing plan: only places from the candidates are kept, in time order; too few candidates are refused', async () => {
   const {planSteps} = await import('../line-worker/ai.mjs');
   const spots = [{name: '上田城跡公園', kind: '公園'}, {name: 'ソラノカフェ', kind: 'カフェ'}, {name: '信州の湯', kind: '温泉'}];
@@ -137,6 +147,10 @@ test('outing plan: only places from the candidates are kept, in time order; too 
   const out = await (await handleAi(req({mode: 'plan', date: '2026-10-11', dayText: '10月11日(土)', area: '上田市', weather: '雨 最高18℃', spots}), s.env, s.deps)).json();
   assert.equal(out.steps.length, 3); assert.equal(s.runs[0][1].messages[0].content, PROMPTS.plan);
   assert.match(s.runs[0][1].messages[1].content, /<候補>\n上田城跡公園（公園）\nソラノカフェ（カフェ）\n信州の湯（温泉）\n<\/候補>/);
+  // 距離を渡すと「前の場所から直線で約○km」を添える
+  resetKeyCache(); s = setup({aiText: raw});
+  await handleAi(req({mode: 'plan', date: '2026-10-11', spots: [{...spots[0], km: 0}, {...spots[1], km: 1.24}, {...spots[2], km: 'x'}]}), s.env, s.deps);
+  assert.match(s.runs[0][1].messages[1].content, /ソラノカフェ（カフェ）　前の場所から直線で約1.2km\n信州の湯（温泉）\n/);
   assert.equal((await handleAi(req({mode: 'plan', date: '2026-10-11', spots: [spots[0]]}), s.env, s.deps)).status, 400);
   resetKeyCache(); s = setup({aiText: '10:00｜どこか｜x'});
   assert.equal((await handleAi(req({mode: 'plan', date: '2026-10-11', spots}), s.env, s.deps)).status, 502);
