@@ -75,7 +75,8 @@ test('smoking OK search returns only shops where smoking is allowed', async () =
 test('search: 1 person 100 a day, then 429; same search is cached by Cloudflare', async () => {
   resetKeyCache(); const s = setup(); const docs = new Map();
   const db = {collection: c => ({doc: id => ({id: c + '/' + id})}),
-    commit: async ops => { for (const o of ops) docs.set(o.ref.id, o.value); }};
+    commit: async ops => { for (const o of ops) docs.set(o.ref.id, o.value); },
+    runTransaction: async fn => { const w = []; const r = await fn({get: x => x.get(), set: (x, v) => w.push([x, v])}); for (const [x, v] of w) docs.set(x.id, v); return r; }};
   db.collection = c => ({doc: id => { const k = c + '/' + id; return {id: k, get: async () => ({exists: docs.has(k), data: () => docs.get(k)})}; }});
   const deps = {...s.deps, db: async () => db};
   const fetched = [];

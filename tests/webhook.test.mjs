@@ -21,7 +21,8 @@ function memoryDb(seed={}){
     set:async(r,v)=>{const [c,id]=r.path.split('/');col(c)[id]=v;},
     patch:async(r,v)=>{const [c,id]=r.path.split('/');Object.assign(col(c)[id],v);},
     remove:async r=>{const [c,id]=r.path.split('/');delete col(c)[id];},
-    commit:async ops=>{for(const o of ops){const [c,id]=o.ref.path.split('/');if(o.remove)delete col(c)[id];else col(c)[id]=o.value;}}};
+    commit:async ops=>{for(const o of ops){const [c,id]=o.ref.path.split('/');if(o.remove)delete col(c)[id];else col(c)[id]=o.value;}},
+    runTransaction:async fn=>{const w=[];const r=await fn({get:x=>x.get(),set:(x,v)=>w.push([x,v]),update:(x,v)=>w.push([x,v])});for(const [x,v] of w){const [c,id]=x.path.split('/');col(c)[id]=v;}return r;}};
 }
 const personalSeed=()=>({personalConfig:{alice:{ownerName:'A',cats:[{name:'遊び'},{name:'食事'},{name:'カフェ',label:'喫茶'}]}},lineLinkCodes:{ABCDEFGH23:{ownerUid:'alice',scope:'personal',expiresAt:new Date(NOW+300000)}}});
 const linked=()=>({...personalSeed(),lineLinkCodes:{},lineAccounts:{[U]:{ownerUid:'alice',scope:'personal'}},lineLinks:{alice:{lineUserId:U}}});

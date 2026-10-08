@@ -807,12 +807,17 @@ test('outing course: collect places, order them, let AI add times, see the route
   const adds=[...sheet.querySelectorAll('[data-cadd]')].map(b=>b.textContent);assert.deepEqual(adds,['➕ ソラノカフェ'.replace('ソラノカフェ','上田城跡公園'),'➕ ソラノカフェ']);
   sheet.querySelector('[data-cadd="1"]').click();sheet.querySelector('[data-cadd="0"]').click();
   assert.deepEqual([...sheet.querySelectorAll('.course-item b')].map(b=>b.textContent),['ソラノカフェ','上田城跡公園']);
-  assert.match(sheet.textContent,/約\d+分（目安）/);
+  assert.match(sheet.textContent,/直線で(1km未満|約[\d.]+km)（時間は地図で確認）/);assert.doesNotMatch(sheet.textContent,/分（目安）/,'時速で計算した分数は出さない');
   await d.getElementById('courseAi').onclick();await settle();
-  assert.equal(asked.mode,'plan');assert.match(asked.weather,/雨/);
+  assert.equal(asked.mode,'plan');assert.match(asked.weather,/雨/);assert.equal(asked.spots[0].km,0);assert.equal(typeof asked.spots[1].km,'number');
+  assert.match(d.getElementById('courseMsg').textContent,/時間は目安/);
   assert.deepEqual([...sheet.querySelectorAll('.course-item b')].map(b=>b.textContent),['上田城跡公園','ソラノカフェ']);
   assert.equal(sheet.querySelector('[data-ctime="1"]').value,'12:00');assert.match(sheet.textContent,/💬 朝のおさんぽ。/);
   const route=[...sheet.querySelectorAll('a')].find(x=>/コース全体/.test(x.textContent));assert.equal(new URL(route.href).searchParams.get('travelmode'),'driving');
+  // 同じ時刻は保存しない
+  const t1=sheet.querySelector('[data-ctime="1"]');t1.value='10:00';t1.onchange();await d.getElementById('courseSave').onclick();
+  assert.equal([...a.data].filter(([k,v])=>k.startsWith('personalEvents/')&&v.kind==='plan').length,0);
+  t1.value='12:00';t1.onchange();
   await d.getElementById('courseSave').onclick();
   const plans=[...a.data].filter(([k,v])=>k.startsWith('personalEvents/')&&v.kind==='plan').map(([,v])=>v);
   assert.equal(plans.length,2);assert.equal(plans.find(p=>p.place==='ソラノカフェ').time,'12:00');assert.equal(plans[0].ownerUid,'A');
