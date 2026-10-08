@@ -1,0 +1,40 @@
+name: ヒビルカの状態確認（読むだけ）
+# 送信はしない。LINEの今月の上限・使用数、定期送信の最後の動作、通数の控えを読んで、注釈に出すだけ。
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/health-check.yml]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --prefix scripts firebase-admin@12 --omit=dev --no-audit --no-fund
+      - name: Read status
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          LINE_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+        run: |
+          node -e '
+          const admin=require("./scripts/node_modules/firebase-admin");const {parseServiceAccount}=require("./scripts/service-account.cjs");
+          (async()=>{
+            const h={Authorization:"Bearer "+process.env.LINE_TOKEN};
+            const q=await (await fetch("https://api.line.me/v2/bot/message/quota",{headers:h})).json();
+            const c=await (await fetch("https://api.line.me/v2/bot/message/quota/consumption",{headers:h})).json();
+            console.log("::notice::LINE plan quota="+JSON.stringify(q)+" used="+c.totalUsage);
+            admin.initializeApp({credential:admin.credential.cert(parseServiceAccount(process.env.FIREBASE_SERVICE_ACCOUNT))});
+            const db=admin.firestore();
+            const hb=(await db.doc("schedulerStatus/cloudflare").get()).data()||{};
+            console.log("::notice::scheduler ok="+hb.ok+" enabled="+hb.enabled+" checkedAt="+(hb.checkedAt?.toDate?.().toISOString())+" version="+hb.version+" sent="+hb.sent+" failed="+hb.failed);
+            const lq=(await db.doc("lineQuota/current").get()).data();
+            console.log("::notice::lineQuota doc="+JSON.stringify(lq||null));
+            const wait=await db.collection("personalEvents").where("nextSendAt","!=",null).limit(50).get();
+            console.log("::notice::personal events with pending sends="+wait.size);
+            await admin.app().delete();
+          })().catch(e=>{console.log("::error::"+(e.code||e.message));process.exitCode=1;});'
