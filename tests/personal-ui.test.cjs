@@ -324,9 +324,13 @@ test('AI extras: style chips, title ideas, SNS caption in the share sheet and a 
   d.getElementById('instaClose').click();
   // month look-back uses only past memories of that month
   const t=new Date(),ym=`${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}`;
-  w.h.setEvents([{id:'1',date:ym+'-01',title:'ヨガ',cat:'遊び',kind:'memory',fav:true},{id:'2',date:'1999-01-01',title:'昔',kind:'memory'}]);
+  // 日付が過ぎただけの予定・中止した予定は入れない。「行った」を選んだ予定は入れる
+  const y1=new Date(t.getFullYear(),t.getMonth(),t.getDate()-1),yd=`${y1.getFullYear()}-${String(y1.getMonth()+1).padStart(2,'0')}-${String(y1.getDate()).padStart(2,'0')}`;
+  const sameMonth=yd.startsWith(ym);
+  w.h.setEvents([{id:'1',date:ym+'-01',title:'ヨガ',cat:'遊び',kind:'memory',fav:true},{id:'2',date:'1999-01-01',title:'昔',kind:'memory'},
+    {id:'3',date:yd,title:'行ったか分からない',kind:'plan'},{id:'4',date:yd,title:'中止',kind:'plan',outcome:'cancelled'},{id:'5',date:yd,title:'行った予定',kind:'plan',outcome:'done'}]);
   d.getElementById('monthThis').click();await settle();
-  const m=sent.at(-1);assert.equal(m.mode,'month');assert.equal(m.records.length,1);assert.equal(m.records[0].fav,true);assert.match(m.month,/^\d{4}年\d{1,2}月$/);
+  const m=sent.at(-1);assert.equal(m.mode,'month');assert.equal(m.records.length,sameMonth?2:1);assert.equal(m.records.some(x=>/分からない|中止/.test(x.title)),false);assert.equal(m.records[0].fav,true);assert.match(m.month,/^\d{4}年\d{1,2}月$/);
   assert.equal(d.getElementById('monthText').textContent,'ヨガに通った月。');
   w.h.setEvents([]);d.getElementById('monthLast').click();await settle();assert.equal(sent.at(-1),m,'no request when the month is empty');
  }finally{a.close();}
@@ -913,5 +917,21 @@ test('AI look-back can be made for any earlier month that has memories',async()=
   const opts=[...d.getElementById('monthPick').options].map(o=>o.value);assert.deepEqual(opts,['','3','14']);
   const sel=d.getElementById('monthPick');sel.value='14';await sel.onchange();await new Promise(r=>setTimeout(r,20));
   assert.equal(asked.mode,'month');assert.equal(asked.records[0].title,'去年');assert.match(d.getElementById('monthText').textContent,/楽しい月/);
+ }finally{a.close();}
+});
+
+test('past plans: not counted as memories until "行った"; 中止 hides them; nothing changes by date alone',async()=>{
+ const a=app();try{await a.w.h.startOwner();const {w,d}=a;
+  const past={id:'pp',date:'2020-05-05',title:'遊園地',kind:'plan',cat:'遊び'};a.data.set('personalEvents/pp',{...past});w.h.setEvents([past]);
+  w.selectView('mem');w.goTab('list');
+  const tile=d.querySelector('#listBox [data-open="pp"]');assert.ok(tile,'行ったか分からない予定も、印つきで見える');assert.match(tile.textContent,/予定だった日/);
+  assert.equal(a.data.get('personalEvents/pp').outcome,undefined,'日付が過ぎただけでは書き換えない');
+  tile.querySelector('[data-outcome="pp|done"]').click();for(let i=0;i<3;i++)await new Promise(r=>setTimeout(r,10));
+  assert.equal(a.data.get('personalEvents/pp').outcome,'done');
+  w.selectView('map');assert.match(d.getElementById('listBox').textContent,/地図に出せる思い出はまだありません/,'場所がないので地図には出ないが、思い出として数える');
+  w.selectView('mem');d.querySelector('#listBox [data-open="pp"]').click();
+  d.querySelector('#detailBody [data-outcome="pp|"]').click();for(let i=0;i<3;i++)await new Promise(r=>setTimeout(r,10));
+  assert.equal(a.data.get('personalEvents/pp').outcome,'__delete__','取り消すと元に戻る');
+  w.h.setEvents([{...past,outcome:'cancelled'}]);w.selectView('mem');assert.equal(d.querySelector('#listBox [data-open="pp"]'),null,'中止は思い出に出ない');
  }finally{a.close();}
 });
