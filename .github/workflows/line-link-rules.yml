@@ -1,4 +1,5 @@
 name: LINE連携番号のルール反映
+# 2026-10-08: 招待の承認（joined）をサーバー専用にしたルールを反映
 # Reuse one emulator database instance per verification context.
 on:
   push:
