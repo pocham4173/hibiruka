@@ -533,6 +533,9 @@
   #firstRecordGuide, #savedNextSteps { background:#fff9f2; border-color:#ead5b9; }
   #firstRecordGuide h2, #savedNextSteps h2 { font-size:21px; }
   #firstRecordGuide .back-link, #savedNextSteps .back-link { background:none; border:0; padding:12px 0; cursor:pointer; }
+  .outcome { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 0; font-size: 13px; }
+  .outcome .chip { padding: 4px 10px; font-size: 13px; }
+  .link-btn { background: none; border: 0; color: var(--rose, #a9536a); text-decoration: underline; font-size: 13px; padding: 2px 4px; cursor: pointer; }
   .ad-note { font-size: 12px; color: var(--text); background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; margin: 0 0 12px; line-height: 1.6; }
   .terms-link { margin:8px 0 0; font-size:13px; } .terms-link a { color:var(--rose, #a9536a); font-weight:700; }
 </style>
@@ -1199,6 +1202,42 @@ function fmtAt(at) { const [d, t] = at.split("T"); const p = parts(d); return `$
 function nextSendAt(sends) { const w = (sends || []).filter(x => x.status === "wait").map(x => x.at).sort(); return w[0] || null; }
 function inviteUrl(token) { return `https://liff.line.me/${CONFIG.liffId}?invite=${encodeURIComponent(token)}${personalMode ? "&scope=personal" : ""}`; }
 function isPlan(e) { return e.kind !== "memory" && e.date >= todayStr(); }
+// 日が過ぎた予定。日付が過ぎただけでは「行った」にしない（行った／中止を本人が選べる。選ばなくても困らない）
+function isPastPlan(e) { return e.kind !== "memory" && e.kind !== "wish" && !!e.date && e.date < todayStr(); }
+// 実際にあったこと＝思い出として記録したもの、または予定で「行った」を選んだもの（AIのふりかえり・地図はこれだけ）
+function isDone(e) { return e.kind === "memory" || (isPastPlan(e) && e.outcome === "done"); }
+async function setOutcome(id, outcome) {
+  const e = events.find(x => x.id === id); if (!e) return;
+  try {
+    await recordCollection("events").doc(id).update({ outcome: outcome || firebase.firestore.FieldValue.delete(), updatedAt: TS() });
+    e.outcome = outcome || undefined;
+    // 行きたいリストから入れた予定なら、そちらも合わせる（その1件だけ）
+    const w = wishes.find(x => x.planId === id);
+    if (w && outcome === "done" && w.status !== "visited") recordCollection("events").doc(w.id).update({ status: "visited", updatedAt: TS() }).catch(() => {});
+    if (w && outcome === "cancelled" && w.status !== "wished") recordCollection("events").doc(w.id).update({ status: "wished", planId: firebase.firestore.FieldValue.delete(), updatedAt: TS() }).catch(() => {});
+    toast(outcome === "done" ? "「行った」にしました。思い出に入ります" : outcome === "cancelled" ? "「中止」にしました。思い出やふりかえりには入りません" : "元に戻しました");
+    renderList();
+  } catch (err) { toast(`保存できませんでした（${err?.code || "error"}）`); }
+}
+function outcomeButtons(e) {
+  if (!isPastPlan(e)) return "";
+  if (e.outcome === "done") return `<div class="outcome" data-stop><span>✅ 行った</span><button type="button" class="link-btn" data-outcome="${e.id}|">取り消す</button></div>`;
+  if (e.outcome === "cancelled") return `<div class="outcome" data-stop><span>✖️ 中止</span><button type="button" class="link-btn" data-outcome="${e.id}|">取り消す</button></div>`;
+  return `<div class="outcome" data-stop><span>行けましたか？</span><button type="button" class="chip" data-outcome="${e.id}|done">✅ 行った</button><button type="button" class="chip" data-outcome="${e.id}|later">📅 延期</button><button type="button" class="chip" data-outcome="${e.id}|cancelled">✖️ 中止</button></div>`;
+}
+function bindOutcome(root) {
+  root.querySelectorAll("[data-outcome]").forEach(b => b.onclick = ev => {
+    ev.stopPropagation();
+    const [id, v] = b.dataset.outcome.split("|");
+    if (v === "later") {
+      // 延期：予定のまま、新しい日付を選んでもらう（過ぎた日のままでは保存されない）
+      closeSheets();
+      editRecord(id).then(() => { $("fKind").value = "plan"; $("fDate").value = ""; updateSaveNote(); toast("新しい日付を選んで保存してください", 4000); setTimeout(() => $("fDate").focus(), 300); }).catch(() => {});
+      return;
+    }
+    setOutcome(id, v).then(() => { if (!$("detailSheet").classList.contains("hidden")) openDetail(id); });
+  });
+}
 function toast(msg, ms = 3500) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), ms); }
 function show(id) { ["loading", "pairView", "app", "invite", "intro", "loginView"].forEach(x => $(x).classList.toggle("hidden", x !== id)); }
 function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
@@ -2355,11 +2394,11 @@ function planFromSpot(s, wishId) {
 function renderWishes() {
   const box = $("wishList"); if (!box) return;
   const today = todayStr();
-  // 予定の日が過ぎたら「行った」にする
+  // 予定で「行った」を選んだら「行った」にする（日が過ぎただけでは変えない）
   wishes.forEach(w => {
     if (w.status !== "scheduled" || !w.planId) return;
     const plan = events.find(e => e.id === w.planId);
-    if (plan && plan.date < today) { w.status = "visited"; recordCollection("events").doc(w.id).update({ status: "visited", updatedAt: TS() }).catch(() => {}); }
+    if (plan && isDone(plan)) { w.status = "visited"; recordCollection("events").doc(w.id).update({ status: "visited", updatedAt: TS() }).catch(() => {}); }
   });
   const order = { wished: 0, scheduled: 1, visited: 2 };
   const list = wishes.slice().sort((a, b) => (order[a.status] ?? 0) - (order[b.status] ?? 0));
@@ -2587,8 +2626,8 @@ async function snsWithAi() {
 function renderMonthPick() {
   const sel = $("monthPick"); if (!sel) return;
   const now = new Date(), ym = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
-  const months = [...new Set(events.filter(e => !isPlan(e) && /^\d{4}-\d{2}/.test(e.date || "")).map(e => e.date.slice(0, 7)))].sort().reverse();
-  const opts = months.map(m => { const [y, mo] = m.split("-").map(Number); const ago = (now.getFullYear() - y) * 12 + (now.getMonth() + 1 - mo); return [ago, `${y}年${mo}月（${events.filter(e => !isPlan(e) && (e.date || "").startsWith(m)).length}件）`]; }).filter(([ago]) => ago >= 2);
+  const months = [...new Set(events.filter(e => isDone(e) && /^\d{4}-\d{2}/.test(e.date || "")).map(e => e.date.slice(0, 7)))].sort().reverse();
+  const opts = months.map(m => { const [y, mo] = m.split("-").map(Number); const ago = (now.getFullYear() - y) * 12 + (now.getMonth() + 1 - mo); return [ago, `${y}年${mo}月（${events.filter(e => isDone(e) && (e.date || "").startsWith(m)).length}件）`]; }).filter(([ago]) => ago >= 2);
   const keep = sel.value;
   sel.innerHTML = `<option value="">${opts.length ? "思い出のある月を選ぶ" : "前の月の思い出はまだありません"}</option>` + opts.map(([ago, l]) => `<option value="${ago}">${l}</option>`).join("");
   sel.disabled = !opts.length; if (keep) sel.value = keep;
@@ -2597,9 +2636,10 @@ async function monthWithAi(offset) {
   if (aiBusy) return;
   const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - offset);
   const ym = `${d.getFullYear()}-${pad(d.getMonth() + 1)}`, label = `${d.getFullYear()}年${d.getMonth() + 1}月`;
-  const list = events.filter(e => (e.date || "").startsWith(ym) && !isPlan(e)).sort((a, b) => a.date < b.date ? -1 : 1).slice(0, 40)
+  // 実際にあったことだけ（中止・行ったか分からない予定は入れない）
+  const list = events.filter(e => (e.date || "").startsWith(ym) && isDone(e)).sort((a, b) => a.date < b.date ? -1 : 1).slice(0, 40)
     .map(e => ({ date: e.date, title: e.title || "", place: shortPlace(e.place), cat: catLabel(e.cat), memo: (e.memo || "").slice(0, 60), fav: !!e.fav }));
-  if (!list.length) { toast(`${label}の思い出はまだありません`); return; }
+  if (!list.length) { toast(`${label}の思い出はまだありません。過ぎた予定は「行った」を押すと入ります`, 5000); return; }
   const btns = [$("monthThis"), $("monthLast"), $("monthPick")];
   aiBusy = true; btns.forEach(b => b.disabled = true); $("monthNote").textContent = ""; $("monthText").textContent = `${label}をふりかえっています…`; $("monthOut").classList.remove("hidden");
   try {
@@ -2949,6 +2989,7 @@ function card(e) {
       ${meta ? `<div class="meta">${meta}</div>` : ""}
       <div class="tags"><span class="tag cat">${esc(catLabel(e.cat))}</span>${e.source === "line" ? `<span class="tag">LINEから</span>` : ""}${(e.who || []).map(n => `<span class="tag">${esc(n)}</span>`).join("")}</div>
       ${(e.thumbs || []).length ? `<div class="thumbs">${e.thumbs.slice(0, 4).map(s => `<img src="${s}" alt="">`).join("")}</div>` : ""}
+      ${outcomeButtons(e)}
       ${sendRows(e)}
       <div class="card-acts"><button type="button" class="btn small sub" data-edit="${e.id}">✏️ 直す</button><button type="button" class="btn small ghost" data-detail="${e.id}">くわしく・送る</button></div>
     </div></div></div>`;
@@ -2994,14 +3035,15 @@ function renderList() {
     title = "これからの予定"; items = list.filter(isPlan).sort((a, b) => (a.date + a.time) < (b.date + b.time) ? -1 : 1);
     html = items.length ? items.map(card).join("") : emptyBox("pin", "次の楽しみを予定にしよう。", "「記録する」から入れられます");
   } else if (view === "mem") {
-    title = "思い出"; items = list.filter(e => !isPlan(e)).sort((a, b) => a.date < b.date ? 1 : -1);
+    // 中止した予定は入れない。行ったか分からない予定は、印をつけて区別する
+    title = "思い出"; items = list.filter(e => !isPlan(e) && e.outcome !== "cancelled").sort((a, b) => a.date < b.date ? 1 : -1);
     html = items.length ? `<div class="album">${items.map(e => {
       const p = parts(e.date);
       return `<div class="m" data-open="${e.id}">${(e.thumbs || [])[0] ? `<div class="img"><img src="${e.thumbs[0]}" alt=""></div>` : memoryCover(e)}
-      <div class="t"><b>${esc(e.title || e.place || catLabel(e.cat))}${e.fav ? ' <span class="fav-mark">♥</span>' : ""}</b><small>${p.y}.${p.m}.${p.d}　${esc(catLabel(e.cat))}</small>${e.place ? `<div><a class="memory-map" href="${placeUrl(e)}" target="_blank" rel="noopener" data-stop>📍 地図で見る</a></div>` : ""}</div></div>`;
+      <div class="t"><b>${esc(e.title || e.place || catLabel(e.cat))}${e.fav ? ' <span class="fav-mark">♥</span>' : ""}</b><small>${p.y}.${p.m}.${p.d}　${esc(catLabel(e.cat))}${isPastPlan(e) && e.outcome !== "done" ? "　📅 予定だった日" : ""}</small>${e.place ? `<div><a class="memory-map" href="${placeUrl(e)}" target="_blank" rel="noopener" data-stop>📍 地図で見る</a></div>` : ""}${isPastPlan(e) && !e.outcome ? outcomeButtons(e) : ""}</div></div>`;
     }).join("")}</div>` : emptyBox("image", "思い出はまだありません。", "行ったところや、あったことを残そう");
   } else if (view === "map") {
-    title = "思い出マップ"; items = list.filter(e => !isPlan(e));
+    title = "思い出マップ"; items = list.filter(isDone);
     const placed = items.filter(e => Number.isFinite(e.lat) && Number.isFinite(e.lng));
     html = placed.length ? `<div id="memMap" class="mem-map" role="region" aria-label="思い出の地図"></div><p class="note">地図に出ているのは場所がわかる思い出 ${placed.length}件です${items.length > placed.length ? `（ほかの${items.length - placed.length}件は場所がないので出ていません。写真の位置や「場所」から地図に出せます）` : ""}。<br>地図：<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener">国土地理院</a></p>`
       : emptyBox("pin", "地図に出せる思い出はまだありません。", "位置情報のある写真を入れたり、場所を選んで記録すると、ここに並びます");
@@ -3021,6 +3063,7 @@ function renderList() {
   $("listBox").innerHTML = notice + (waiting && !items.length ? "" : html);
   const retry = $("listBox").querySelector("[data-retry-records]"); if (retry) retry.onclick = watchRecords;
   $("listBox").querySelectorAll("[data-open]").forEach(el => el.onclick = (ev) => { if (ev.target.closest("[data-cancel],[data-stop],[data-edit]")) return; openDetail(el.dataset.open); });
+  bindOutcome($("listBox"));
   $("listBox").querySelectorAll("[data-edit]").forEach(b => b.onclick = ev => { ev.stopPropagation(); editRecord(b.dataset.edit).catch(err => { console.error(err); toast(`直す画面を開けませんでした（${err?.code || err?.message || "error"}）`, 6000); }); });
   $("listBox").querySelectorAll("[data-cancel]").forEach(b => b.onclick = (ev) => { ev.stopPropagation(); const [a, c] = b.dataset.cancel.split("|"); cancelSend(a, c); });
   if (view === "map" && $("memMap")) drawMemMap(items);
@@ -3066,7 +3109,7 @@ function renderCal(list) {
     const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i), s = ymd(d);
     const es = list.filter(e => e.date === s);
     h += `<button type="button" aria-label="${fmtDate(s)} ${es.length}件" aria-pressed="${s === calSel}" class="day ${d.getMonth() !== m ? "other" : ""} ${s === todayStr() ? "today" : ""} ${s === calSel ? "sel" : ""}" data-d="${s}">${d.getDate()}
-      <div class="dots">${es.slice(0, 3).map(e => `<i class="${isPlan(e) ? "" : "p"}"></i>`).join("")}</div></button>`;
+      <div class="dots">${es.slice(0, 3).map(e => `<i class="${isDone(e) ? "p" : ""}"></i>`).join("")}</div></button>`;
     if (i === 34 && new Date(start.getFullYear(), start.getMonth(), start.getDate() + 35).getMonth() !== m) break;
   }
   $("calGrid").innerHTML = h;
@@ -3079,12 +3122,13 @@ async function openDetail(id) {
   const c = catOf(e.cat);
   const plan = isPlan(e);
   $("detailBody").innerHTML = `
-    <div class="form-head"><div class="ic ${catColor(catIndex(e.cat))}">${icon(c.icon)}</div><div><div class="eyebrow" style="margin:0">${plan ? "予定" : "思い出"}・${esc(catLabel(e.cat))}</div><h2 style="margin:0">${esc(e.title || e.place || catLabel(e.cat))}${e.fav ? ' <span class="fav-mark">♥</span>' : ""}</h2></div></div>
+    <div class="form-head"><div class="ic ${catColor(catIndex(e.cat))}">${icon(c.icon)}</div><div><div class="eyebrow" style="margin:0">${plan ? "予定" : isPastPlan(e) ? (e.outcome === "done" ? "思い出（予定から）" : e.outcome === "cancelled" ? "中止した予定" : "過ぎた予定") : "思い出"}・${esc(catLabel(e.cat))}</div><h2 style="margin:0">${esc(e.title || e.place || catLabel(e.cat))}${e.fav ? ' <span class="fav-mark">♥</span>' : ""}</h2></div></div>
     <div class="detail-photos" id="dPhotos">${(e.thumbs || []).map(s => `<img src="${s}" alt="">`).join("")}</div>
     <div class="ev-mini" style="margin-top:8px">📅 ${fmtDate(e.date)}${e.time ? " " + esc(e.time) : ""}
       ${e.place ? `<br>📍 <a href="${placeUrl(e)}" target="_blank" rel="noopener">${esc(e.place)}</a>` : ""}${(e.who || []).length ? `<br>👥 ${e.who.map(esc).join("・")}` : ""}
       ${e.memo ? `<br>📝 ${esc(e.memo).replace(/\n/g, "<br>")}` : ""}
       ${e.link ? `<br>🔗 <a href="${esc(e.link)}" target="_blank" rel="noopener">${esc(e.link)}</a>` : ""}</div>
+    ${outcomeButtons(e)}
     <div id="dWeather"></div>
     ${sendRows(e)}
     <div style="margin-top:16px">
@@ -3104,6 +3148,7 @@ async function openDetail(id) {
   $("dInsta").onclick = () => openInsta(e, fullPhotos.then(f => f[0] || (e.thumbs || [])[0] || "", () => (e.thumbs || [])[0] || ""));
   $("dDel").onclick = () => deleteRecord(id);
   $("dClose").onclick = closeSheets;
+  bindOutcome($("detailBody"));
   $("detailBody").querySelectorAll("[data-cancel]").forEach(b => b.onclick = () => { const [a, c2] = b.dataset.cancel.split("|"); cancelSend(a, c2).then(closeSheets); });
   $("detailSheet").onclick = (ev) => { if (ev.target.id === "detailSheet") closeSheets(); };
   $("detailSheet").classList.remove("hidden");

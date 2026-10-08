@@ -252,11 +252,14 @@ test('ふりかえり: summarises only this owner\'s memories of the month', asy
     a:{ownerUid:'alice', kind:'memory', date:'2026-10-01', title:'ヨガ', place:'LOIVE', cat:'遊び', fav:true},
     b:{ownerUid:'alice', kind:'plan', date:'2026-10-20', title:'先の予定'},
     c:{ownerUid:'bob', kind:'memory', date:'2026-10-02', title:'他人の思い出'},
-    d:{ownerUid:'alice', kind:'memory', date:'2026-09-15', title:'先月の思い出'}}});
+    d:{ownerUid:'alice', kind:'memory', date:'2026-09-15', title:'先月の思い出'},
+    e:{ownerUid:'alice', kind:'plan', date:'2026-10-02', title:'行ったか分からない予定'},
+    f:{ownerUid:'alice', kind:'plan', date:'2026-10-02', title:'行った予定', outcome:'done'},
+    g:{ownerUid:'alice', kind:'plan', date:'2026-10-02', title:'中止した予定', outcome:'cancelled'}}});
   const env = aiEnv('ヨガで始まった10月。');
   const [r] = await handleEvent(db, env, msg({type:'text', text:'ふりかえり'}), NOW);
-  assert.match(r.text, /2026年10月のふりかえり（1件）\n\nヨガで始まった10月。/);
-  const sent = env.runs[0].messages[1].content; assert.match(sent, /ヨガ/); assert.doesNotMatch(sent, /他人|先の予定|先月の/);
+  assert.match(r.text, /2026年10月のふりかえり（2件）\n\nヨガで始まった10月。/);
+  const sent = env.runs[0].messages[1].content; assert.match(sent, /ヨガ/); assert.match(sent, /行った予定/); assert.doesNotMatch(sent, /他人|先の予定|先月の|分からない|中止/);
   const [last] = await handleEvent(db, env, msg({type:'text', text:'先月'}), NOW);
   assert.match(last.text, /2026年9月のふりかえり（1件）/);
   assert.match((await handleEvent(memoryDb(linked()), env, msg({type:'text', text:'今月のふりかえり'}), NOW))[0].text, /まだありません/);
