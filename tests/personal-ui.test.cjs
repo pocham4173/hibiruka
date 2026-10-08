@@ -639,7 +639,7 @@ test('deals: local show-only coupons, Hotpepper coupon shops and travel coupons,
   // 承認前（vcOn:false）はふつうのリンク
   w.h.config.affiliate.vcOn=false;d.querySelector('[data-find="coupon"]').click();await settle();
   assert.equal([...d.querySelectorAll('#findResults .spot a')].find(x=>x.textContent.includes('ホットペッパーで見る')).href,'https://www.hotpepper.jp/strJ1/');
-  assert.match(d.querySelector('#tab-find .ad-note').textContent,/広告（アフィリエイト）が含まれます/);
+  assert.match(d.querySelector('#tab-find .ad-note').textContent,/#PR この画面には広告が含まれます/);
   // the coupon filter chip goes to Hotpepper too
   assert(d.querySelector('[data-filter="coupon"]'));
  }finally{a.close();}
