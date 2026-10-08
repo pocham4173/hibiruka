@@ -297,7 +297,7 @@
   .chip .line-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--line-green); margin-left: 6px; vertical-align: middle; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 
-  .heart-toggle { display: flex; align-items: center; gap: 10px; background: #fff; border-radius: 10px; padding: 11px 14px; cursor: pointer; font-weight: 600; margin-top: 18px; border: 1px solid var(--line); font-size: 15px; }
+  .heart-toggle { width: 100%; font-family: inherit; color: inherit; text-align: left; display: flex; align-items: center; gap: 10px; background: #fff; border-radius: 10px; padding: 11px 14px; cursor: pointer; font-weight: 600; margin-top: 18px; border: 1px solid var(--line); font-size: 15px; }
   .heart-toggle svg { width: 20px; height: 20px; color: var(--rose); }
   .heart-toggle.on { background: var(--blush); border-color: var(--blush-b); color: var(--rose-dk); }
   .heart-toggle.on svg { fill: var(--rose); }
@@ -536,6 +536,9 @@
   .outcome { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 0; font-size: 13px; }
   .outcome .chip { padding: 4px 10px; font-size: 13px; }
   .link-btn { background: none; border: 0; color: var(--rose, #a9536a); text-decoration: underline; font-size: 13px; padding: 2px 4px; cursor: pointer; }
+  .hint { border-color: var(--blush-b, #e9c9d2); background: var(--blush, #f6edef); }
+  .more-opts { margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; background: #fff; }
+  .more-opts summary { cursor: pointer; font-weight: 600; font-size: 14px; }
   .ad-note { font-size: 12px; color: var(--text); background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; margin: 0 0 12px; line-height: 1.6; }
   .terms-link { margin:8px 0 0; font-size:13px; } .terms-link a { color:var(--rose, #a9536a); font-weight:700; }
 </style>
@@ -570,7 +573,8 @@
     <h2>ヒビルカへようこそ</h2>
     <a id="beginPersonal" class="btn" href="?start=1" style="background:#ad4564;margin:18px 0">はじめる</a>
     <p class="note">自分専用の予定と思い出を作れます。</p>
-    <a class="btn sub" href="?signin=1">ログイン</a>
+    <a class="btn sub" href="?signin=1">前に使っていた方はログイン</a>
+    <p class="note" style="margin-top:4px">機種変更やほかのブラウザで、同じ記録を開くとき。メールを登録していない場合は、前の端末の「設定」で登録してからログインしてください。</p>
     <a class="back-link" href="../../guide/">使い方を見る</a>
     <p class="note">登録なしではじめられます。メールの登録はあとから設定でできます。</p>
     <div class="disclaimer"><b>ご利用上の注意（免責事項）</b><p>本サービス（ヒビルカ）は、個人が無料で提供している試作開発アプリです。</p><ul><li>無料枠の範囲内で運用しているため、利用状況によっては通知の遅延・未達、一時的なアクセス制限、または予告のない機能変更・サービス停止が発生する場合があります。</li><li>本サービスのご利用により生じた損害等について、開発者は一切の責任を負いかねますのであらかじめご了承ください。</li></ul><p class="terms-link"><a href="../../terms/" target="_blank" rel="noopener">📄 利用規約・プライバシーポリシー</a>　<a href="../../terms/#contact" target="_blank" rel="noopener">✉️ お問い合わせ</a></p></div>
@@ -596,7 +600,7 @@
   <section id="tab-rec" class="wrap hidden">
     <button type="button" class="btn sub" id="backToPlans" style="width:auto;margin-top:16px">‹ 予定を見る</button>
     <h2 id="recEyebrow" tabindex="-1" class="record-heading">記録の種類を選ぶ</h2>
-    <p class="note">遊び・食事など、1つ選んでください。</p>
+    <p class="note">遊び・食事など、1つ選んでください（必須）。</p>
     <div class="pills" id="catPills" style="margin-top:8px"></div>
     <button class="chip add" id="catEditBtn" style="margin-top:12px">✏️ 項目を編集</button>
 
@@ -609,7 +613,7 @@
         <button type="button" class="pill" data-kind="memory" aria-pressed="false">思い出</button>
       </div>
 
-      <div class="step"><span class="n">1</span>いつ？</div>
+      <div class="step"><span class="n">1</span>いつ？<small>日付は必須</small></div>
       <div class="row2">
         <input type="date" id="fDate">
         <input type="time" id="fTime" aria-label="時間">
@@ -645,30 +649,33 @@
         </div>
         <p class="note" id="aiNote"></p>
       </div>
-      <label class="lbl">写真<small id="phCount">0/4枚</small></label>
+      <label class="lbl">写真<small id="phCount">0/2枚</small></label>
       <div class="photos" id="fPhotos"></div>
       <input type="file" id="fPhotoInput" accept="image/*" multiple class="hidden">
 
+      <details class="more-opts"><summary>📷 SNS投稿・インスタのリンク</summary>
       <button type="button" class="btn sub insta-btn" id="fInsta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r=".6" fill="currentColor"/></svg>SNSに投稿する</button>
       <p class="note">写真・場所・日付を入れた画像を作って、iPhoneの共有からInstagram（フィード・ストーリーズ）やXに送れます。</p>
       <label class="lbl">投稿したインスタのリンク<small>なくてもOK・あとからここで開けます</small></label>
       <input type="url" id="fLink" placeholder="https://">
+      </details>
 
-      <div class="heart-toggle" id="fFav"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.5-1.4 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.1 3 5.5l7 7Z"/></svg>また行きたい</div>
+      <button type="button" class="heart-toggle" id="fFav" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.5-1.4 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.1 3 5.5l7 7Z"/></svg>また行きたい</button>
 
       <div style="margin-top:22px">
         <button class="btn" id="saveBtn">この内容で記録する</button>
         <button class="btn ghost hidden" id="cancelEditBtn">編集をやめる</button>
       </div>
-      <p class="note center" id="saveNote">予定のときは、保存したあとにLINEで送るかどうか選べます。</p>
+      <p class="note center" id="saveNote">予定のときは、保存したあとにLINEやアプリ通知で知らせることもできます。</p>
     </div>
   </section>
 
   <!-- ===== 予定・思い出 ===== -->
   <section id="tab-list" class="wrap">
+    <aside id="backupHint" class="card hint hidden" role="note"><b>🔐 記録が増えてきました</b><p class="note" style="margin:4px 0 8px">スマホを替えたりブラウザのデータを消したりしても戻れるように、メールの登録をしておくと安心です（いつでも・無料）。</p><div class="btnrow"><button type="button" class="btn small" id="backupGo">登録する</button><button type="button" class="btn small ghost" id="backupLater">あとで</button></div></aside>
     <aside id="firstRecordGuide" class="card hidden" aria-labelledby="firstRecordTitle">
       <p class="note">はじめの1件</p><h2 id="firstRecordTitle">何を残しますか？</h2>
-      <p>日付と内容があればOK。写真やLINEの設定は、あとからでも。</p>
+      <p>種類（遊び・食事など）と日付を選べばOK。写真や通知の設定は、あとからでも。</p>
       <div class="start-actions"><button class="btn" id="firstPlan" type="button">＋ 予定を入れる</button><button class="btn sub" id="firstMemory" type="button">思い出を残す</button></div>
       <button class="back-link" id="skipFirstRecord" type="button">あとで</button>
       <div class="disclaimer"><b>ご利用上の注意（免責事項）</b><p>本サービス（ヒビルカ）は、個人が無料で提供している試作開発アプリです。</p><ul><li>無料枠の範囲内で運用しているため、利用状況によっては通知の遅延・未達、一時的なアクセス制限、または予告のない機能変更・サービス停止が発生する場合があります。</li><li>本サービスのご利用により生じた損害等について、開発者は一切の責任を負いかねますのであらかじめご了承ください。</li></ul><p class="terms-link"><a href="../../terms/" target="_blank" rel="noopener">📄 利用規約・プライバシーポリシー</a>　<a href="../../terms/#contact" target="_blank" rel="noopener">✉️ お問い合わせ</a></p></div>
@@ -933,6 +940,10 @@
       <p class="note" style="margin-top:-6px">いつものホームアイコンから開けば、番号の入力は不要です。別の端末で使うときに、この番号で引き継ぎます。</p>
       <button class="btn sub" id="pinChangeBtn" style="margin-top:12px">暗証番号を変える</button>
     </div>
+    <div class="card" id="exportCard"><h2>📦 記録を書き出す</h2>
+      <p class="note">自分の記録を、ファイルにまとめて取り出せます（見るため・保管用の控え）。写真は小さい版だけ入ります。このファイルから自動で元に戻す機能はありません。</p>
+      <div class="btnrow"><button type="button" class="btn sub" id="exportJson">ファイル（JSON）</button><button type="button" class="btn sub" id="exportCsv">表（CSV）</button></div>
+    </div>
     <div class="card" id="accountCard"><h2>機種変更・別の端末でも使う</h2>
       <p class="note" id="accountStatus">登録はあとからでも大丈夫。同じ記録を別のスマホやブラウザで開くための設定です。登録前にブラウザのデータを消すと、記録に戻れなくなることがあります。</p>
       <form id="accountForm" method="post" action="./?tab=set" autocomplete="on"><label class="lbl" for="accountEmail">メールアドレス</label><input id="accountEmail" name="email" type="email" inputmode="email" autocapitalize="none" spellcheck="false" autocomplete="username" required>
@@ -990,7 +1001,7 @@
     <p class="ig-p">初めての方は「はじめる」から、「予定を入れる」か「思い出を残す」を選びます。説明を読み終える必要はありません。保存したあとに、ホーム追加や自分へのLINE通知を設定できます。別のブラウザや機種へ移る前は、設定でメールとパスワードを登録してください。</p>
     <div class="ig-steps">
       <div class="ig-step"><span>01</span><div><b>記録する</b><p>「予定・記録」の「記録する」を押して、「遊び」「食事」などを1つ選び、「予定」か「思い出」を選びます。日付と、場所または内容を入れて保存。写真やメモは、残したいときだけでOK。</p></div></div>
-      <div class="ig-step"><span>02</span><div><b>LINEで予定を送る</b><p>これからの予定を保存すると「LINEで予定を送りますか？」と出ます。<b>誰に</b>・<b>送る日</b>・<b>送る時間</b>を選ぶだけ。「前の日の朝」「予定の1時間前」などもワンタップ。</p></div></div>
+      <div class="ig-step"><span>02</span><div><b>予定を知らせる（LINE・アプリ通知）</b><p>これからの予定を保存すると「予定をだれに知らせますか？」と出ます。<b>誰に</b>・<b>送る日</b>・<b>送る時間</b>を選ぶだけ。「前の日の朝」「予定の1時間前」などもワンタップ。</p></div></div>
       <div class="ig-step"><span>03</span><div><b>振り返る</b><p>「予定・記録」のカレンダーで日付を押すと、その日の予定を見たり追加できます。「思い出」で過去を振り返り、♥を付けた記録は「また行きたい」に集まります。</p></div></div>
       <div class="ig-step"><span>04</span><div><b>LINEの送信先を追加する</b><p>「設定」の「LINEの送信先を追加」で相手の名前を入れて、招待リンクをLINEで送ります。相手が<b>承認</b>すると、予定を送れる相手になります。</p></div></div>
     </div>
@@ -1067,9 +1078,10 @@
   </div>
 </div>
 
-<!-- LINEで予定を送る -->
+<!-- 予定を知らせる（LINE・アプリ通知） -->
 <div id="sendSheet" class="sheet-bg hidden"><div class="sheet">
-  <h2>📨 LINEで予定を送りますか？</h2>
+  <h2>🔔 予定をだれに知らせますか？</h2>
+  <p class="note" style="margin:-4px 0 8px">LINE、または「📱 アプリ通知」でこのスマホに届きます。</p>
   <div class="ev-mini" id="sEv"></div>
   <div style="font-weight:900;margin-bottom:6px">誰に？</div>
   <div class="chips" id="sWho"></div>
@@ -1531,7 +1543,7 @@ function catIndex(name) { const i = cats.findIndex(c => c.name === name); return
 function setupForm() {
   resetForm();
   $("catEditBtn").onclick = openCatSheet;
-  $("fFav").onclick = () => { form.fav = !form.fav; $("fFav").classList.toggle("on", form.fav); };
+  $("fFav").onclick = () => { form.fav = !form.fav; $("fFav").classList.toggle("on", form.fav); $("fFav").setAttribute("aria-pressed", String(form.fav)); };
   $("fPhotoInput").onchange = addPhotos;
   $("aiWrite").onclick = () => writeWithAi("diary"); bindAiActions();
   setupFind();
@@ -1567,7 +1579,7 @@ function resetForm() {
   form = { cat: "", who: new Set(), fav: false, photos: [], geo: null, dateTouched: false, fromWish: null };
   $("fKind").value = "plan"; $("fDate").value = todayStr(); $("fTime").value = "";
   $("fPlace").value = ""; $("fTitle").value = ""; $("fMemo").value = ""; $("fLink").value = "";
-  $("fFav").classList.remove("on");
+  $("fFav").classList.remove("on"); $("fFav").setAttribute("aria-pressed", "false");
   closeAi(); if ($("aiTitles")) $("aiTitles").classList.add("hidden");
   $("saveBtn").textContent = "この内容で記録する";
   $("cancelEditBtn").classList.add("hidden");
@@ -1624,7 +1636,7 @@ function updateSaveNote() {
     const on = b.dataset.kind === k; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
   });
   $("saveBtn").textContent = editingId ? "変更を保存する" : plan ? "予定を保存する" : "思い出を保存する";
-  $("saveNote").textContent = plan ? "予定なので、保存したあとにLINEで送るかどうか選べます。" : "思い出として残ります。";
+  $("saveNote").textContent = plan ? "予定なので、保存したあとにLINEやアプリ通知で知らせることもできます。" : "思い出として残ります。";
 }
 
 /* 写真：小さくしてから保存 */
@@ -2818,7 +2830,8 @@ async function saveRecord() {
     const saved = { ...data, id, sends: events.find(x => x.id === id)?.sends || [] };
     if (firstRecord) { finishGuide(); $("savedNextSteps").classList.remove("hidden"); }
     resetForm(); selectView(isPlan(saved) ? "cal" : "mem"); goTab("list");
-    if (isPlan(saved)) openSend(id, saved);
+    // 知らせる相手（LINE登録・アプリ通知）がある人にだけ、知らせる画面を開く。ない人には負担をかけない
+    if (isPlan(saved)) { if (friends.some(f => f.status === "joined" && f.lineUserId) || pushReady) openSend(id, saved); else toast("予定を保存しました。LINEやアプリ通知で知らせたいときは、予定を開いて「予定を知らせる」から", 5000); }
     else toast(wasNew ? "記録しました" : "変更を保存しました");
   } catch (e) { console.error(e); toast(`保存できませんでした。電波のよい所でもう一度お試しください。（${e?.code || e?.name || "error"}）`, 6000); }
   finally { controls.forEach(el => { el.disabled = false; }); updateSaveNote(); }
@@ -2834,7 +2847,7 @@ async function editRecord(id) {
   form.dateTouched = true;
   $("fKind").value = isPlan(e) ? "plan" : "memory"; $("fDate").value = e.date; $("fTime").value = e.time || "";
   $("fPlace").value = e.place || ""; $("fTitle").value = e.title || ""; $("fMemo").value = e.memo || ""; $("fLink").value = e.link || "";
-  $("fFav").classList.toggle("on", form.fav);
+  $("fFav").classList.toggle("on", form.fav); $("fFav").setAttribute("aria-pressed", String(!!form.fav));
   $("saveBtn").textContent = "変更を保存する"; $("cancelEditBtn").classList.remove("hidden");
   $("recEyebrow").textContent = "記録を直す";
   // 既存の大きい写真を読み込む（写真のない予定は読まない）。読めなくても、写真はそのままにして文字は直せるようにする
@@ -2983,7 +2996,7 @@ function sendRows(e) {
     if (x.status === "sent") return `<div class="sendrow"><span class="tag sent">✓ ${fmtAt(x.at)} ${esc(names)}へ${how}送信済み${said}</span></div>`;
     if (x.status === "fail" && x.pushResult === "ok" && !appOnly) return `<div class="sendrow"><span class="tag fail">⚠️ ${fmtAt(x.at)} アプリ通知は届きました・LINEは送れませんでした${x.error ? `<br>${esc(x.error)}` : ""}${said}</span></div>`;
     if (x.status === "fail") return `<div class="sendrow"><span class="tag fail">⚠️ ${fmtAt(x.at)} ${esc(names)}へ送れませんでした${x.error ? `<br>${esc(x.error)}` : ""}${said}</span></div>`;
-    return `<div class="sendrow"><span class="tag wait">🔔 ${fmtAt(x.at)} ${esc(names)}へLINEで送る予定${said}</span><button class="x-btn" data-cancel="${e.id}|${x.id}">取消</button></div>`;
+    return `<div class="sendrow"><span class="tag wait">🔔 ${fmtAt(x.at)} ${esc(names)}へ知らせる予定${said}</span><button class="x-btn" data-cancel="${e.id}|${x.id}">取消</button></div>`;
   }).join("");
 }
 function card(e) {
@@ -3022,7 +3035,36 @@ function renderCountdown() {
     return `<button type="button" class="cd" data-cd="${esc(e.id)}"><div class="n">${n === 0 ? "🎉 <b>今日</b>！" : n === 1 ? "✨ <b>明日</b>！" : `あと<b>${n}</b>日`}</div><div class="t">${esc(e.title || e.place || catLabel(e.cat))}</div><small>${esc(fmtDate(e.date))}${e.time ? " " + esc(e.time) : ""}</small></button>`; }).join("");
   box.querySelectorAll("[data-cd]").forEach(b => b.onclick = () => openDetail(b.dataset.cd));
 }
+// 匿名のまま記録が増えた人に、1回だけ（30日に1回まで）メール登録をすすめる。押しつけない
+function renderBackupHint() {
+  const el = $("backupHint"); if (!el) return;
+  let later = 0; try { later = Number(localStorage.getItem("hibiruka.backupLater")) || 0; } catch {}
+  const show = personalMode && auth.currentUser?.isAnonymous && events.filter(e => e.kind !== "wish").length >= 5 && Date.now() - later > 30 * 86400000;
+  el.classList.toggle("hidden", !show);
+  $("backupLater").onclick = () => { try { localStorage.setItem("hibiruka.backupLater", String(Date.now())); } catch {} el.classList.add("hidden"); };
+  $("backupGo").onclick = () => { goTab("set"); $("accountCard").scrollIntoView({ behavior: "smooth" }); };
+}
+// 記録の書き出し（自分の端末の中だけで作る。サーバーには送らない）
+function exportRows() {
+  return events.map(e => ({ 日付: e.date || "", 時間: e.time || "", 種類: e.kind === "memory" ? "思い出" : e.kind === "wish" ? "行きたい" : "予定", 行った: e.outcome === "done" ? "行った" : e.outcome === "cancelled" ? "中止" : "", 題名: e.title || "", 場所: e.place || "", 分類: catLabel(e.cat) || "", 誰と: (e.who || []).join("・"), メモ: e.memo || "", リンク: e.link || "", また行きたい: e.fav ? "♥" : "" }));
+}
+function download(name, text, type) {
+  const a = document.createElement("a"), url = URL.createObjectURL(new Blob([text], { type }));
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+function exportJson() {
+  const rows = exportRows();
+  const out = { app: "ヒビルカ", exportedAt: new Date().toISOString(), note: "見るため・保管用の控えです。このファイルから自動で元に戻す機能はありません。写真は小さい版だけです。", records: events.map((e, i) => ({ ...rows[i], 写真: e.thumbs || [] })), wishes: wishes.map(w => ({ 場所: w.place || w.title || "", 状態: w.status || "", lat: w.lat, lng: w.lng })) };
+  download(`hibiruka-${todayStr()}.json`, JSON.stringify(out, null, 2), "application/json");
+  toast(`${events.length}件を書き出しました`);
+}
+function exportCsv() {
+  const rows = exportRows(), head = Object.keys(rows[0] || { 日付: "" }), q = v => `"${String(v).replace(/"/g, '""')}"`;
+  download(`hibiruka-${todayStr()}.csv`, "\ufeff" + [head.map(q).join(","), ...rows.map(r => head.map(h => q(r[h])).join(","))].join("\r\n"), "text/csv");
+  toast(`${rows.length}件を書き出しました`);
+}
 function renderList() {
+  renderBackupHint();
   renderCountdown();
   if (!$("listBox") || !calMonth) return;
   const waiting = recordsState !== "ready";
@@ -3072,7 +3114,12 @@ function renderList() {
   $("listCount").textContent = `${items.length}件`;
   $("listBox").innerHTML = notice + (waiting && !items.length ? "" : html);
   const retry = $("listBox").querySelector("[data-retry-records]"); if (retry) retry.onclick = watchRecords;
-  $("listBox").querySelectorAll("[data-open]").forEach(el => el.onclick = (ev) => { if (ev.target.closest("[data-cancel],[data-stop],[data-edit]")) return; openDetail(el.dataset.open); });
+  $("listBox").querySelectorAll("[data-open]").forEach(el => {
+    el.onclick = (ev) => { if (ev.target.closest("[data-cancel],[data-stop],[data-edit]")) return; openDetail(el.dataset.open); };
+    // キーボード・読み上げでも開けるように（Enter／スペース）
+    if (!el.hasAttribute("tabindex")) { el.setAttribute("tabindex", "0"); el.setAttribute("role", "button"); el.setAttribute("aria-label", (el.querySelector("b,.ttl")?.textContent || "記録").trim() + "を開く"); }
+    el.onkeydown = (ev) => { if ((ev.key === "Enter" || ev.key === " ") && ev.target === el) { ev.preventDefault(); openDetail(el.dataset.open); } };
+  });
   bindOutcome($("listBox"));
   $("listBox").querySelectorAll("[data-edit]").forEach(b => b.onclick = ev => { ev.stopPropagation(); editRecord(b.dataset.edit).catch(err => { console.error(err); toast(`直す画面を開けませんでした（${err?.code || err?.message || "error"}）`, 6000); }); });
   $("listBox").querySelectorAll("[data-cancel]").forEach(b => b.onclick = (ev) => { ev.stopPropagation(); const [a, c] = b.dataset.cancel.split("|"); cancelSend(a, c); });
@@ -3146,7 +3193,7 @@ async function openDetail(id) {
         ${e.place ? `<a class="btn sub" href="${placeUrl(e)}" target="_blank" rel="noopener">${icon("map")}Googleマップ</a>` : ""}
         <a class="btn sub" href="${gcalUrl(e)}" target="_blank" rel="noopener" ${e.place ? "" : 'style="grid-column:1/-1"'}>${icon("caldot")}Googleカレンダーに追加</a>
       </div>
-      ${plan ? `<button class="btn line" id="dSend">${icon("send")}LINEで予定を送る</button>` : ""}
+      ${plan ? `<button class="btn line" id="dSend">${icon("send")}予定を知らせる（LINE・アプリ通知）</button>` : ""}
       <button class="btn sub insta-btn" id="dInsta" style="margin-top:8px">${INSTA_ICON}SNSに投稿する</button>
       <button class="btn sub" id="dEdit">${icon("pencil")}直す</button>
       <button class="btn danger" id="dDel">${icon("trash")}消す</button>
@@ -3364,7 +3411,7 @@ async function renderPush() {
   const sub = Notification.permission === "granted" ? await currentSub() : null;
   pushReady = !!sub;
   $("pushOn").classList.toggle("hidden", pushReady); $("pushTest").classList.toggle("hidden", !pushReady); $("pushOff").classList.toggle("hidden", !pushReady);
-  st.textContent = pushReady ? "✅ この端末で通知を受け取れます。予定をLINEで送る画面で「📱 アプリ通知」を選ぶと、ここに届きます。"
+  st.textContent = pushReady ? "✅ この端末で通知を受け取れます。予定の「🔔 予定を知らせる」で「📱 アプリ通知」を選ぶと、ここに届きます。"
     : Notification.permission === "denied" ? "通知が「許可しない」になっています。スマホの設定 → 通知 → ヒビルカ（またはブラウザ）で許可してから、もう一度押してください。"
     : "予定のお知らせを、LINEではなくこの端末に直接届けます。LINEの送信数（月30通）は使いません。";
 }
@@ -3501,6 +3548,7 @@ function setupAccount() {
     finally{$("accountSave").disabled=false;}
   };
   setupContact(user);
+  $("exportJson").onclick = exportJson; $("exportCsv").onclick = exportCsv;
   $("accountLogout").onclick=async()=>{
     if(!auth.currentUser?.email || !confirm("ログアウトしますか？登録したメールとパスワードで戻れます。"))return;
     try{unsub.forEach(stop=>stop());unsub=[];await auth.signOut();location.assign("?intro=1");}catch{toast("ログアウトできませんでした。");}

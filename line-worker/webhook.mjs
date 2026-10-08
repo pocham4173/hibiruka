@@ -275,7 +275,7 @@ async function fromText(db, env, owner, ev, message, now) {
   const what = [data.title || data.place, data.title && data.place ? '📍' + data.place : '', data.who.length ? '👥' + data.who.join('・') : ''].filter(Boolean).join('　');
   const when = jpDate(data.date) + (data.time ? ' ' + data.time : '');
   const quickReply = {items:[{type:'action', action:{type:'postback', label:'取り消す', data:`a=del&e=${id}`, displayText:'取り消す'}}]};
-  if (data.kind === 'plan') return [text(`📅 予定に入れました\n${when}\n${what}\n\nLINEで誰かに届けるときは、アプリで予定を開いて「LINEで予定を送る」を押してください。\nちがっていたら「取り消す」を押してください。`, quickReply)];
+  if (data.kind === 'plan') return [text(`📅 予定に入れました\n${when}\n${what}\n\nLINEやアプリ通知で知らせるときは、アプリで予定を開いて「予定を知らせる」を押してください。\nちがっていたら「取り消す」を押してください。`, quickReply)];
   return [text(`📝 思い出に記録しました\n${when}\n${what}${data.memo ? '\n\n' + data.memo : ''}\n\n写真はアプリで追加できます。ちがっていたら「取り消す」を押してください。`, quickReply)];
 }
 
