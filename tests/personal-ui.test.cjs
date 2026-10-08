@@ -573,6 +573,16 @@ test('free-tier safety: monthly LINE allowance per person, 2 photos per record, 
   d.querySelector('#sWho [data-id="self"]').click();assert.equal(d.getElementById('sNowBtn').disabled,false);
   d.querySelector('#sWho [data-id="f2"]').click();assert.equal(d.getElementById('sNowBtn').disabled,true,'two people would go over');
   await a.w.addSend(true);assert.equal(a.data.get('personalEvents/p1').sends,undefined);
+  // サーバーの控え：全体の枠がなくなっていれば、個人の残りがあっても送れないと出す
+  a.w.h.setEvents([plan]);const m=ym.replace('-','');a.data.set('lineQuota/current',{month:m,left:0});a.data.set(`lineUsage/${m}_A`,{ownerUid:'A',count:5});
+  a.w.openSend('p1');for(let i=0;i<3;i++)await new Promise(r=>setTimeout(r,10));
+  assert.match(d.getElementById('sQuota').textContent,/全体の今月のLINE無料送信の枠がなくなりました/);
+  d.querySelector('#sWho [data-id="self"]').click();assert.equal(d.getElementById('sNowBtn').disabled,true);
+  a.data.set('lineQuota/current',{month:m,left:150});a.w.openSend('p1');for(let i=0;i<3;i++)await new Promise(r=>setTimeout(r,10));
+  assert.match(d.getElementById('sQuota').textContent,/今月あと25通/,'サーバーが数えた5通を引く');
+  // 片方だけ届いたときの表示
+  assert.match(a.w.sendRows({sends:[{id:'q',at:'2099-01-01T09:00',status:'sent',pushResult:'fail',friendIds:['push:self','self']}]}),/LINEは送信済み・アプリ通知は届けられませんでした/);
+  assert.match(a.w.sendRows({sends:[{id:'q',at:'2099-01-01T09:00',status:'fail',pushResult:'ok',friendIds:['push:self','self']}]}),/アプリ通知は届きました・LINEは送れませんでした/);
   a.w.renderPhotos();assert.match(d.getElementById('phCount').textContent,/^0\/2枚/);
   for(const id of ['pairView','tab-set','firstRecordGuide'])assert.match(d.getElementById(id).textContent,/ご利用上の注意（免責事項）[\s\S]*個人が無料で提供[\s\S]*一切の責任を負いかねます/,id);
  }finally{a.close();}

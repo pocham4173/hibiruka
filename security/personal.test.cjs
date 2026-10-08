@@ -34,6 +34,12 @@ test('invitation capability allows only pending acceptance, no ownership change 
  const C=env.authenticatedContext('person-C').firestore();await assertFails(getDoc(doc(C,'personalFriends/token')));
  await assertSucceeds(updateDoc(ref,{name:'renamed'}));await assertFails(deleteDoc(doc(B,'personalFriends/token')));
 });
+test('LINE counts: only the owner reads their own month, everyone reads the total left, nobody writes',async()=>{
+ await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();await setDoc(doc(d,'lineUsage/202610_person-A'),{ownerUid:'person-A',count:3});await setDoc(doc(d,'lineQuota/current'),{left:150});});
+ await assertSucceeds(getDoc(doc(A,'lineUsage/202610_person-A')));await assertFails(getDoc(doc(B,'lineUsage/202610_person-A')));
+ await assertFails(setDoc(doc(A,'lineUsage/202610_person-A'),{ownerUid:'person-A',count:0}));
+ await assertSucceeds(getDoc(doc(B,'lineQuota/current')));await assertFails(setDoc(doc(B,'lineQuota/current'),{left:999}));
+});
 test('new users cannot enter legacy records or install a legacy membership',async()=>{
  await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();await setDoc(doc(d,'config/secret'),{pinHash:'legacy-secret'});await setDoc(doc(d,'events/legacy'),{title:'private'});});
  await assertFails(getDoc(doc(A,'events/legacy')));await assertFails(setDoc(doc(A,'members/person-A'),{pinHash:'wrong'}));

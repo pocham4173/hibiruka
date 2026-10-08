@@ -61,6 +61,10 @@ export function firestore(accessToken, fetcher=fetch, limit=4){
         const result=await callback({get:async r=>{const s=await r.get();reads.set(r.path,s);return s;},update:(r,value)=>{
           const old=reads.get(r.path);if(!old?.exists||!old.updateTime)throw Error('Read before update required');
           writes.push({update:{name:root+'/'+r.path,fields:fields(value)},updateMask:{fieldPaths:Object.keys(value)},currentDocument:{updateTime:old.updateTime}});
+        },set:(r,value)=>{
+          // 丸ごと書く（なければ作る）。読んだときと変わっていたらやり直し
+          const old=reads.get(r.path);if(!old)throw Error('Read before set required');
+          writes.push({update:{name:root+'/'+r.path,fields:fields(value)},currentDocument:old.exists&&old.updateTime?{updateTime:old.updateTime}:{exists:false}});
         }});
         if(!writes.length)return result;
         try{await call(':commit',{writes});return result;}catch(e){if((![409,412].includes(e.status)&&!['ABORTED','FAILED_PRECONDITION'].includes(e.code))||attempt===2)throw e;}

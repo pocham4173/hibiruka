@@ -33,6 +33,13 @@
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','from','sentAt','sentCount']);
       // 招待の承認（pending → joined）は、LINEの本人確認をしたサーバーだけが書く（2026-10）。ブラウザからは書けない。
     }
+    // LINEの通数（2026-10）：数えるのはサーバーだけ。本人は自分の今月の数を、だれでも全体の残りの数だけを読める
+    match /lineUsage/{id} {
+      allow get: if request.auth != null && resource.data.ownerUid == request.auth.uid;
+    }
+    match /lineQuota/{id} {
+      allow get: if request.auth != null;
+    }
     // LINE連携（2026-10）: アプリで作る使い捨て番号と、連携状態の確認・解除。
     // lineAccounts（LINEの人→持ち主）はサーバー専用で、利用者は読み書きできない。
     match /lineLinkCodes/{code} {
