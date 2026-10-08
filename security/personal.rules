@@ -31,15 +31,7 @@
       allow delete: if personalOwner(resource.data);
       allow update: if personalOwner(resource.data) && personalOwner(request.resource.data)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name','from','sentAt','sentCount']);
-      allow update: if request.auth != null && resource.data.status == 'pending'
-        && request.resource.data.status == 'joined'
-        && request.resource.data.acceptedBy == request.auth.uid
-        && request.resource.data.joinedAt == request.time
-        && request.resource.data.lineUserId is string
-        && request.resource.data.lineUserId.matches('^U[0-9a-fA-F]{32}$')
-        && request.resource.data.lineName is string
-        && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['status','lineUserId','lineName','joinedAt','acceptedBy']);
+      // 招待の承認（pending → joined）は、LINEの本人確認をしたサーバーだけが書く（2026-10）。ブラウザからは書けない。
     }
     // LINE連携（2026-10）: アプリで作る使い捨て番号と、連携状態の確認・解除。
     // lineAccounts（LINEの人→持ち主）はサーバー専用で、利用者は読み書きできない。

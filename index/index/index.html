@@ -1166,6 +1166,7 @@ const CONFIG = {
   pushUrl: "https://hibiruka-line.okm-co.workers.dev/push/",
   weatherUrl: "https://hibiruka-line.okm-co.workers.dev/weather",
   accountUrl: "https://hibiruka-line.okm-co.workers.dev/account/delete",
+  acceptUrl: "https://hibiruka-line.okm-co.workers.dev/line/accept",
   // アフィリエイト（登録ができたら値を入れるだけ。空のあいだは普通のリンクで開く）
   //   valuecommerce: バリューコマースの MyLink の sid と pid（ホットペッパーグルメのプログラム）
   //   rakuten: 楽天アフィリエイトID（例 "1a2b3c4d.5e6f7a8b.1a2b3c4e.5f6a7b8c"）
@@ -1271,8 +1272,14 @@ async function startInvite() {
     $("invAcceptBtn").onclick = async () => {
       $("invAcceptBtn").disabled = true; $("invAcceptBtn").textContent = "承認しています…";
       try {
-        const prof = await liff.getProfile();
-        await ref.update({ status: "joined", lineUserId: prof.userId, lineName: prof.displayName || "", joinedAt: TS(), ...(personalInvite ? {acceptedBy:auth.currentUser.uid} : {}) });
+        // 承認はサーバーで確定する（LINEに本人を確かめてもらう。ブラウザからLINE IDは送らない）
+        const r = await fetch(CONFIG.acceptUrl, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + await auth.currentUser.getIdToken() },
+          body: JSON.stringify({ invite: token, scope: personalInvite ? "personal" : "legacy", lineToken: liff.getAccessToken() }) });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          const why = { expired: "この招待は期限が切れています（30日）。<br>もう一度送ってもらってください。", used: "この招待は、別のLINEですでに登録されています。<br>新しい招待を送ってもらってください。", missing: "この招待は取り消されたようです。<br>もう一度送ってもらってください。", line: "LINEの本人確認ができませんでした。<br>LINEアプリの中で、もう一度開いてください。" }[j.error];
+          inviteMsg("⚠️", why || "登録できませんでした。<br>時間をおいてもう一度開いてください。"); return;
+        }
         $("invStep1").classList.add("hidden"); $("invStep2").classList.remove("hidden");
       } catch (e) { console.error(e); inviteMsg("⚠️", "登録できませんでした。<br>時間をおいてもう一度開いてください。"); }
     };

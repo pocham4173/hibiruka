@@ -23,7 +23,7 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
  const auth={currentUser:user,signInWithEmailAndPassword:async()=>{calls.push(['signin']);},setPersistence:async()=>{},signInAnonymously:async()=>{calls.push(['anonymous']);return{user};}};
  const authFn=()=>auth;authFn.Auth={Persistence:{LOCAL:'local'}};authFn.EmailAuthProvider={credential:(email,password)=>({email,password})};
  const firestore=()=>db;firestore.FieldValue={delete:()=>'__delete__',serverTimestamp:()=>1,arrayUnion:x=>[x],arrayRemove:()=>[],increment:x=>x};
- w.firebase={initializeApp:()=>{},auth:authFn,firestore};w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.console.error=(...args)=>errors.push(args);w.liff={init:async()=>{},isLoggedIn:()=>true,getProfile:async()=>({userId:'U'+'a'.repeat(32),displayName:'A'}),isInClient:()=>false};
+ w.firebase={initializeApp:()=>{},auth:authFn,firestore};w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.console.error=(...args)=>errors.push(args);w.liff={init:async()=>{},isLoggedIn:()=>true,getProfile:async()=>({userId:'U'+'a'.repeat(32),displayName:'A'}),getAccessToken:()=>'line-access-token',isInClient:()=>false};
  const script=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean).pop();
  w.testNavigate=url=>calls.push(['navigate',url]);
  w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setWishes:value=>wishes=value,setShown:value=>findShown=value,spotMapLink,setFriends:(value,self)=>{friends=value;selfFriendId=self;},config:CONFIG,setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
@@ -43,7 +43,18 @@ test('returning email user stays signed in; linking anonymous account preserves 
  const b=app();try{await b.w.h.startOwner();b.d.getElementById('accountEmail').value='a@example.test';b.d.getElementById('accountPassword').value='long-password';await b.d.getElementById('accountForm').onsubmit({preventDefault(){}});assert(b.calls.some(c=>c[0]==='link'&&c[1]==='A'));assert(b.data.has('personalConfig/A'));}finally{b.close();}
 });
 test('personal invite acceptance preserves current account and records acceptance identity',async()=>{
- const a=app({url:'?invite=token&scope=personal',invite:true,linked:true});try{await a.w.h.startInvite();await a.d.getElementById('invAcceptBtn').onclick();const f=a.data.get('personalFriends/token');assert.equal(f.status,'joined');assert.equal(f.acceptedBy,'A');assert.equal(f.ownerUid,'sender');assert(!a.calls.some(c=>c[0]==='anonymous'));}finally{a.close();}
+ const a=app({url:'?invite=token&scope=personal',invite:true,linked:true});try{
+  // 承認はサーバーへ：LINEのアクセストークンとFirebaseのIDトークンを送り、ブラウザからは書かない
+  const sent=[];a.w.fetch=async(url,opt)=>{sent.push([url,opt]);return{ok:true,status:200,json:async()=>({ok:true})};};
+  await a.w.h.startInvite();await a.d.getElementById('invAcceptBtn').onclick();
+  const f=a.data.get('personalFriends/token');assert.equal(f.status,'pending','ブラウザは joined を書かない');assert.equal(f.ownerUid,'sender');
+  assert.equal(sent.length,1);assert.match(sent[0][0],/\/line\/accept$/);const body=JSON.parse(sent[0][1].body);
+  assert.deepEqual(body,{invite:'token',scope:'personal',lineToken:'line-access-token'});assert.equal(sent[0][1].headers.Authorization,'Bearer id-token-A');
+  assert(!a.d.getElementById('invStep2').classList.contains('hidden'));assert(!a.calls.some(c=>c[0]==='anonymous'));
+  // 期限切れ
+  a.w.fetch=async()=>({ok:false,status:409,json:async()=>({error:'expired'})});await a.d.getElementById('invAcceptBtn').onclick();
+  assert.match(a.d.getElementById('invMsgText').innerHTML,/期限が切れています/);
+ }finally{a.close();}
 });
 
 test('first record guidance opens the chosen form and can be dismissed without losing data',async()=>{

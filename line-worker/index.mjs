@@ -6,6 +6,7 @@ import {handleSpots} from './spots.mjs';
 import {handleWeather} from './weather.mjs';
 import {handlePush, pushToOwner} from './push.mjs';
 import {handleAccount} from './account.mjs';
+import {handleAccept} from './accept.mjs';
 let cached;
 const base64url=bytes=>Buffer.from(bytes).toString('base64url');
 export async function googleToken(secret,fetcher=fetch){
@@ -49,6 +50,10 @@ export default {
     if(url.pathname.startsWith('/push/')&&['GET','POST','OPTIONS'].includes(request.method)){
       try{return await handlePush(request,env,{db:async()=>firestore(await googleToken(env.FIREBASE_SERVICE_ACCOUNT),fetch,5)});}
       catch{console.error('Hibiruka push failed.');return new Response(JSON.stringify({error:'busy'}),{status:502,headers:{'content-type':'application/json','access-control-allow-origin':'https://pocham4173.github.io',vary:'origin'}});}
+    }
+    if(url.pathname==='/line/accept'&&['POST','OPTIONS'].includes(request.method)){
+      try{return await handleAccept(request,env,{db:async()=>firestore(await googleToken(env.FIREBASE_SERVICE_ACCOUNT),fetch,4)});}
+      catch{console.error('Hibiruka invite accept failed.');return new Response(JSON.stringify({error:'busy'}),{status:502,headers:{'content-type':'application/json','access-control-allow-origin':'https://pocham4173.github.io',vary:'origin'}});}
     }
     if(url.pathname.startsWith('/account/')&&['POST','OPTIONS'].includes(request.method)){
       try{return await handleAccount(request,env,{db:async()=>firestore(await googleToken(env.FIREBASE_SERVICE_ACCOUNT),fetch,300)});}

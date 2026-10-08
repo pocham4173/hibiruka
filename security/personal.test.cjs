@@ -27,7 +27,9 @@ test('invitation capability allows only pending acceptance, no ownership change 
  await assertSucceeds(getDoc(doc(B,'personalFriends/token')));await assertFails(getDocs(collection(B,'personalFriends')));
  await assertFails(updateDoc(ref,{status:'joined',lineUserId:'U'+'a'.repeat(32)}));
  await assertFails(updateDoc(doc(B,'personalFriends/token'),{ownerUid:'person-B'}));
- await assertSucceeds(updateDoc(doc(B,'personalFriends/token'),{status:'joined',lineUserId:'U'+'b'.repeat(32),lineName:'B',joinedAt:serverTimestamp(),acceptedBy:'person-B'}));
+ // 承認はサーバーだけ：ブラウザから joined にはできない（本人確認なしのLINE IDを防ぐ）
+ await assertFails(updateDoc(doc(B,'personalFriends/token'),{status:'joined',lineUserId:'U'+'b'.repeat(32),lineName:'B',joinedAt:serverTimestamp(),acceptedBy:'person-B'}));
+ await env.withSecurityRulesDisabled(async c=>{await updateDoc(doc(c.firestore(),'personalFriends/token'),{status:'joined',lineUserId:'U'+'b'.repeat(32),lineName:'B',joinedAt:serverTimestamp(),acceptedBy:'person-B'});});
  await assertFails(updateDoc(doc(B,'personalFriends/token'),{lineUserId:'U'+'c'.repeat(32)}));
  const C=env.authenticatedContext('person-C').firestore();await assertFails(getDoc(doc(C,'personalFriends/token')));
  await assertSucceeds(updateDoc(ref,{name:'renamed'}));await assertFails(deleteDoc(doc(B,'personalFriends/token')));
