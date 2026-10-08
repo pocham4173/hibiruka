@@ -940,3 +940,26 @@ test('past plans: not counted as memories until "行った"; 中止 hides them; 
   w.h.setEvents([{...past,outcome:'cancelled'}]);w.selectView('mem');assert.equal(d.querySelector('#listBox [data-open="pp"]'),null,'中止は思い出に出ない');
  }finally{a.close();}
 });
+
+test('recovery and plain wording: backup hint for many anonymous records, export, keyboard open, names that match',async()=>{
+ const a=app();try{const {w,d}=a;await w.h.startOwner();
+  const many=Array.from({length:5},(_,i)=>({id:'m'+i,date:'2020-01-0'+(i+1),title:'思い出'+i,kind:'memory',cat:'遊び'}));
+  w.h.setEvents(many);w.selectView('mem');w.goTab('list');
+  // 匿名で5件 → すすめる。「あとで」で30日は出さない
+  const hint=d.getElementById('backupHint');assert.equal(hint.classList.contains('hidden'),false);
+  d.getElementById('backupLater').click();assert.equal(hint.classList.contains('hidden'),true);w.renderList();assert.equal(hint.classList.contains('hidden'),true);
+  // 書き出し：CSV は日本語の見出し・件数どおり
+  let saved=null;w.URL.createObjectURL=b=>{saved=b;return 'blob:x';};w.URL.revokeObjectURL=()=>{};
+  const read=b=>new Promise(r=>{const f=new w.FileReader();f.onload=()=>r(f.result);f.readAsText(b);});
+  d.getElementById('exportCsv').click();const text=await read(saved);
+  assert.match(text,/^\ufeff?"日付","時間","種類"/);assert.equal(text.trim().split('\r\n').length,6);
+  d.getElementById('exportJson').click();const j=JSON.parse(await read(saved));assert.equal(j.records.length,5);assert.match(j.note,/自動で元に戻す機能はありません/);
+  // キーボードで思い出を開ける
+  const tile=d.querySelector('#listBox [data-open="m0"]');assert.equal(tile.getAttribute('role'),'button');assert.equal(tile.getAttribute('tabindex'),'0');
+  tile.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));assert.equal(d.getElementById('detailSheet').classList.contains('hidden'),false);
+  // 説明と実装をそろえる
+  assert.equal(d.getElementById('fFav').tagName,'BUTTON');
+  assert.match(d.getElementById('sendSheet').textContent,/予定をだれに知らせますか？[\s\S]*アプリ通知/);
+  assert.match(d.getElementById('phCount').textContent,/\/2枚/);
+ }finally{a.close();}
+});
