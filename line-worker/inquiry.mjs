@@ -5,7 +5,7 @@ import { inquiryNo } from './account.mjs';
 export const FAQ_URL = 'https://pocham4173.github.io/hibiruka/guide/#faq';
 export const CONTACT_URL = 'https://pocham4173.github.io/hibiruka/terms/#contact';
 // Googleフォーム（作ったら入れる）。entry の番号は「事前入力したURLを取得」で分かる
-export const FORM = { url: 'https://docs.google.com/forms/d/e/1FAIpQLSfUJmj_ja4CkWWw0naho5ML6O4T3MzVJXsnzDG_RRwLUoIIvA/formResponse', entry: { kind: 'entry.1764692148', text: 'entry.317546293', device: 'entry.673106725', when: 'entry.456326230', no: 'entry.620971036', agree: 'entry.879427435' } };
+export const FORM = { url: 'https://docs.google.com/forms/d/e/1FAIpQLScw0231bhasTV6md3E5i2vE6bXYS_JPLdI_48D_VkucxXsiXQ/formResponse', entry: { kind: 'entry.624595342', text: 'entry.1167455955', device: 'entry.1032165107', when: 'entry.1299198426', no: 'entry.1123677430', agree: 'entry.757516540' } };
 export const AGREE = '確認しました'; // フォームの「同意」の選択肢と同じ文字
 export const KINDS = { bug: '🐞 不具合（うまく動かない）', how: '❓ 使い方がわからない', idea: '💡 ご意見・ほしい機能', ad: '🏷 広告（PR）について', other: '✉️ その他' };
 const PER_DAY = 3, WAIT_MIN = 15, MAX_LEN = 1000;

@@ -170,8 +170,8 @@ test('inquiry: pick a kind, send one message, it is saved without the LINE id; 3
   const posted=[];const ff=async(u,o)=>{posted.push([u,o.body]);return new Response('');};
   await handleEvent(db,{},pb('ad'),NOW,ff);await handleEvent(db,{},msg({type:'text',text:'PRの表示について'}),NOW,ff);
   assert.equal(posted.length,1);assert.match(posted[0][0],/formResponse$/);
-  const body=new URLSearchParams(posted[0][1]);assert.equal(body.get('entry.1764692148'),'広告（PR）について');assert.equal(body.get('entry.317546293'),'PRの表示について');
-  assert.equal(body.get('entry.673106725'),'LINEから');assert.equal(body.get('entry.879427435'),'確認しました');assert.match(body.get('entry.620971036'),/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+  const body=new URLSearchParams(posted[0][1]);assert.equal(body.get('entry.624595342'),'広告（PR）について');assert.equal(body.get('entry.1167455955'),'PRの表示について');
+  assert.equal(body.get('entry.1032165107'),'LINEから');assert.equal(body.get('entry.757516540'),'確認しました');assert.match(body.get('entry.1123677430'),/^[A-Z2-9]{4}-[A-Z2-9]{4}$/);
   // 次の文はふつうの記録・返事に戻る
   assert.equal(await (async()=>{const r=await handleEvent(db,{},msg({type:'text',text:'使い方'}),NOW);return /このトークでできること/.test(r[0].text);})(),true);
   // やめる
