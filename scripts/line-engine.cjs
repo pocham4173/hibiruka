@@ -85,6 +85,8 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
   const snapshot = {docs:[...legacy.docs,...personal.docs].sort((a,b) => String(a.data().nextSendAt || '').localeCompare(String(b.data().nextSendAt || '')))};
   if (recoveryAt && snapshot.docs.flatMap(doc => sendList(doc.data().sends).filter(item => item.status === 'wait' && recoveryMatches(doc.data(), item))).length > 1) throw new Error('LINE接続情報：該当する自分宛ての予約が複数あるため停止しました。');
   let sent = 0, failed = 0, processed = 0, quota;
+  // 30分ごとに、全体の残りを画面用に控える（送信がなくても「残り」が分かるように。LINEへの問い合わせは無料）
+  if (!recoveryAt && new Date().getUTCMinutes() % 30 === 0) { quota = await accountQuota(token).catch(() => null); if (quota) await saveQuota(db, quota).catch(() => {}); else quota = undefined; }
   for (const doc of snapshot.docs) {
     const isPersonal = doc.ref.parent?.id === "personalEvents";
     if (!Array.isArray(doc.data().sends) || sendList(doc.data().sends).length !== doc.data().sends.length || sendList(doc.data().sends).some(s => s.status === 'wait' && !validSend(s))) {
