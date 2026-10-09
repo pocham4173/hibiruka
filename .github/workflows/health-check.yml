@@ -1,6 +1,8 @@
 name: ヒビルカの状態確認（読むだけ）
 # 送信はしない。LINEの今月の上限・使用数、定期送信の最後の動作、通数の控えを読んで、注釈に出すだけ。
+# これは手動で1回読むための点検で、定期監視ではない（自動で見張ったり、異常を知らせたりはしない）。
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths: [.github/workflows/health-check.yml]
@@ -34,6 +36,9 @@ jobs:
             console.log("::notice::scheduler ok="+hb.ok+" enabled="+hb.enabled+" checkedAt="+(hb.checkedAt?.toDate?.().toISOString())+" version="+hb.version+" sent="+hb.sent+" failed="+hb.failed);
             const lq=(await db.doc("lineQuota/current").get()).data();
             console.log("::notice::lineQuota doc="+JSON.stringify(lq||null));
+            const m=new Date(Date.now()+9*3600000).toISOString().slice(0,7).replace("-","");
+            const hold=(await db.doc("lineQuota/hold_"+m).get()).data();
+            console.log("::notice::app hold (reserved, not yet confirmed)="+(hold?.count||0)+" confirmed this month="+(hold?.sent||0));
             const wait=await db.collection("personalEvents").where("nextSendAt","!=",null).limit(50).get();
             console.log("::notice::personal events with pending sends="+wait.size);
             await admin.app().delete();

@@ -542,6 +542,22 @@ test('plan sending: an optional ひとこと is counted, saved with the reservat
  }finally{a.close();}
 });
 
+test('notification requests: the app only appends one reservation or one cancel request (server-owned fields untouched)',async()=>{
+ const a=app();try{await a.w.h.startOwner();const id='personalEvents/p1',plan={id:'p1',date:'2099-10-06',time:'09:00',title:'遊び'};
+ const serverRow={id:'s-old-0001',at:'2099-10-01T09:00',status:'sent',friendIds:['self'],lineResult:'sent'};
+ a.data.set(id,{...plan,ownerUid:'A',sends:[serverRow],nextSendAt:null});a.w.h.setEvents([{...plan,sends:[serverRow]}]);
+ a.w.h.setFriends([{id:'self',status:'joined',lineUserId:'U1'}],'self');
+ a.w.openSend('p1');a.d.querySelector('#sWho [data-id="self"]').click();await a.w.addSend(true);
+ let doc=a.data.get(id);assert.equal(doc.sends.length,2);assert.deepEqual(doc.sends[0],serverRow,'既存の行は1文字も変えない');
+ assert.deepEqual(Object.keys(doc.sends[1]).sort(),['at','friendIds','from','id','status']);assert.equal(doc.sends[1].status,'wait');assert.equal(doc.nextSendAt,doc.sends[1].at);
+ // 取り消し：申し出を1件足すだけ。行や送信状態は変えない
+ a.w.confirm=()=>true;const before=JSON.stringify(doc.sends);a.w.h.setEvents([{...plan,...doc}]);
+ await a.w.cancelSend('p1',doc.sends[1].id);doc=a.data.get(id);
+ assert.equal(JSON.stringify(doc.sendCancels),JSON.stringify([doc.sends[1].id]));assert.equal(JSON.stringify(doc.sends),before);
+ await a.w.cancelSend('p1',doc.sends[1].id);assert.equal(a.data.get(id).sendCancels.length,1,'二重に申し出ない');
+ }finally{a.close();}
+});
+
 test('going out: choose where and which day first, then the weather of that day there suggests what to look for',async()=>{
  const a=app();try{const {w,d}=a;await w.h.startOwner();
   const wx=[];let code=0,max=24;
@@ -585,8 +601,15 @@ test('free-tier safety: monthly LINE allowance per person, 2 photos per record, 
   a.data.set('lineQuota/current',{month:m,left:150});a.w.openSend('p1');for(let i=0;i<3;i++)await new Promise(r=>setTimeout(r,10));
   assert.match(d.getElementById('sQuota').textContent,/今月あと25通/,'サーバーが数えた5通を引く');
   // 片方だけ届いたときの表示
-  assert.match(a.w.sendRows({sends:[{id:'q',at:'2099-01-01T09:00',status:'sent',pushResult:'fail',friendIds:['push:self','self']}]}),/LINEは送信済み・アプリ通知は届けられませんでした/);
-  assert.match(a.w.sendRows({sends:[{id:'q',at:'2099-01-01T09:00',status:'fail',pushResult:'ok',friendIds:['push:self','self']}]}),/アプリ通知は届きました・LINEは送れませんでした/);
+  // 手段ごとの結果（以前の版の行も新しい行も）。端末への到達は確認できないので「届いた」とは書かない
+  assert.match(a.w.sendRows({sends:[{id:'q',at:'2099-01-01T09:00',status:'sent',pushResult:'fail',friendIds:['push:self','self']}]}),/一部だけ送信しました（LINE：送信済み・アプリ通知：送れませんでした）/);
+  assert.match(a.w.sendRows({sends:[{id:'q',at:'2099-01-01T09:00',status:'fail',pushResult:'ok',friendIds:['push:self','self']}]}),/一部だけ送信しました（LINE：送れませんでした・アプリ通知：送信済み）/);
+  const quotaGone=a.w.sendRows({sends:[{id:'q',at:'2099-01-01T09:00',status:'partial',lineResult:'quota_all',pushResult:'ok',error:'ヒビルカ全体の今月のLINE無料送信の枠がなくなったため、LINEは送れませんでした。',friendIds:['push:self','self']}]});
+  assert.match(quotaGone,/LINE：送れませんでした・アプリ通知：送信済み/);assert.match(quotaGone,/全体の今月/);
+  for(const row of [quotaGone,a.w.sendRows({sends:[{id:'q',at:'2099-01-01T09:00',status:'sent',friendIds:['push:self']}]})])assert.doesNotMatch(row,/届きました|届いた/);
+  assert.match(a.w.sendRows({sends:[{id:'q',at:'2099-01-01T09:00',status:'wait',pushResult:'ok',lineResult:'retry',friendIds:['push:self','self']}]}),/LINE：再試行中・アプリ通知：送信済み/);
+  assert.match(a.w.sendRows({sendCancels:['q'],sends:[{id:'q',at:'2099-01-01T09:00',status:'wait',friendIds:['self']}]}),/取り消しました/,'取り消しはすぐ画面に出る');
+  assert.doesNotMatch(a.w.sendRows({sendCancels:['q'],sends:[{id:'q',at:'2099-01-01T09:00',status:'wait',friendIds:['self']}]}),/data-cancel/);
   a.w.renderPhotos();assert.match(d.getElementById('phCount').textContent,/^0\/2枚/);
   for(const id of ['pairView','tab-set','firstRecordGuide'])assert.match(d.getElementById(id).textContent,/ご利用上の注意（免責事項）[\s\S]*個人が無料で提供[\s\S]*一切の責任を負いかねます/,id);
  }finally{a.close();}
@@ -961,5 +984,102 @@ test('recovery and plain wording: backup hint for many anonymous records, export
   assert.equal(d.getElementById('fFav').tagName,'BUTTON');
   assert.match(d.getElementById('sendSheet').textContent,/予定をだれに知らせますか？[\s\S]*アプリ通知/);
   assert.match(d.getElementById('phCount').textContent,/\/2枚/);
+ }finally{a.close();}
+});
+
+/* ===== 2026-10-09 再レビュー：予定の状態と行きたいリスト ===== */
+const ymdLocal=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const yesterday=()=>{const d=new Date();d.setDate(d.getDate()-1);return ymdLocal(d);};
+const nextWeek=()=>{const d=new Date();d.setDate(d.getDate()+7);return ymdLocal(d);};
+async function editAndSave(a,id,memo){await a.w.h.editRecord(id);a.d.getElementById('fMemo').value=memo;await a.w.h.saveRecord();return a.data.get('personalEvents/'+id);}
+const tick=async()=>{for(let i=0;i<3;i++)await new Promise(r=>setTimeout(r,10));};
+
+test('④ editing the memo of a past plan never turns it into a memory or "行った"',async()=>{
+ const a=app();try{await a.w.h.startOwner();const yd=yesterday(),w=a.w;
+ const rows={c1:{kind:'plan',date:yd,title:'中止した',outcome:'cancelled'},u1:{kind:'plan',date:yd,title:'未確認'},d1:{kind:'plan',date:yd,title:'行った',outcome:'done'},m1:{kind:'memory',date:yd,title:'思い出'}};
+ for(const [id,r] of Object.entries(rows))a.data.set('personalEvents/'+id,{...r,ownerUid:'A',cat:'遊び',sends:[],nextSendAt:null});
+ w.h.setEvents(Object.entries(rows).map(([id,r])=>({id,cat:'遊び',...r})));
+ let s=await editAndSave(a,'c1','メモだけ直す');assert.equal(s.kind,'plan');assert.equal(s.outcome,'cancelled');assert.equal(w.isDone({...s,id:'c1'}),false,'中止のまま');
+ s=await editAndSave(a,'u1','メモ');assert.equal(s.kind,'plan');assert.equal(s.outcome,undefined);assert.equal(w.isDone({...s,id:'u1'}),false,'未確認のまま');
+ s=await editAndSave(a,'d1','メモ');assert.equal(s.kind,'plan');assert.equal(s.outcome,'done');assert.equal(w.isDone({...s,id:'d1'}),true,'行ったのまま');
+ s=await editAndSave(a,'m1','メモ');assert.equal(s.kind,'memory');assert.equal(w.isDone({...s,id:'m1'}),true,'普通の思い出はそのまま');
+ // 編集画面：過去の予定は「予定」のまま開き、保存の説明も合う
+ await w.h.editRecord('c1');assert.equal(a.d.getElementById('fKind').value,'plan');assert.match(a.d.getElementById('saveNote').textContent,/中止/);
+ }finally{a.close();}
+});
+test('④ one rule everywhere: records already broken by the old edit (memory + 中止) are not counted as done',async()=>{
+ const a=app();try{await a.w.h.startOwner();const yd=yesterday(),w=a.w,d=a.d;
+ const broken={id:'b1',kind:'memory',date:yd,title:'以前の版で種類だけ変わった中止',outcome:'cancelled',cat:'遊び',lat:36.4,lng:138.2};
+ const done={id:'m2',kind:'memory',date:yd,title:'普通の思い出',cat:'遊び',lat:36.4,lng:138.2};
+ w.h.setEvents([broken,done]);
+ assert.equal(w.isDone(broken),false);assert.equal(w.isDone(done),true);
+ w.selectView('mem');assert.equal(d.querySelector('#listBox [data-open="b1"]'),null,'思い出の一覧に出さない');assert.ok(d.querySelector('#listBox [data-open="m2"]'));
+ // 中身は書き換えない（推測で直さない）
+ assert.equal(a.data.get('personalEvents/b1'),undefined);
+ // LINEのまとめ（Worker）も同じ判定
+ const {isDoneRecord}=await import('../line-worker/webhook.mjs');const today=ymdLocal(new Date());
+ const cases=[broken,done,{kind:'plan',date:yd,outcome:'done'},{kind:'plan',date:yd},{kind:'plan',date:yd,outcome:'cancelled'},{kind:'plan',date:nextWeek(),outcome:'done'},{kind:'wish',date:yd,outcome:'done'}];
+ for(const c of cases)assert.equal(isDoneRecord(c,today),w.isDone(c),JSON.stringify(c));
+ }finally{a.close();}
+});
+test('④ postponing a past plan to a later date clears 行った／中止; switching a 中止 to 思い出 on purpose clears 中止',async()=>{
+ const a=app();try{await a.w.h.startOwner();const yd=yesterday(),w=a.w,d=a.d;
+ a.data.set('personalEvents/p2',{kind:'plan',date:yd,title:'延期',outcome:'cancelled',ownerUid:'A',cat:'遊び'});w.h.setEvents([{id:'p2',kind:'plan',date:yd,title:'延期',outcome:'cancelled',cat:'遊び'}]);
+ await w.h.editRecord('p2');d.getElementById('fDate').value=nextWeek();d.getElementById('fDate').oninput();await w.h.saveRecord();
+ assert.equal(a.data.get('personalEvents/p2').outcome,'__delete__');assert.equal(a.data.get('personalEvents/p2').kind,'plan');
+ a.data.set('personalEvents/p3',{kind:'plan',date:yd,title:'中止→思い出',outcome:'cancelled',ownerUid:'A',cat:'遊び'});w.h.setEvents([{id:'p3',kind:'plan',date:yd,title:'中止→思い出',outcome:'cancelled',cat:'遊び'}]);
+ await w.h.editRecord('p3');d.querySelector('[data-kind="memory"]').click();await w.h.saveRecord();
+ assert.equal(a.data.get('personalEvents/p3').kind,'memory');assert.equal(a.data.get('personalEvents/p3').outcome,'__delete__');
+ }finally{a.close();}
+});
+
+test('⑤ 行った／取り消し／中止／延期 keep the 行きたいリスト in step, without erasing other visits',async()=>{
+ const a=app();try{await a.w.h.startOwner();const yd=yesterday(),w=a.w;
+ const plan={id:'p1',kind:'plan',date:yd,title:'カフェ',place:'森のカフェ',cat:'食事'};
+ const wish={id:'w1',kind:'wish',status:'scheduled',planId:'p1',place:'森のカフェ',cat:'食事'};
+ const set=(evs,ws)=>{for(const x of [...evs,...ws])a.data.set('personalEvents/'+x.id,{...x,ownerUid:'A'});w.h.setEvents(evs);w.h.setWishes(ws);};
+ const status=()=>a.data.get('personalEvents/w1').status;
+ set([plan],[{...wish}]);
+ await w.setOutcome('p1','done');assert.equal(status(),'visited');
+ await w.setOutcome('p1','');assert.equal(status(),'scheduled','取り消すと予定ありに戻る');
+ await w.setOutcome('p1','done');await w.setOutcome('p1','cancelled');assert.equal(status(),'wished','行った→中止');
+ assert.equal(a.data.get('personalEvents/w1').planId,'p1','つながりは残す（中止を取り消せば戻せる）');
+ await w.setOutcome('p1','');assert.equal(status(),'scheduled');
+ // 同じ場所の別の実施済み記録があれば、取り消しても「行った」のまま
+ set([plan,{id:'m9',kind:'memory',date:'2025-05-01',title:'前に行った',place:'森のカフェ',cat:'食事'}],[{...wish}]);
+ await w.setOutcome('p1','done');assert.equal(status(),'visited');
+ await w.setOutcome('p1','');assert.equal(status(),'visited','別の訪問実績は消さない');
+ await w.setOutcome('p1','cancelled');assert.equal(status(),'visited');
+ // 延期：行った→取り消し→先の日付に変更 → 予定あり
+ set([plan],[{...wish,status:'visited'}]);a.data.set('personalEvents/p1',{...plan,ownerUid:'A',outcome:'done'});w.h.setEvents([{...plan,outcome:'done'}]);
+ await w.setOutcome('p1','');await w.h.editRecord('p1');a.d.getElementById('fDate').value=nextWeek();a.d.getElementById('fDate').oninput();await w.h.saveRecord();
+ assert.equal(status(),'scheduled');
+ }finally{a.close();}
+});
+test('⑤ a failed save changes neither the plan nor the wish; retrying applies both',async()=>{
+ const a=app();try{await a.w.h.startOwner();const yd=yesterday(),w=a.w;
+ a.data.set('personalEvents/p1',{id:'p1',kind:'plan',date:yd,title:'カフェ',place:'森のカフェ',ownerUid:'A'});a.data.set('personalEvents/w1',{kind:'wish',status:'scheduled',planId:'p1',place:'森のカフェ',ownerUid:'A'});
+ w.h.setEvents([{id:'p1',kind:'plan',date:yd,title:'カフェ',place:'森のカフェ'}]);w.h.setWishes([{id:'w1',kind:'wish',status:'scheduled',planId:'p1',place:'森のカフェ'}]);
+ a.db.failCommit=true;await w.setOutcome('p1','done');
+ assert.equal(a.data.get('personalEvents/p1').outcome,undefined);assert.equal(a.data.get('personalEvents/w1').status,'scheduled');
+ await w.setOutcome('p1','done');assert.equal(a.data.get('personalEvents/p1').outcome,'done');assert.equal(a.data.get('personalEvents/w1').status,'visited');
+ }finally{a.close();}
+});
+
+test('⑥ explanations match the behaviour; form fields have labels; dialogs move and return focus',async()=>{
+ const guide=fs.readFileSync('guide/index.html','utf8');
+ assert.doesNotMatch(guide,/その日が過ぎると「行った」/);assert.doesNotMatch(html,/日付が過ぎるとそのまま思い出|自然に「思い出」へ/);
+ assert.doesNotMatch(html,/種類（遊び・食事など）と日付を選べばOK/);assert.match(html,/「どこで？」か「なにをする？」を入れればOK/);
+ for(const page of [html,guide])assert.match(page,/完全なバックアップではありません/);
+ const a=app();try{await a.w.h.startOwner();const d=a.d;
+  for(const id of ['fDate','fPlace','fTitle','fMemo','fLink','ownerName','inviteName','sDate','sTime','catNew','pinInput']){
+   const el=d.getElementById(id);assert.ok(el.getAttribute('aria-label')||el.getAttribute('aria-labelledby')||d.querySelector(`label[for="${id}"]`),id);
+  }
+  const yd=yesterday();a.w.h.setEvents([{id:'m1',kind:'memory',date:yd,title:'思い出',cat:'遊び'}]);
+  const opener=d.createElement('button');d.body.appendChild(opener);opener.focus();
+  a.w.openDetail('m1');await tick();
+  const sheet=d.querySelector('#detailSheet .sheet');assert.equal(sheet.getAttribute('role'),'dialog');assert.ok(sheet.contains(d.activeElement),'開いたら中へ');
+  d.dispatchEvent(new a.w.KeyboardEvent('keydown',{key:'Escape'}));await tick();
+  assert.ok(d.getElementById('detailSheet').classList.contains('hidden'),'Escで閉じる');assert.equal(d.activeElement,opener,'閉じたら元のボタンへ');
  }finally{a.close();}
 });

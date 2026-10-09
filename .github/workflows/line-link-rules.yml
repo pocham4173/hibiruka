@@ -1,5 +1,6 @@
 name: LINE連携番号のルール反映
 # 2026-10-08: 招待の承認（joined）をサーバー専用に／LINEの通数（lineUsage・lineQuota）を読み取り専用で追加
+# 2026-10-09: 通知の送信状態・通数・ロックをサーバー専用に（予約は末尾に1件足す・取り消しは申し出を足すだけ）。送信台帳 sendLedger は利用者から読めない
 # Reuse one emulator database instance per verification context.
 on:
   push:

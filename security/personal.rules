@@ -7,12 +7,53 @@
       allow create, update: if request.auth != null && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['ownerName', 'cats', 'people', 'selfFriendId', 'createdAt', 'version']);
     }
+    // 通知の予約（2026-10-09）：送信状態・通数・処理中の印はサーバーだけが書く。
+    // 本人ができるのは「予約を1件、末尾に足す」と「取り消しの申し出を1件足す」だけ（既存の行は変えられない）。
+    function sendFieldsUntouched() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['sends', 'nextSendAt', 'sendCancels', 'schedulerError']);
+    }
+    function validNewSend(item) {
+      return item is map
+        && item.keys().hasOnly(['id', 'at', 'friendIds', 'from', 'note', 'status'])
+        && item.keys().hasAll(['id', 'at', 'friendIds', 'status'])
+        && item.status == 'wait'
+        && item.id is string && item.id.matches('^[A-Za-z0-9-]{8,64}$')
+        && item.at is string && item.at.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$')
+        && item.friendIds is list && item.friendIds.size() >= 1 && item.friendIds.size() <= 20
+        && (!('from' in item) || (item.from is string && item.from.size() <= 40))
+        && (!('note' in item) || (item.note is string && item.note.size() <= 100));
+    }
+    function appendsOneSend() {
+      let old = resource.data.get('sends', []);
+      let neu = request.resource.data.get('sends', []);
+      let n = old.size();
+      let before = resource.data.get('nextSendAt', null);
+      let after = request.resource.data.get('nextSendAt', null);
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sends', 'nextSendAt', 'updatedAt'])
+        && n < 40 && neu.size() == n + 1 && neu[0:n] == old
+        && validNewSend(neu[n])
+        && ((before == null && after == neu[n].at)
+          || (before != null && neu[n].at < before && after == neu[n].at)
+          || (before != null && neu[n].at >= before && after == before));
+    }
+    function appendsOneCancel() {
+      let old = resource.data.get('sendCancels', []);
+      let neu = request.resource.data.get('sendCancels', []);
+      let n = old.size();
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sendCancels', 'updatedAt'])
+        && n < 40 && neu.size() == n + 1 && neu[0:n] == old
+        && neu[n] is string && neu[n].matches('^[A-Za-z0-9-]{1,64}$');
+    }
     match /personalEvents/{id} {
       allow read, delete: if personalOwner(resource.data);
       allow create: if personalOwner(request.resource.data)
-        && request.resource.data.createdAt == request.time;
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.get('sends', []) == []
+        && request.resource.data.get('nextSendAt', null) == null
+        && !request.resource.data.keys().hasAny(['sendCancels', 'schedulerError']);
       allow update: if personalOwner(resource.data) && personalOwner(request.resource.data)
-        && request.resource.data.createdAt == resource.data.createdAt;
+        && request.resource.data.createdAt == resource.data.createdAt
+        && (sendFieldsUntouched() || appendsOneSend() || appendsOneCancel());
     }
     match /personalPhotos/{id} {
       allow read, delete: if personalOwner(resource.data);
@@ -40,6 +81,7 @@
     match /lineQuota/{id} {
       allow get: if request.auth != null;
     }
+    // sendLedger（送信台帳：確保した通数・処理中の印・手段ごとの結果）はサーバー専用。ここに許可を書かない＝だれも読み書きできない。
     // LINE連携（2026-10）: アプリで作る使い捨て番号と、連携状態の確認・解除。
     // lineAccounts（LINEの人→持ち主）はサーバー専用で、利用者は読み書きできない。
     match /lineLinkCodes/{code} {
