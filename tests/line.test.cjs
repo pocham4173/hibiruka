@@ -24,7 +24,7 @@ test('retry key is stable for a reservation and different for another', () => {
   assert.ok(buildText({date:'2026-09-28',title:'予定',memo:'a'.repeat(6000)},'テスト').length<=5000);
 });
 
-function fixture({onSend=null,lineMessage='',validate=false,status=200,accepted=false,expired=false,revoked=false,recovery=false,personal=false,foreign=false,quotaLeft=Infinity,usedThisMonth=0}={}) {
+function fixture({infoStatus=200,quotaStatus=200,quotaBody=null,onSend=null,lineMessage='',validate=false,status=200,accepted=false,expired=false,revoked=false,recovery=false,personal=false,foreign=false,quotaLeft=Infinity,usedThisMonth=0}={}) {
   const records={config:{app:{selfFriendId:'self'}},events:{event:{date:expired?'2020-01-01':'2099-01-01',time:'12:00',kind:'plan',title:'テストの予定',sends:[{id:'send',friendIds:['self'],at:'2020-01-01T10:00',status:'wait'}],nextSendAt:'2020-01-01T10:00'}},friends:{self:{status:revoked?'pending':'joined',lineUserId:'U'+'a'.repeat(32)},other:{status:'joined',lineUserId:'U'+'b'.repeat(32)}}};
   records.personalEvents={}; records.personalFriends={}; records.lineUsage={}; records.lineQuota={}; records.sendLedger={};
   const month=new Date(Date.now()+9*3600000).toISOString().slice(0,7).replace('-','');if(usedThisMonth)records.lineUsage[month+'_owner-A']={ownerUid:'owner-A',count:usedThisMonth};
@@ -58,9 +58,15 @@ function fixture({onSend=null,lineMessage='',validate=false,status=200,accepted=
   const statuses=Array.isArray(status)?status:[status]; let multicasts=0;
   const exports={};
   const context={exports,module:{exports},require:name=>name==='firebase-admin'?{initializeApp:()=>{},credential:{cert:x=>x},firestore:()=>db}:name==='./service-account.cjs'?{parseServiceAccount}:require(name),Date,AbortSignal,console:{log:()=>{},error:()=>{}},process:{env:{FIREBASE_SERVICE_ACCOUNT:json,LINE_CHANNEL_ACCESS_TOKEN:'fake-test-token',VALIDATE_ONLY:String(validate),...(recovery?{RECOVER_SELF_AT:'2020-01-01T10:00'}:{})}},fetch:async(url,options)=>{
-    if(/\/message\/quota/.test(url))return url.endsWith('/consumption')?{ok:true,json:async()=>({totalUsage:Number.isFinite(quotaLeft)?200-quotaLeft:0})}:{ok:true,json:async()=>(Number.isFinite(quotaLeft)?{type:'limited',value:200}:{type:'none'})};
+    if(/\/message\/quota/.test(url)){
+      const qs=typeof quotaStatus==='function'?quotaStatus():quotaStatus;
+      if(qs==='timeout')throw new DOMException('timeout','TimeoutError');
+      if(qs!==200)return {ok:false,status:qs,json:async()=>({})};
+      if(quotaBody)return {ok:true,json:async()=>quotaBody(url)};
+      return url.endsWith('/consumption')?{ok:true,json:async()=>({totalUsage:Number.isFinite(quotaLeft)?200-quotaLeft:0})}:{ok:true,json:async()=>(Number.isFinite(quotaLeft)?{type:'limited',value:200}:{type:'none'})};
+    }
     calls.push({url,options});
-    if(url.endsWith('/info'))return {ok:true,json:async()=>({basicId:'@626hnkgo'})};
+    if(url.endsWith('/info')){const is=typeof infoStatus==='function'?infoStatus():infoStatus;return is===200?{ok:true,json:async()=>({basicId:'@626hnkgo'})}:{ok:false,status:is,json:async()=>({})};}
     const st=statuses[Math.min(multicasts++,statuses.length-1)];
     if(onSend)await onSend(records);
     if(st==='network')throw new TypeError('fetch failed');
@@ -317,7 +323,7 @@ test('③ a reservation made last month is returned to last month, not this mont
 const PREV='202001';
 // 1回目の試行を「前月」に起きたことにする（台帳の確保・個人の数・予約枠を前月へ移す）
 function toLastMonth(f,{prevUsed=1}={}){
-  const l=f.ledger();l.holds=(l.holds||[]).map(h=>({...h,month:PREV}));l.month=PREV;l.leaseUntil=0;
+  const l=f.ledger();l.holds=(l.holds||[]).map(h=>({...h,month:PREV}));l.tries=(l.tries||[]).map(t=>({...t,month:PREV}));l.month=PREV;l.leaseUntil=0;
   const cur=f.month+'_'+P;f.records.lineUsage[PREV+'_'+P]={ownerUid:P,month:PREV,count:prevUsed};delete f.records.lineUsage[cur];
   f.records.lineQuota['hold_'+PREV]={month:PREV,count:f.hold(),sent:0};delete f.records.lineQuota['hold_'+f.month];
 }
@@ -381,4 +387,104 @@ test('取り消しの結果：アプリ通知だけ送信済みなら隠さず�
   // 送信中に取り消し → LINEは受け付け済み（間に合わない）
   f=fixture({personal:true,onSend:r=>{r.personalEvents.event.sendCancels=['send'];}});await run(f);
   s=item(f);assert.equal(s.status,'sent');assert.equal(s.cancelDone,true);assert.equal(s.lineResult,'sent');
+});
+
+
+/* ===== 2026-10-10 再審査（c621a01）の再現テスト ===== */
+const HOUR=3600000;
+async function at(ms,fn){const real=Date.now;Date.now=()=>ms;try{return await fn();}finally{Date.now=real;}}
+const bodies=f=>f.calls.filter(x=>x.url.endsWith('/multicast')).map(x=>JSON.parse(x.options.body));
+const keys=f=>f.calls.filter(x=>x.url.endsWith('/multicast')).map(x=>x.options.headers['X-Line-Retry-Key']);
+
+test('R1 結果不明のまま24時間を過ぎた通知は、再送しない（期限直前は確かめる・旧台帳は推測で再送しない）',async()=>{
+  const t0=Date.now();
+  // 期限超過：通信断 → 停止 → 25時間後に再開
+  let f=fixture({personal:true,status:['network',200]});
+  await at(t0,()=>run(f));assert.equal(f.multicastCount(),1);
+  f.expireLease();await at(t0+25*HOUR,()=>run(f));
+  assert.equal(f.multicastCount(),1,'24時間を過ぎたら送信要求を出さない');assert.equal(item(f).lineResult,'unknown');assert.equal(item(f).status,'fail');assert.equal(f.usage(),1,'不明分は返さない');
+  // 期限到達（ちょうど24時間）も送らない
+  f=fixture({personal:true,status:['network',200]});await at(t0,()=>run(f));f.expireLease();await at(t0+24*HOUR,()=>run(f));assert.equal(f.multicastCount(),1);
+  // 期限直前（23時間）は同じキーで確かめる
+  f=fixture({personal:true,status:['network',409]});await at(t0,()=>run(f));f.expireLease();await at(t0+23*HOUR,()=>run(f));
+  assert.equal(f.multicastCount(),2);assert.equal(new Set(keys(f)).size,1,'同じ再送キー');assert.equal(item(f).status,'sent');
+  // 停止後の再開：送る直前で止まった（inflight）→ 期限を過ぎていたら送らない
+  f=fixture({personal:true,status:[200]});
+  await at(t0,()=>run(f));const l=f.ledger();Object.assign(l,{lineState:'held',lineInflight:true,lineUnsure:false,leaseUntil:0,holds:[{month:f.month,count:1}]});
+  ev(f).sends[0]={...item(f),status:'wait'};ev(f).nextSendAt=item(f).at;const before=f.multicastCount();
+  await at((l.firstSentMs||t0)+25*HOUR,()=>run(f));assert.equal(f.multicastCount(),before,'停止後の再開でも期限後は送らない');assert.equal(item(f).lineResult,'unknown');
+  // 旧台帳（初回送信時刻なし）で結果不明：推測した時刻で再送しない
+  f=fixture({personal:true,status:['network',200]});await run(f);delete f.ledger().firstSentMs;delete f.ledger().tries;f.ledger().lineUnsure=true;f.expireLease();
+  await run(f);assert.equal(f.multicastCount(),1,'旧台帳の不明分は再送しない');assert.equal(item(f).lineResult,'unknown');
+});
+
+test('R2 受付月が分からない409では、どの月の確保も返さない（不明分を少なく数えない）',async()=>{
+  // 前月：不明 → 今月：仮確保して再確認、その返事も不明 → 次の再確認で409
+  let f=fixture({personal:true,status:['network','network',409]});await run(f);toLastMonth(f);useThisMonth(f,5);
+  f.ledger().firstSentMs=Date.now()-HOUR;
+  await run(f);assert.equal(item(f).status,'wait');assert.equal(prevUsage(f),1);assert.equal(curUsage(f),6);
+  f.expireLease();await run(f);
+  assert.equal(item(f).status,'sent');assert.equal(prevUsage(f),1,'前月分は返さない');assert.equal(curUsage(f),6,'今月分も返さない（どちらで受け付けたか分からない）');
+  assert.equal(f.hold(),0);assert.equal(prevHold(f),0,'予約枠は外す');
+  // 前月：不明 → 今月：200（今回受け付け）→ 前月は届いていない
+  f=fixture({personal:true,status:['network',200]});await run(f);toLastMonth(f);useThisMonth(f,5);f.ledger().firstSentMs=Date.now()-HOUR;
+  await run(f);assert.equal(prevUsage(f),0);assert.equal(curUsage(f),6);
+  // 前月：不明 → 今月：不明 → 取り消し：どちらも返さない
+  f=fixture({personal:true,status:['network','network']});await run(f);toLastMonth(f);useThisMonth(f,5);f.ledger().firstSentMs=Date.now()-HOUR;
+  await run(f);ev(f).sendCancels=['send'];f.expireLease();await run(f);
+  assert.equal(prevUsage(f),1);assert.equal(curUsage(f),6);assert.equal(f.hold(),0);assert.equal(prevHold(f),0);
+  // 期限切れ（予定の日時を過ぎた）：どちらも返さない
+  f=fixture({personal:true,status:['network','network']});await run(f);toLastMonth(f);useThisMonth(f,5);f.ledger().firstSentMs=Date.now()-HOUR;
+  await run(f);ev(f).date='2020-01-01';f.expireLease();await run(f);
+  assert.equal(prevUsage(f),1);assert.equal(curUsage(f),6);assert.equal(f.hold(),0);
+  // 同時実行：送信要求は1回だけ
+  f=fixture({personal:true,status:['network',409]});await run(f);toLastMonth(f);useThisMonth(f,5);f.ledger().firstSentMs=Date.now()-HOUR;
+  await Promise.all([run(f),run(f),run(f)]);assert.equal(f.multicastCount(),2);assert.equal(prevUsage(f),1);assert.equal(curUsage(f),5,'前月だけで試したなら前月の分');
+});
+
+test('R3 再送は初回と同じ本文・同じ宛先（予定を直しても、同じキーで別の内容を送らない）',async()=>{
+  const f=fixture({personal:true,status:[500,200]});
+  f.records.personalFriends.other={ownerUid:'owner-A',status:'joined',lineUserId:'U'+'c'.repeat(32)};
+  await run(f);
+  // 再送の前に、題名・メモ・日付・場所・送信先を変える
+  Object.assign(ev(f),{title:'変えた題名',memo:'変えたメモ',date:'2099-02-02',place:'変えた場所'});item(f).friendIds=['self','other'];
+  f.records.personalFriends.self.lineUserId='U'+'d'.repeat(32);
+  f.expireLease();await run(f);
+  const b=bodies(f);assert.equal(b.length,1,'宛先の登録が変わったら、同じキーでは送らない');
+  // 宛先の登録はそのまま・本文だけ変わった場合
+  const g=fixture({personal:true,status:[500,200]});await run(g);
+  Object.assign(ev(g),{title:'変えた題名',memo:'変えたメモ',date:'2099-02-02',place:'変えた場所'});g.expireLease();await run(g);
+  const gb=bodies(g);assert.equal(gb.length,2);assert.deepEqual(gb[1],gb[0],'2回目も初回と同じ本文・宛先');assert.equal(new Set(keys(g)).size,1);
+  assert.doesNotMatch(gb[1].messages[0].text,/変えた/);
+  assert.equal(g.ledger().linePayload,null,'送り終えたら本文・宛先の控えは消す');
+});
+
+test('R4 全体の残りが分からないときは、LINEを送らずに保留（アプリ通知は送る）',async()=>{
+  for(const qs of [503,'timeout']){
+    const f=fixture({personal:true,quotaStatus:qs});item(f).friendIds=['push:self','self'];let pushes=0;
+    await run(f,{push:async()=>{pushes++;return 1;}});
+    assert.equal(f.multicastCount(),0,String(qs)+'：残りが分からないので送らない');assert.equal(pushes,1,'アプリ通知は送る');
+    assert.equal(item(f).status,'wait');assert.equal(item(f).lineResult,'retry');assert.equal(f.usage(),undefined,'通数を数えない');
+  }
+  // 不正な応答
+  let f=fixture({personal:true,quotaBody:url=>url.endsWith('/consumption')?{totalUsage:'abc'}:{type:'limited',value:'x'}});
+  await run(f);assert.equal(f.multicastCount(),0);assert.equal(item(f).status,'wait');
+  // 回復したら送る
+  let ok=false;f=fixture({personal:true,quotaStatus:()=>ok?200:503});await run(f);assert.equal(f.multicastCount(),0);
+  ok=true;f.expireLease();await run(f);assert.equal(f.multicastCount(),1);assert.equal(item(f).status,'sent');assert.equal(f.usage(),1);
+  // 保留中に取り消し → 取り消し完了（数えていない）
+  f=fixture({personal:true,quotaStatus:503});await run(f);ev(f).sendCancels=['send'];f.expireLease();await run(f);
+  assert.equal(item(f).status,'cancelled');assert.equal(f.multicastCount(),0);assert.equal(f.usage(),undefined);
+});
+
+test('R5 LINEの接続確認が失敗しても、アプリ通知は送る（LINEはあとで）',async()=>{
+  let f=fixture({personal:true,infoStatus:503});item(f).friendIds=['push:self'];let pushes=0;
+  await run(f,{push:async()=>{pushes++;return 1;}});assert.equal(pushes,1);assert.equal(item(f).status,'sent');
+  f=fixture({personal:true,infoStatus:503});item(f).friendIds=['push:self','self'];pushes=0;
+  await run(f,{push:async()=>{pushes++;return 1;}});
+  assert.equal(pushes,1);assert.equal(f.multicastCount(),0);assert.equal(item(f).status,'wait');assert.equal(item(f).pushResult,'ok');
+  // LINEが戻ったら、LINEだけ送る（アプリ通知は重ねない）
+  let up=false;f=fixture({personal:true,infoStatus:()=>up?200:503});item(f).friendIds=['push:self','self'];pushes=0;
+  await run(f,{push:async()=>{pushes++;return 1;}});up=true;f.expireLease();await run(f,{push:async()=>{pushes++;return 1;}});
+  assert.equal(pushes,1);assert.equal(f.multicastCount(),1);assert.equal(item(f).status,'sent');
 });

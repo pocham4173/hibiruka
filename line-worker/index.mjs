@@ -30,7 +30,7 @@ export async function tick(env,controller){
     const token=await googleToken(env.FIREBASE_SERVICE_ACCOUNT);
     db=firestore(token);
     const result=await engine.runSender({db,token:env.LINE_CHANNEL_ACCESS_TOKEN,validateOnly:!enabled,maxSends:2,push:(uid,msg)=>pushToOwner(db,uid,msg)});
-    await db.heartbeat({checkedAt:new Date(),scheduledAt:new Date(controller.scheduledTime),enabled,ok:true,version:env.WORKER_VERSION||'unknown',sent:result?.sent||0,failed:result?.failed||0});
+    await db.heartbeat({checkedAt:new Date(),scheduledAt:new Date(controller.scheduledTime),enabled,ok:true,lineOk:result?.lineOk!==false,version:env.WORKER_VERSION||'unknown',sent:result?.sent||0,failed:result?.failed||0});
   }catch{
     // Never log credentials, names, message bodies, or Firebase response bodies.
     console.error('Hibiruka scheduler failed; check credentials, service status and limits.');

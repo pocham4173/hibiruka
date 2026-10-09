@@ -120,7 +120,7 @@ test('また行きたい shows the wish list and ♥ places as cards with map an
   assert.equal(intro.contents.contents.length,3);assert.match(intro.contents.contents[0].hero.url,/guide\/img\/line-wish-1\.jpg$/);assert.match(JSON.stringify(intro),/おでかけコース/);
   for(const c of intro.contents.contents)assert.ok(c.footer.contents[0].action.label.length<=20);
   const cards=flex.contents.contents;assert.equal(cards.length,3);
-  assert.equal(cards[0].hero.url,'https://img.example/a.jpg');assert.match(JSON.stringify(cards[0]),/📌 行きたいリスト.*森のカフェ/);
+  assert.equal(cards[0].hero.url,'https://img.example/a.jpg');assert.match(JSON.stringify(cards[0].body),/画像提供：ホットペッパー グルメ/,'保存した写真には画像の提供元を出す');assert.match(JSON.stringify(cards[0]),/📌 行きたいリスト.*森のカフェ/);
   assert.equal(cards[0].footer.contents[0].action.uri,'https://www.google.com/maps/search/?api=1&query=36.400000,138.250000');
   assert.match(JSON.stringify(cards[1]),/♥ また行きたい.*上田城跡公園/);assert.match(cards[2].footer.contents[0].action.uri,/guide\/#wish$/);
   assert.doesNotMatch(list.text,/行った所/);

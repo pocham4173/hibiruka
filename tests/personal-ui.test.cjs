@@ -1203,3 +1203,51 @@ test('楽天トラベル「行き先の宿を探す」：探す画面に出た�
  assert.ok(sets().every(([,p])=>/^routeStats\/rk_stay_\d{8}$/.test(p)));
  }finally{a.close();}
 });
+
+/* ===== 2026-10-10 再審査（c621a01）：予定の削除と行きたいリスト／保存した写真の提供元 ===== */
+test('R6 行きたいリストから作った予定を消すと、リストも同じ保存で「行きたい」に戻る（別の訪問実績があれば「行った」）',async()=>{
+ const a=app();try{await a.w.h.startOwner();const w=a.w;w.confirm=()=>true;
+ const plan={id:'p1',kind:'plan',date:nextWeek(),title:'カフェ',place:'森のカフェ',cat:'食事'};
+ const wish={id:'w1',kind:'wish',status:'scheduled',planId:'p1',place:'森のカフェ',cat:'食事'};
+ const put=(evs,ws)=>{for(const x of [...evs,...ws])a.data.set('personalEvents/'+x.id,{...x,ownerUid:'A'});w.h.setEvents(evs);w.h.setWishes(ws.map(x=>({...x})));};
+ put([plan],[wish]);await w.deleteRecord('p1');
+ let d=a.data.get('personalEvents/w1');assert.equal(a.data.has('personalEvents/p1'),false);assert.equal(d.status,'wished');assert.equal(d.planId,'__delete__');
+ // 同じ場所に別の「行った」記録がある
+ put([plan,{id:'m9',kind:'memory',date:'2025-05-01',place:'森のカフェ',cat:'食事'}],[wish]);await w.deleteRecord('p1');
+ assert.equal(a.data.get('personalEvents/w1').status,'visited');
+ // 保存に失敗：予定もリストも変わらない → もう一度で両方
+ put([plan],[wish]);a.db.failCommit=true;await w.deleteRecord('p1');
+ assert.equal(a.data.has('personalEvents/p1'),true);assert.equal(a.data.get('personalEvents/w1').status,'scheduled');
+ await w.deleteRecord('p1');assert.equal(a.data.has('personalEvents/p1'),false);assert.equal(a.data.get('personalEvents/w1').status,'wished');
+ }finally{a.close();}
+});
+test('R6 すでに食い違っている記録（消えた予定を指す「予定あり」）は、全部読み終わってから直す。読み込み中は直さない',async()=>{
+ const a=app({delayed:true});try{await a.w.h.startOwner();const w=a.w;
+ const wish={id:'w2',kind:'wish',status:'scheduled',planId:'gone',place:'駅前の店',cat:'食事'};
+ a.data.set('personalEvents/w2',{...wish,ownerUid:'A'});
+ // 端末の控えだけ（読み込み途中）：直さない
+ a.db.recordsCallback({docs:[{id:'w2',data:()=>({...wish})}],metadata:{fromCache:true}});await tick();
+ assert.equal(a.data.get('personalEvents/w2').status,'scheduled','読み込み途中は予定の削除とみなさない');
+ // サーバーから読み終わった：消えた予定として直す
+ a.db.recordsCallback({docs:[{id:'w2',data:()=>({...wish})}],metadata:{fromCache:false}});await tick();
+ assert.equal(a.data.get('personalEvents/w2').status,'wished');assert.equal(a.data.get('personalEvents/w2').planId,'__delete__');
+ }finally{a.close();}
+});
+test('R7 行きたいリストに保存したホットペッパーの写真は、検索結果がなくても「画像提供」を出す',async()=>{
+ const a=app();try{await a.w.h.startOwner();const w=a.w,d=a.d;
+ // 検索結果から保存 → 出典を一緒に残す
+ await w.addWish({id:'hp:J9',name:'森のごはん',lat:36.4,lng:138.2,photo:'https://imgfp.hotp.jp/x.jpg',website:'https://www.hotpepper.jp/strJ9/',source:'hp',catKeys:['食事']});
+ const saved=[...a.data.values()].find(v=>v.placeId==='hp:J9');assert.equal(saved.imageSource,'hp');assert.equal(saved.infoSource,'hp');
+ // 開き直したあと（検索結果なし）に、保存済みのリストだけを表示
+ d.getElementById('findResults').innerHTML='';
+ w.h.setWishes([{id:'w1',...saved}]);w.renderWishes();
+ assert.match(d.getElementById('wishList').textContent,/【画像提供：ホットペッパー グルメ】/);assert.match(d.getElementById('wishList').textContent,/Powered by ホットペッパーグルメ Webサービス/);
+ assert.doesNotMatch(d.getElementById('wishList').textContent,/\bPR\b/,'広告の表示とは別');
+ // 以前の版で保存した写真（出典の記録なし）：ホットペッパーの検索結果からしか保存できなかったので同じ表示
+ w.h.setWishes([{id:'w2',kind:'wish',status:'wished',place:'前の店',imageUrl:'https://imgfp.hotp.jp/y.jpg'}]);w.renderWishes();
+ assert.match(d.getElementById('wishList').textContent,/画像提供：ホットペッパー グルメ/);
+ // 写真がないものだけなら出さない
+ w.h.setWishes([{id:'w3',kind:'wish',status:'wished',place:'写真なし'}]);w.renderWishes();
+ assert.doesNotMatch(d.getElementById('wishList').textContent,/画像提供/);
+ }finally{a.close();}
+});

@@ -194,12 +194,15 @@ async function listToday(db, owner, now) {
 const mapLink = e => Number.isFinite(e.lat) && Number.isFinite(e.lng) ? `https://www.google.com/maps/search/?api=1&query=${(+e.lat).toFixed(6)},${(+e.lng).toFixed(6)}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(e.place || e.title || '')}`;
 function placeCard(e, badge) {
   const img = /^https:\/\//.test(e.imageUrl || '') ? e.imageUrl : '';
+  // ホットペッパーの写真には「画像提供」を出す（以前の版の写真も、ホットペッパーの検索結果からしか保存できなかった）
+  const hpPhoto = img && (e.imageSource === 'hp' || e.imageSource === undefined);
   return {type: 'bubble', size: 'kilo',
     ...(img ? {hero: {type: 'image', url: img, size: 'full', aspectRatio: '20:13', aspectMode: 'cover'}} : {}),
     body: {type: 'box', layout: 'vertical', spacing: 'sm', contents: [
       {type: 'text', text: badge, size: 'xs', color: '#ad4564', weight: 'bold'},
       {type: 'text', text: clip(shortAddress(e.place) || e.title || '場所', 40), weight: 'bold', size: 'md', wrap: true},
       ...(e.genre || e.cat ? [{type: 'text', text: clip(e.genre || e.cat, 30), size: 'xs', color: '#888888'}] : []),
+      ...(hpPhoto ? [{type: 'text', text: '画像提供：ホットペッパー グルメ', size: 'xxs', color: '#999999'}] : []),
     ]},
     footer: {type: 'box', layout: 'vertical', spacing: 'sm', contents: [
       {type: 'button', style: 'primary', color: '#1f2d4a', height: 'sm', action: {type: 'uri', label: '🗺 地図で見る', uri: mapLink(e)}},
@@ -225,7 +228,7 @@ async function listFavorites(db, owner) {
   const base = () => { let q = db.collection(eventsOf(owner.scope)); if (owner.scope === 'personal') q = q.where('ownerUid', '==', owner.uid); return q; };
   const [fav, wish] = await Promise.all([
     base().where('fav', '==', true).select('place', 'title', 'cat', 'lat', 'lng').limit(40).get(),
-    base().where('kind', '==', 'wish').select('place', 'title', 'genre', 'lat', 'lng', 'imageUrl', 'status').limit(40).get().catch(() => ({docs: []})),
+    base().where('kind', '==', 'wish').select('place', 'title', 'genre', 'lat', 'lng', 'imageUrl', 'imageSource', 'status').limit(40).get().catch(() => ({docs: []})),
   ]);
   const favs = fav.docs.map(d => d.data()), wishes = wish.docs.map(d => d.data()).filter(w => w.status !== 'visited');
   if (!favs.length && !wishes.length) return [text('「また行きたい」はまだありません。\n・行った思い出に ♥ を付ける\n・アプリの「探す」で「📌 ここ行きたい！」を押す\nと、ここに集まります。\n\n📖 使い方\n' + GUIDE_URL + '#wish')];
