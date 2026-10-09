@@ -608,7 +608,7 @@ test('free-tier safety: monthly LINE allowance per person, 2 photos per record, 
   assert.match(quotaGone,/LINE：送れませんでした・アプリ通知：送信済み/);assert.match(quotaGone,/全体の今月/);
   for(const row of [quotaGone,a.w.sendRows({sends:[{id:'q',at:'2099-01-01T09:00',status:'sent',friendIds:['push:self']}]})])assert.doesNotMatch(row,/届きました|届いた/);
   assert.match(a.w.sendRows({sends:[{id:'q',at:'2099-01-01T09:00',status:'wait',pushResult:'ok',lineResult:'retry',friendIds:['push:self','self']}]}),/LINE：再試行中・アプリ通知：送信済み/);
-  assert.match(a.w.sendRows({sendCancels:['q'],sends:[{id:'q',at:'2099-01-01T09:00',status:'wait',friendIds:['self']}]}),/取り消しました/,'取り消しはすぐ画面に出る');
+  assert.match(a.w.sendRows({sendCancels:['q'],sends:[{id:'q',at:'2099-01-01T09:00',status:'wait',friendIds:['self']}]}),/取り消しを受け付けました（確認中）/,'申し出はすぐ画面に出る（まだ「取り消しました」とは言わない）');
   assert.doesNotMatch(a.w.sendRows({sendCancels:['q'],sends:[{id:'q',at:'2099-01-01T09:00',status:'wait',friendIds:['self']}]}),/data-cancel/);
   a.w.renderPhotos();assert.match(d.getElementById('phCount').textContent,/^0\/2枚/);
   for(const id of ['pairView','tab-set','firstRecordGuide'])assert.match(d.getElementById(id).textContent,/ご利用上の注意（免責事項）[\s\S]*個人が無料で提供[\s\S]*一切の責任を負いかねます/,id);
@@ -1081,5 +1081,69 @@ test('⑥ explanations match the behaviour; form fields have labels; dialogs mov
   const sheet=d.querySelector('#detailSheet .sheet');assert.equal(sheet.getAttribute('role'),'dialog');assert.ok(sheet.contains(d.activeElement),'開いたら中へ');
   d.dispatchEvent(new a.w.KeyboardEvent('keydown',{key:'Escape'}));await tick();
   assert.ok(d.getElementById('detailSheet').classList.contains('hidden'),'Escで閉じる');assert.equal(d.activeElement,opener,'閉じたら元のボタンへ');
+ }finally{a.close();}
+});
+
+test('取り消しの表示：受付→サーバー確認後の結果（取消完了・間に合わず送信済み・不明）を手段ごとに',async()=>{
+ const a=app();try{await a.w.h.startOwner();const w=a.w,at='2099-01-01T09:00',both=['push:self','self'];
+ const row=(x,cancels=[])=>w.sendRows({sendCancels:cancels,sends:[{id:'q',at,friendIds:both,...x}]});
+ // 受付直後：アプリ通知はもう送信済み → それを隠さない
+ let r=row({status:'wait',pushResult:'ok',lineResult:'retry'},['q']);
+ assert.match(r,/取り消しを受け付けました（確認中）/);assert.match(r,/アプリ通知：送信済み/);assert.doesNotMatch(r,/取り消しました|data-cancel/);
+ // 確認後：両方止められた
+ r=row({status:'cancelled',cancelDone:true,lineResult:'cancelled',pushResult:'cancelled'});assert.match(r,/取り消しました/);
+ // 確認後：アプリ通知は送信済み・LINEは取り消し済み
+ r=row({status:'partial',cancelDone:true,lineResult:'cancelled',pushResult:'ok'});
+ assert.match(r,/取り消しが間に合わなかった分があります/);assert.match(r,/LINE：取り消し済み・アプリ通知：送信済み/);
+ // 確認後：送信と競合して、LINEは受け付け済みだった
+ r=row({status:'sent',cancelDone:true,lineResult:'sent',pushResult:'ok'});assert.match(r,/間に合わなかった/);assert.match(r,/LINE：送信済み/);
+ // 確認後：LINEは送れたか不明
+ r=row({status:'cancelled',cancelDone:true,lineResult:'unknown',pushResult:'cancelled'});assert.match(r,/取り消しました/);assert.match(r,/LINE：送れたか不明/);
+ for(const x of [r,row({status:'partial',lineResult:'quota_all',pushResult:'ok'})])assert.doesNotMatch(x,/届きました|届いた/);
+ // 通信失敗：申し出は保存されず、そう伝える
+ const id='personalEvents/p1',plan={id:'p1',date:'2099-10-06',title:'遊び'};
+ a.data.set(id,{...plan,ownerUid:'A',sends:[{id:'q',at,status:'wait',friendIds:['self']}]});w.h.setEvents([{...plan,...a.data.get(id)}]);
+ w.confirm=()=>true;const real=a.db.runTransaction;a.db.runTransaction=async()=>{throw new Error('offline');};
+ await w.cancelSend('p1','q');a.db.runTransaction=real;
+ assert.equal(a.data.get(id).sendCancels,undefined);assert.match(a.d.getElementById('toast')?.textContent||a.d.body.textContent,/取り消せませんでした/);
+ await w.cancelSend('p1','q');assert.equal(a.data.get(id).sendCancels.length,1);assert.match(a.d.body.textContent,/取り消しを受け付けました/);
+ }finally{a.close();}
+});
+
+/* ===== 2026-10-09 お店の予定 → そのお店のページ（導線と計測） ===== */
+test('お店から入れた予定：開くとそのお店のページへ進める（予約するとは書かない）。表示と押下を1回ずつだけ数える',async()=>{
+ const a=app();try{await a.w.h.startOwner();const w=a.w,d=a.d;
+ const shop={id:'J001',name:'森のパスタ',lat:36.4,lng:138.25,website:'https://www.hotpepper.jp/strJ001234567/',couponUrl:'https://www.hotpepper.jp/strJ001234567/map/',coupon:false,source:'hp',catKeys:['食事']};
+ w.planFromSpot(shop);d.querySelector('#catPills [data-cat]').click();d.getElementById('fDate').value=nextWeek();d.getElementById('fDate').oninput();
+ await w.h.saveRecord();
+ const [path,saved]=[...a.data].find(([k,v])=>k.startsWith('personalEvents/')&&v.place==='森のパスタ');
+ assert.equal(saved.shop.url,shop.website);assert.equal(saved.shop.src,'hp');
+ const id=path.split('/')[1];w.h.setEvents([{id,...saved}]);
+ await w.openDetail(id);
+ const btn=d.getElementById('dShop');assert.ok(btn);assert.equal(btn.getAttribute('href'),shop.website,'承認前は普通のリンク');assert.equal(btn.target,'_blank');
+ assert.doesNotMatch(btn.textContent,/予約する|PR/);assert.match(d.getElementById('detailBody').textContent,/外部サイトが開きます。空席・ネット予約ができるか/);
+ const stats=()=>a.calls.filter(([op,p])=>op==='set'&&p.startsWith('routeStats/'));
+ assert.equal(stats().length,1,'表示を1回数える');
+ const day=new Date();const key=`routeStats/hp_plan_${ymdLocal(day).replaceAll('-','')}`;
+ assert.deepEqual(Object.keys(a.data.get(key)).sort(),['day','route','shown'],'個人を表す情報は送らない');
+ w.closeSheets();await w.openDetail(id);await w.openDetail(id);assert.equal(stats().length,1,'同じ日・同じ予定の再表示は数えない');
+ d.getElementById('dShop').dispatchEvent(new w.MouseEvent('click',{cancelable:true}));d.getElementById('dShop').dispatchEvent(new w.MouseEvent('click',{cancelable:true}));
+ assert.equal(stats().length,2,'押下も1回だけ');assert.ok('clicks' in a.data.get(key));
+ // 承認後（vcOn）は広告リンクになり、PRと sponsored を付ける
+ w.h.config.affiliate.vcOn=true;await w.openDetail(id);
+ const ad=d.getElementById('dShop');assert.match(ad.href,/^https:\/\/ck\.jp\.ap\.valuecommerce\.com\//);assert.match(ad.textContent,/PR/);assert.match(ad.rel,/sponsored/);
+ w.h.config.affiliate.vcOn=false;
+ // 場所を別の名前に直したら、お店のページは外す（別の店へ案内しない）
+ await w.h.editRecord(id);d.getElementById('fPlace').value='駅前の別の店';await w.h.saveRecord();assert.equal(a.data.get(path).shop,'__delete__');
+ }finally{a.close();}
+});
+test('お店のページは、先の予定だけ・ホットペッパーのお店のページだけ',async()=>{
+ const a=app();try{await a.w.h.startOwner();const w=a.w,d=a.d,yd=yesterday();
+ const hp={src:'hp',url:'https://www.hotpepper.jp/strJ001234567/',name:'森のパスタ'};
+ w.h.setEvents([{id:'m1',kind:'memory',date:yd,place:'森のパスタ',shop:hp,cat:'食事'},{id:'x1',kind:'plan',date:nextWeek(),place:'森のパスタ',shop:{...hp,url:'https://www.hotpepper.jp/strJ001234567/coupon/'},cat:'食事'},{id:'x2',kind:'plan',date:nextWeek(),place:'どこか',shop:{src:'hp',url:'https://evil.example/',name:'どこか'},cat:'食事'}]);
+ for(const id of ['m1','x1','x2']){await w.openDetail(id);assert.equal(d.getElementById('dShop'),null,id);}
+ assert.equal(a.calls.filter(([op,p])=>op==='set'&&p.startsWith('routeStats/')).length,0,'出していないものは数えない');
+ // お店のクーポンがないときに「予約」と書いたボタンを出さない
+ assert.doesNotMatch(w.spotCard({id:'J',name:'店',source:'hp',website:hp.url,couponUrl:'https://www.hotpepper.jp/strJ001234567/map/',coupon:false},0),/予約/);
  }finally{a.close();}
 });

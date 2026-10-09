@@ -81,6 +81,16 @@
     match /lineQuota/{id} {
       allow get: if request.auth != null;
     }
+    // 導線の計測（2026-10-09）：日ごとの合計だけ。1回に1つ増やすことだけができ、だれも読めない（集計はサーバー側で読む）
+    match /routeStats/{id} {
+      allow create: if request.auth != null && id.matches('^hp_plan_[0-9]{8}$')
+        && request.resource.data.route + '_' + request.resource.data.day == id
+        && ((request.resource.data.keys().hasOnly(['route', 'day', 'shown']) && request.resource.data.shown == 1)
+          || (request.resource.data.keys().hasOnly(['route', 'day', 'clicks']) && request.resource.data.clicks == 1));
+      allow update: if request.auth != null
+        && ((request.resource.data.diff(resource.data).affectedKeys().hasOnly(['shown']) && request.resource.data.shown == resource.data.get('shown', 0) + 1)
+          || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['clicks']) && request.resource.data.clicks == resource.data.get('clicks', 0) + 1));
+    }
     // sendLedger（送信台帳：確保した通数・処理中の印・手段ごとの結果）はサーバー専用。ここに許可を書かない＝だれも読み書きできない。
     // LINE連携（2026-10）: アプリで作る使い捨て番号と、連携状態の確認・解除。
     // lineAccounts（LINEの人→持ち主）はサーバー専用で、利用者は読み書きできない。

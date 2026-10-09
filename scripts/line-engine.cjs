@@ -85,7 +85,7 @@ function newLedger({coll, eventId, sendId, ownerUid, item, isPersonal}) {
   const wantPush = isPersonal && (item.friendIds || []).includes(PUSH_SELF);
   return {
     v: 1, coll, eventId, sendId, ownerUid: typeof ownerUid === 'string' ? ownerUid : '',
-    month: '', lineState: wantLine ? 'todo' : 'off', lineReason: '', lineCount: 0, lineFriends: [], lineUnsure: false, lineInflight: false,
+    month: '', holds: [], lineState: wantLine ? 'todo' : 'off', lineReason: '', lineCount: 0, lineFriends: [], lineUnsure: false, lineInflight: false,
     // 以前の版で「アプリ通知は送信済み」になっていたものは、重ねて鳴らさない（偽っても本人の通知が止まるだけ）
     pushState: wantPush ? (item.pushResult === 'ok' ? 'ok' : 'todo') : 'off', pushTries: 0, pushInflight: false,
     attempts: 0, leaseUntil: 0, leaseToken: '', createdMs: Date.now(), updatedMs: Date.now()
@@ -93,14 +93,35 @@ function newLedger({coll, eventId, sendId, ownerUid, item, isPersonal}) {
 }
 const linePending = l => l.lineState === 'todo' || l.lineState === 'held';
 const pushPending = l => l.pushState === 'todo' || (l.pushState === 'fail' && l.pushTries < MAX_PUSH_TRIES);
-// 確保していた通数をどうするか。送ったか分からない分は返さない（個人の数は残し、アプリ内の予約枠だけ外す）
-function closeLine(l, reason, delta) {
+/* 確保の記録（holds）：どの月の枠から何通確保したか。月をまたいだ再確認では、今月分を「仮」に足す。
+   - refund（返す）：個人の数と予約枠を減らす（受け付けられていないと確定した分）
+   - confirm（使った）：個人の数は残し、予約枠から「確定」へ移す（受け付けられた分・受け付けられたかもしれない分） */
+function holdsOf(l) {
+  if (Array.isArray(l.holds)) return l.holds.map(h => ({...h}));
+  // PR #99 で作った台帳（holds がない）：月と数から読み替える
+  return l.lineState === 'held' && l.lineCount ? [{ month: l.month || monthKey(), count: l.lineCount }] : [];
+}
+const addDelta = (d, month, key, n) => { if (!n) return; d[month] ||= { usage: 0, hold: 0, sent: 0 }; d[month][key] += n; };
+const refundHold = (d, h) => { addDelta(d, h.month, 'usage', -h.count); addDelta(d, h.month, 'hold', -h.count); };
+const confirmHold = (d, h) => { addDelta(d, h.month, 'hold', -h.count); addDelta(d, h.month, 'sent', h.count); };
+// LINEを閉じる。送れたか分からない分は返さない（安全側）
+function closeLine(l, reason, d) {
   if (l.lineState === 'todo') { l.lineState = 'blocked'; l.lineReason = reason; }
   else if (l.lineState === 'held') {
-    // 届いたかもしれない分は、全体の残りの計算でも「使った」側に数えておく（安全側）
-    if (l.lineUnsure || l.lineInflight) { l.lineState = 'unknown'; l.lineReason = 'unknown'; delta.hold -= l.lineCount; delta.sent = (delta.sent || 0) + l.lineCount; }
-    else { l.lineState = 'returned'; l.lineReason = reason; delta.usage -= l.lineCount; delta.hold -= l.lineCount; }
+    const holds = holdsOf(l);
+    if (l.lineUnsure || l.lineInflight) { holds.forEach(h => confirmHold(d, h)); l.lineState = 'unknown'; l.lineReason = reason === 'cancelled' || reason === 'expired' ? reason : 'unknown'; }
+    else { holds.forEach(h => refundHold(d, h)); l.lineState = 'returned'; l.lineReason = reason; }
+    l.holds = [];
   }
+  l.lineInflight = false;
+}
+// 受け付けられた：今回の送信で受け付けられた（acceptedNow）なら今月の仮分を使う。前回分が受け付け済みだった（409）なら元の月を使う
+function acceptLine(l, d, acceptedNow) {
+  const holds = holdsOf(l), probe = holds.filter(h => h.probe), base = holds.filter(h => !h.probe);
+  const used = probe.length ? (acceptedNow ? probe : base) : holds;
+  holds.forEach(h => (used.includes(h) ? confirmHold : refundHold)(d, h));
+  l.month = used[0]?.month || l.month;
+  l.lineState = 'sent'; l.lineUnsure = false; l.lineInflight = false; l.lineReason = ''; l.holds = [];
 }
 function closePush(l) {
   if (l.pushInflight) { l.pushState = 'unknown'; l.pushInflight = false; }
@@ -114,7 +135,9 @@ function mirror(item, l, closedReason) {
   const pending = !closedReason && ((lineWanted && linePending(l)) || (pushWanted && pushPending(l)));
   out.lineResult = !lineWanted ? '' : l.lineState === 'sent' ? 'sent' : l.lineState === 'unknown' ? 'unknown'
     : ['returned', 'blocked'].includes(l.lineState) ? (l.lineReason || 'fail') : l.attempts > 0 && l.lineState === 'held' ? 'retry' : '';
-  out.pushResult = !pushWanted ? '' : l.pushState === 'ok' ? 'ok' : l.pushState === 'unknown' ? 'unknown' : l.pushState === 'fail' ? 'fail' : '';
+  out.pushResult = !pushWanted ? '' : l.pushState === 'ok' ? 'ok' : l.pushState === 'unknown' ? 'unknown' : l.pushState === 'fail' ? 'fail'
+    : l.pushState === 'skipped' && closedReason ? closedReason : '';
+  if (closedReason === 'cancelled') out.cancelDone = true; // サーバーが取り消しを確かめた印（画面の「確認中」を終える）
   const ok = (lineWanted && l.lineState === 'sent' ? 1 : 0) + (pushWanted && l.pushState === 'ok' ? 1 : 0);
   const wanted = (lineWanted ? 1 : 0) + (pushWanted ? 1 : 0);
   if (pending) out.status = 'wait';
@@ -122,29 +145,30 @@ function mirror(item, l, closedReason) {
   else out.status = ok === wanted ? 'sent' : ok > 0 ? 'partial' : 'fail';
   const lineText = { quota_all: TEXT.quota_all, quota_user: TEXT.quota_user, limit: TEXT.limit, nobody: TEXT.nobody, rejected: TEXT.rejected, busy: TEXT.busy, unknown: TEXT.unknown, expired: TEXT.expired, cancelled: TEXT.cancelled }[out.lineResult] || '';
   const pushText = out.pushResult === 'fail' && !pushPending(l) ? TEXT.pushFail : out.pushResult === 'unknown' ? TEXT.pushUnknown : '';
-  out.lineError = out.lineResult === 'sent' || out.lineResult === 'retry' ? '' : lineText;
+  out.lineError = ['sent', 'retry', 'cancelled'].includes(out.lineResult) ? '' : lineText;
   out.pushError = pushText;
-  if (out.status === 'cancelled') { out.lineError = out.lineResult === 'unknown' ? TEXT.unknown : ''; out.pushError = out.pushResult === 'unknown' ? TEXT.pushUnknown : ''; }
+  if (l.lineState === 'unknown') out.lineError = TEXT.unknown;
   out.error = out.status === 'cancelled' ? [TEXT.cancelled, out.lineError, out.pushError].filter(Boolean).join('\n')
     : [out.lineError, out.pushError].filter(Boolean).join('\n') || (closedReason === 'expired' && out.status !== 'sent' ? TEXT.expired : '');
   if (ok && !out.sentAt) out.sentAt = nowJst();
   return out;
 }
-// 個人の通数とアプリ内の予約枠を、同じトランザクションの中で増減する（読む→最後にまとめて書く）
-async function readCounters(tx, db, l, delta, isPersonal) {
-  const month = l.month || monthKey(), out = { month };
-  if (delta.usage && isPersonal && l.ownerUid) { out.uRef = usageRef(db, l.ownerUid, month); out.u = await tx.get(out.uRef); }
-  if (delta.hold || delta.sent) { out.hRef = holdRef(db, month); out.h = await tx.get(out.hRef); }
+// 個人の数・予約枠を月ごとに読む（トランザクションでは、書く前に全部読む）
+async function readCounters(tx, db, l, d, isPersonal, extraMonths = []) {
+  const out = {};
+  for (const month of new Set([...Object.keys(d), ...extraMonths])) {
+    const c = out[month] = { month };
+    if (isPersonal && l.ownerUid) { c.uRef = usageRef(db, l.ownerUid, month); c.u = await tx.get(c.uRef); }
+    c.hRef = holdRef(db, month); c.h = await tx.get(c.hRef);
+  }
   return out;
 }
-function writeCounters(tx, l, delta, c) {
-  if (c.uRef && delta.usage && (delta.usage > 0 || c.u.exists)) {
-    const cur = c.u.exists ? Number(c.u.data().count) || 0 : 0;
-    tx.set(c.uRef, { ownerUid: l.ownerUid, month: c.month, count: Math.max(0, cur + delta.usage), updatedAt: new Date() });
-  }
-  if (c.hRef && (delta.hold || delta.sent) && (delta.hold > 0 || delta.sent > 0 || c.h.exists)) {
-    const cur = c.h.exists ? c.h.data() : {};
-    tx.set(c.hRef, { month: c.month, count: Math.max(0, (Number(cur.count) || 0) + delta.hold), sent: Math.max(0, (Number(cur.sent) || 0) + (delta.sent || 0)), updatedAt: new Date() });
+const countOf = (snap, key = 'count') => snap?.exists ? Number(snap.data()[key]) || 0 : 0;
+function writeCounters(tx, l, d, cs) {
+  for (const [month, x] of Object.entries(d)) {
+    const c = cs[month]; if (!c) continue;
+    if (c.uRef && x.usage && (x.usage > 0 || c.u.exists)) tx.set(c.uRef, { ownerUid: l.ownerUid, month, count: Math.max(0, countOf(c.u) + x.usage), updatedAt: new Date() });
+    if ((x.hold || x.sent) && (x.hold > 0 || x.sent > 0 || c.h.exists)) tx.set(c.hRef, { month, count: Math.max(0, countOf(c.h) + x.hold), sent: Math.max(0, countOf(c.h, 'sent') + x.sent), updatedAt: new Date() });
   }
 }
 function writeItem(tx, ref, ev, id, next) {
@@ -232,26 +256,36 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
         // 前回が途中で止まっていた：アプリ通知は送ったか分からないので重ねて送らない。LINEは同じ再送キーで確かめ直す
         if (l.pushInflight) { l.pushState = 'unknown'; l.pushInflight = false; }
         if (l.lineInflight) { l.lineUnsure = true; l.lineInflight = false; }
-        const delta = { usage: 0, hold: 0 };
+        const d = {}, cur = monthKey();
         const closed = cancelsOf(ev).has(item.id) ? 'cancelled' : deadlinePassed(ev) ? 'expired' : '';
+        let reserve = 0, probe = false;
         if (closed) {
-          closeLine(l, closed, delta); closePush(l);
-        } else if (l.lineState === 'todo') {
-          if (!need) { l.lineState = 'blocked'; l.lineReason = 'nobody'; }
+          closeLine(l, closed, d); closePush(l);
+        } else if (l.lineState === 'held' && !holdsOf(l).some(h => h.month === cur)) {
+          // 月をまたいだ再送：その月の枠では送れない
+          if (!l.lineUnsure) {
+            // 前回は「受け付けられていない」と確定 → 前月の確保を返し、今月の枠で確保し直す（今月の上限を確かめる）
+            holdsOf(l).forEach(h => refundHold(d, h)); l.holds = []; l.lineState = 'todo'; l.lineCount = 0;
+          } else if (holdsOf(l).some(h => h.probe)) {
+            closeLine(l, 'unknown', d); // 仮分を足したあと、さらに月が変わった：これ以上は確かめない
+          } else probe = true; // 前回の結果が不明 → 同じ再送キーで確かめる。今送られると今月の分になるので、今月の枠に仮で確保する
+        }
+        if (!closed && l.lineState === 'todo') { if (!need) { l.lineState = 'blocked'; l.lineReason = 'nobody'; } else reserve = need; }
+        const wantCur = reserve || probe ? (probe ? l.lineCount : reserve) : 0;
+        // 前月の確保を閉じる場合に備えて、確保のある月もあわせて読む（書く前に全部読む）
+        const cs = await readCounters(tx, db, l, d, isPersonal && typeof ev.ownerUid === 'string', [...(wantCur ? [cur] : []), ...holdsOf(l).map(h => h.month)]);
+        if (wantCur) {
+          const c = cs[cur], held = countOf(c.h) + (d[cur]?.hold || 0), used = countOf(c.u) + (d[cur]?.usage || 0);
+          const sentSince = quota ? Math.max(0, countOf(c.h, 'sent') - (quota.sentMark || 0)) : 0;
+          // 全体：LINEの実使用量の残りから、確定前の予約分と、聞いた後に確定した分を引いて足りるか。個人：今月30通まで
+          const reason = quota && quota.left - sentSince - held < wantCur ? 'quota_all' : isPersonal && (!c.uRef || used + wantCur > PER_USER_MONTHLY) ? 'quota_user' : '';
+          if (reason && probe) closeLine(l, 'unknown', d); // 確かめると今月分を使うかもしれない。枠がないので確かめない（前月分は不明のまま残す）
+          else if (reason) { l.lineState = 'blocked'; l.lineReason = reason; }
           else {
-            const month = monthKey();
-            const hRef = holdRef(db, month), h = await tx.get(hRef);
-            const held = h.exists ? Number(h.data().count) || 0 : 0, sentSince = quota ? Math.max(0, (h.exists ? Number(h.data().sent) || 0 : 0) - (quota.sentMark || 0)) : 0;
-            const uRef = isPersonal && typeof ev.ownerUid === 'string' ? usageRef(db, ev.ownerUid, month) : null;
-            const u = uRef ? await tx.get(uRef) : null, used = u?.exists ? Number(u.data().count) || 0 : 0;
-            // 全体：LINEの実使用量の残りから、アプリ内でまだ確定していない予約分を引いて足りるか
-            if (quota && quota.left - sentSince - held < need) { l.lineState = 'blocked'; l.lineReason = 'quota_all'; }
-            else if (isPersonal && (!uRef || used + need > PER_USER_MONTHLY)) { l.lineState = 'blocked'; l.lineReason = 'quota_user'; }
-            else {
-              l.month = month; l.lineState = 'held'; l.lineCount = need; l.lineFriends = valid.map(x => x.id);
-              if (uRef) tx.set(uRef, { ownerUid: ev.ownerUid, month, count: used + need, updatedAt: new Date() });
-              tx.set(hRef, { month, count: held + need, sent: h.exists ? Number(h.data().sent) || 0 : 0, updatedAt: new Date() });
-            }
+            if (c.uRef) addDelta(d, cur, 'usage', wantCur);
+            addDelta(d, cur, 'hold', wantCur);
+            if (probe) l.holds = [...holdsOf(l), { month: cur, count: wantCur, probe: true }];
+            else { l.month = cur; l.lineState = 'held'; l.lineCount = need; l.lineFriends = valid.map(x => x.id); l.holds = [{ month: cur, count: need }]; }
           }
         }
         const doLine = !closed && l.lineState === 'held';
@@ -261,10 +295,9 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
           if (doLine) l.lineInflight = true; // 送る直前の印。返事が来たら外す（止まったら「送れたか不明」として扱う）
           if (doPush) l.pushInflight = true;
         }
-        const c = closed ? await readCounters(tx, db, l, delta, isPersonal) : null;
         l.updatedMs = Date.now();
         tx.set(lRef, l);
-        if (c) writeCounters(tx, l, delta, c);
+        writeCounters(tx, l, d, cs);
         // アプリ通知の送り手がいない実行では、行は待ちのまま（送れる実行に任せる）
         const waitingForPushSender = !closed && pushPending(l) && typeof push !== 'function';
         const next = mirror(item, l, closed);
@@ -294,7 +327,8 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
               method:'POST', headers:{'X-Line-Retry-Key':retryKey(isPersonal ? `personal:${ev.ownerUid}:${doc.id}` : doc.id,item.id)},
               body:JSON.stringify({to:userIds,messages:[{type:'text',text:buildText(ev,item.from,item.note)}]})
             });
-            if (response.ok || (response.status === 409 && response.headers.has('x-line-accepted-request-id'))) lineOutcome = {kind:'sent'};
+            if (response.ok) lineOutcome = {kind:'sent', now:true};
+            else if (response.status === 409 && response.headers.has('x-line-accepted-request-id')) lineOutcome = {kind:'sent', now:false}; // 前回分がすでに受け付け済み
             else if (response.status === 429) {
               const reason = await Promise.resolve().then(() => response.json()).then(j => String(j?.message || ''), () => '');
               // 月の上限：LINEは受け付けていない（無料プランなので請求もない）。来月まで再送しても無駄
@@ -309,17 +343,17 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
         const fresh = await tx.get(doc.ref);
         const ledger = await tx.get(lRef);
         if (!ledger.exists) return null;
-        const l2 = {...ledger.data()}, delta = { usage: 0, hold: 0, sent: 0 };
+        const l2 = {...ledger.data()}, d = {};
         if (doPush) { l2.pushInflight = false; l2.pushTries = (l2.pushTries || 0) + 1; l2.pushState = pushOk ? 'ok' : 'fail'; }
         if (doLine && l2.lineState === 'held') {
           l2.lineInflight = false;
-          if (lineOutcome.kind === 'sent') { l2.lineState = 'sent'; l2.lineUnsure = false; l2.lineReason = ''; delta.hold -= l2.lineCount; delta.sent += l2.lineCount; }
+          if (lineOutcome.kind === 'sent') acceptLine(l2, d, lineOutcome.now);
           else {
             // 4xx（429以外）は「受け付けていない」とはっきり分かる。429は前回分の結果までは分からないので、不明の印は残す
             if (lineOutcome.clear) l2.lineUnsure = false;
             if (lineOutcome.unsure) l2.lineUnsure = true;
-            if (lineOutcome.kind === 'rejected') closeLine(l2, lineOutcome.reason, delta);
-            else { l2.lineReason = lineOutcome.reason; if ((l2.attempts || 0) >= MAX_LINE_ATTEMPTS) closeLine(l2, lineOutcome.reason, delta); }
+            if (lineOutcome.kind === 'rejected') closeLine(l2, lineOutcome.reason, d);
+            else { l2.lineReason = lineOutcome.reason; if ((l2.attempts || 0) >= MAX_LINE_ATTEMPTS) closeLine(l2, lineOutcome.reason, d); }
           }
         }
         l2.leaseUntil = 0; l2.updatedMs = Date.now();
@@ -327,10 +361,10 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
         const item2 = ev2 && sendList(ev2.sends).find(s => s.id === item.id);
         // 送っている間に取り消された／予定が消えた：まだ送っていない分だけ閉じる（送った分はそのまま記録）
         const closed = !ev2 || !item2 ? 'cancelled' : cancelsOf(ev2).has(item.id) ? 'cancelled' : '';
-        if (closed) { closeLine(l2, 'cancelled', delta); closePush(l2); }
-        const c = await readCounters(tx, db, l2, delta, isPersonal);
+        if (closed) { closeLine(l2, 'cancelled', d); closePush(l2); }
+        const c = await readCounters(tx, db, l2, d, isPersonal);
         tx.set(lRef, l2);
-        writeCounters(tx, l2, delta, c);
+        writeCounters(tx, l2, d, c);
         if (item2) { const next = mirror(item2, l2, closed); writeItem(tx, doc.ref, ev2, item.id, next); return next.status; }
         return 'gone';
       });
@@ -358,11 +392,11 @@ async function sweepHeld(db, limit = 2) {
       const e = ev.exists ? ev.data() : null, item = e && sendList(e.sends).find(s => s.id === l.sendId);
       const closed = !e || !item || item.status !== 'wait' ? 'cancelled' : cancelsOf(e).has(l.sendId) ? 'cancelled' : deadlinePassed(e) ? 'expired' : '';
       if (!closed) return; // まだ送る予定の行は、通常の送信処理に任せる
-      const delta = { usage: 0, hold: 0 };
-      closeLine(l, closed, delta); closePush(l); l.updatedMs = Date.now();
-      const c = await readCounters(tx, db, l, delta, r.coll === 'personalEvents');
+      const d = {};
+      closeLine(l, closed, d); closePush(l); l.updatedMs = Date.now();
+      const c = await readCounters(tx, db, l, d, r.coll === 'personalEvents');
       tx.set(row.ref, l);
-      writeCounters(tx, l, delta, c);
+      writeCounters(tx, l, d, c);
       if (item && item.status === 'wait') writeItem(tx, eRef, e, l.sendId, mirror(item, l, closed));
     });
   }

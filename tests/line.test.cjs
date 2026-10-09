@@ -305,10 +305,80 @@ test('③ deleting the plan after a temporary refusal: the patrol returns the co
 test('③ a reservation made last month is returned to last month, not this month',async()=>{
   const f=fixture({personal:true,status:429,lineMessage:'busy'});
   await run(f);
-  const prev='202001',l=f.ledger();l.month=prev;
+  const prev='202001',l=f.ledger();l.month=prev;l.holds=[{month:prev,count:1}];
   f.records.lineUsage[prev+'_'+P]={ownerUid:P,month:prev,count:7};f.records.lineQuota['hold_'+prev]={month:prev,count:1};
   const cur=f.month+'_'+P;f.records.lineUsage[cur]={ownerUid:P,month:f.month,count:2};f.records.lineQuota['hold_'+f.month]={month:f.month,count:0};
   ev(f).sendCancels=['send'];f.expireLease();await run(f);
   assert.equal(f.records.lineUsage[prev+'_'+P].count,6);assert.equal(f.records.lineQuota['hold_'+prev].count,0);
   assert.equal(f.records.lineUsage[cur].count,2,'今月の数は変えない');
+});
+
+/* ===== 2026-10-09 再々レビュー：月をまたぐ再送 ===== */
+const PREV='202001';
+// 1回目の試行を「前月」に起きたことにする（台帳の確保・個人の数・予約枠を前月へ移す）
+function toLastMonth(f,{prevUsed=1}={}){
+  const l=f.ledger();l.holds=(l.holds||[]).map(h=>({...h,month:PREV}));l.month=PREV;l.leaseUntil=0;
+  const cur=f.month+'_'+P;f.records.lineUsage[PREV+'_'+P]={ownerUid:P,month:PREV,count:prevUsed};delete f.records.lineUsage[cur];
+  f.records.lineQuota['hold_'+PREV]={month:PREV,count:f.hold(),sent:0};delete f.records.lineQuota['hold_'+f.month];
+}
+const useThisMonth=(f,n)=>{f.records.lineUsage[f.month+'_'+P]={ownerUid:P,month:f.month,count:n};};
+const prevUsage=f=>f.records.lineUsage[PREV+'_'+P]?.count, curUsage=f=>f.records.lineUsage[f.month+'_'+P]?.count;
+const prevHold=f=>f.records.lineQuota['hold_'+PREV]?.count||0;
+
+test('月またぎ：前月に「受け付けられていない」と確定した再送は、今月の30通を確かめて確保し直す',async()=>{
+  // 今月30通使用済み → 送らない。前月の確保は返す。今月の数は30のまま
+  let f=fixture({personal:true,status:[429,200],lineMessage:'busy'});await run(f);toLastMonth(f);useThisMonth(f,30);
+  await run(f);
+  assert.equal(f.multicastCount(),1,'今月の上限に達していれば再送しない');assert.equal(item(f).lineResult,'quota_user');
+  assert.equal(curUsage(f),30);assert.equal(prevUsage(f),0,'前月の確保は返す');assert.equal(prevHold(f),0);
+  // 今月に余裕 → 今月で確保して送る。前月分は返す（二重に数えない）
+  f=fixture({personal:true,status:[429,200],lineMessage:'busy'});await run(f);toLastMonth(f);useThisMonth(f,5);
+  await run(f);
+  assert.equal(f.multicastCount(),2);assert.equal(item(f).status,'sent');assert.equal(curUsage(f),6);assert.equal(prevUsage(f),0);assert.equal(prevHold(f),0);assert.equal(f.hold(),0);
+});
+test('月またぎ：前回の結果が不明な再確認は、今月の枠がなければ確かめない（前月分は返さない）',async()=>{
+  const f=fixture({personal:true,status:[500,200]});await run(f);toLastMonth(f);useThisMonth(f,30);
+  await run(f);
+  assert.equal(f.multicastCount(),1,'今月分を使うかもしれない再確認はしない');assert.equal(item(f).lineResult,'unknown');
+  assert.equal(curUsage(f),30);assert.equal(prevUsage(f),1,'届いたかもしれない前月分は返さない');assert.equal(prevHold(f),0);
+});
+test('月またぎ：不明な再確認で「前回受付済み（409）」なら前月の分、「今回受付（200）」なら今月の分',async()=>{
+  let f=fixture({personal:true,status:[500,409]});await run(f);toLastMonth(f);useThisMonth(f,5);
+  await run(f);
+  assert.equal(item(f).status,'sent');assert.equal(prevUsage(f),1,'前月に届いていた');assert.equal(curUsage(f),5,'今月の仮分は返す');assert.equal(f.hold(),0);assert.equal(prevHold(f),0);
+  f=fixture({personal:true,status:[500,200]});await run(f);toLastMonth(f);useThisMonth(f,5);
+  await run(f);
+  assert.equal(item(f).status,'sent');assert.equal(prevUsage(f),0,'前月は届いていなかった');assert.equal(curUsage(f),6,'今月の分');assert.equal(f.hold(),0);
+  // 不明のまま（もう一度500）→ 両方確保したまま再試行。取り消せば、どちらも返さない（予約枠だけ外す）
+  f=fixture({personal:true,status:[500,500]});await run(f);toLastMonth(f);useThisMonth(f,5);
+  await run(f);assert.equal(item(f).status,'wait');assert.equal(curUsage(f),6);assert.equal(prevUsage(f),1);
+  ev(f).sendCancels=['send'];f.expireLease();await run(f);
+  assert.equal(item(f).status,'cancelled');assert.equal(curUsage(f),6);assert.equal(prevUsage(f),1);assert.equal(f.hold(),0);assert.equal(prevHold(f),0);
+});
+test('月またぎ：取り消しは前月の分を正しく返す／同時実行でも1回だけ送り1回だけ数える',async()=>{
+  let f=fixture({personal:true,status:[429],lineMessage:'busy'});await run(f);toLastMonth(f);useThisMonth(f,2);
+  ev(f).sendCancels=['send'];await run(f);
+  assert.equal(item(f).status,'cancelled');assert.equal(prevUsage(f),0);assert.equal(curUsage(f),2);assert.equal(f.multicastCount(),1);
+  f=fixture({personal:true,status:[429,200],lineMessage:'busy'});await run(f);toLastMonth(f);useThisMonth(f,29);
+  await Promise.all([run(f),run(f),run(f)]);
+  assert.equal(f.multicastCount(),2);assert.equal(curUsage(f),30);assert.equal(prevUsage(f),0);assert.equal(f.hold(),0);
+});
+test('PR #99 の形の台帳（holds なし）も同じように扱う',async()=>{
+  const f=fixture({personal:true,usedThisMonth:5,status:[429],lineMessage:'busy'});await run(f);
+  const l=f.ledger();delete l.holds;l.month=f.month;l.lineCount=1;l.leaseUntil=0;
+  ev(f).sendCancels=['send'];await run(f);
+  assert.equal(f.usage(),5,'返す');assert.equal(f.hold(),0);
+});
+test('取り消しの結果：アプリ通知だけ送信済みなら隠さず「一部」、止められた手段は「取り消し済み」',async()=>{
+  // アプリ通知は成功・LINEははっきり断られて再試行待ち → 取り消し
+  let f=fixture({personal:true,usedThisMonth:3,status:[429],lineMessage:'busy'});item(f).friendIds=['push:self','self'];
+  await run(f,{push:async()=>1});assert.equal(item(f).status,'wait');
+  ev(f).sendCancels=['send'];f.expireLease();await run(f,{push:async()=>1});
+  let s=item(f);assert.equal(s.status,'partial');assert.equal(s.pushResult,'ok');assert.equal(s.lineResult,'cancelled');assert.equal(s.cancelDone,true);assert.equal(f.usage(),3,'止めたLINEの分は返す');
+  // どちらもまだ → 取り消し完了
+  f=fixture({personal:true,status:[429],lineMessage:'busy'});await run(f);ev(f).sendCancels=['send'];f.expireLease();await run(f);
+  s=item(f);assert.equal(s.status,'cancelled');assert.equal(s.cancelDone,true);assert.equal(s.lineResult,'cancelled');
+  // 送信中に取り消し → LINEは受け付け済み（間に合わない）
+  f=fixture({personal:true,onSend:r=>{r.personalEvents.event.sendCancels=['send'];}});await run(f);
+  s=item(f);assert.equal(s.status,'sent');assert.equal(s.cancelDone,true);assert.equal(s.lineResult,'sent');
 });
