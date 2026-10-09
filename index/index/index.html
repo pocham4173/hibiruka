@@ -541,6 +541,7 @@
   .more-opts summary { cursor: pointer; font-weight: 600; font-size: 14px; }
   .beta { display: inline-block; vertical-align: middle; margin-left: 8px; font-size: 10px; font-weight: 700; letter-spacing: .05em; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; }
   .ad-note { font-size: 12px; color: var(--muted); margin: 0 0 10px; line-height: 1.6; }
+  .shop-route { margin: 12px 0 0; } .shop-route .note { margin: 6px 0 0; font-size: 12px; }
   .terms-link { margin:8px 0 0; font-size:13px; } .terms-link a { color:var(--rose, #a9536a); font-weight:700; }
 </style>
 </head>
@@ -2044,6 +2045,37 @@ function affButton(url, kind, label, cls) {
   const l = affLink(url, kind); if (!l.href) return "";
   return `<a class="${cls}" href="${esc(l.href)}" target="_blank" rel="noopener${l.pr ? " sponsored" : ""}">${label}${l.pr ? '<span class="pr">PR</span>' : ""}</a>`;
 }
+// ホットペッパーのお店のページか（クーポンのページは広告リンクにできない決まりなので除く）
+function hpShopUrl(u) { return /^https:\/\/www\.hotpepper\.jp\/str[A-Za-z0-9]+\//.test(u || "") && !/coupon/i.test(u); }
+// 予定に入れたお店へ、探し直さずに進むボタン。空席や予約できるかは取得していないので「予約する」とは書かない
+function shopRoute(e) {
+  if (!e.shop || e.shop.src !== "hp" || !hpShopUrl(e.shop.url)) return "";
+  const l = affLink(e.shop.url, "hp"); if (!l.href) return "";
+  return `<div class="shop-route"><a class="btn sub" id="dShop" href="${esc(l.href)}" target="_blank" rel="noopener${l.pr ? " sponsored" : ""}">🍽 ホットペッパーでこのお店を見る${l.pr ? '<span class="pr">PR</span>' : ""}</a>
+    <p class="note">外部サイトが開きます。空席・ネット予約ができるか・最新の情報は、開いた先で確かめてください。</p></div>`;
+}
+/* 導線の計測（2026-10-09）：日ごとの「表示」と「押された」回数の合計だけを数える。
+   だれが・どの予定か・お店の名前・場所は送らない。同じ端末・同じ予定・同じ日の2回目以降は数えない（再表示・連打で増やさない）。
+   押された回数は、予約や購入ができた数ではない */
+const ROUTES = ["hp_plan"], routeSeen = new Set();
+let routePruned = false;
+function recordRoute(route, kind, key) {
+  try {
+    if (!ROUTES.includes(route) || !["shown", "clicks"].includes(kind) || !auth?.currentUser) return;
+    const day = todayStr().replaceAll("-", ""), mark = `hibiruka-route:${route}:${kind}:${key}:${day}`;
+    if (routeSeen.has(mark)) return;
+    routeSeen.add(mark);
+    try {
+      if (localStorage.getItem(mark)) return;
+      localStorage.setItem(mark, "1");
+      if (!routePruned) { // 8日より前の印は消す
+        routePruned = true; const old = addDays(todayStr(), -8).replaceAll("-", "");
+        Object.keys(localStorage).filter(k => k.startsWith("hibiruka-route:") && k.slice(-8) < old).forEach(k => localStorage.removeItem(k));
+      }
+    } catch {}
+    db.collection("routeStats").doc(`${route}_${day}`).set({ route, day, [kind]: firebase.firestore.FieldValue.increment(1) }, { merge: true }).catch(() => {});
+  } catch {}
+}
 const TRAVEL_DEALS = [
   ["🎟 楽天トラベルのクーポン", "https://travel.rakuten.co.jp/coupon/"],
   ["🏨 宿のクーポン", "https://travel.rakuten.co.jp/coupon/yado/"],
@@ -2399,7 +2431,7 @@ function spotCard(s, i) {
       <button type="button" class="btn small sub ${inCourse(s) ? "on-course" : ""}" data-course="${i}">${inCourse(s) ? "✓ コースに入っています" : "🧭 コースに入れる"}</button>
       <a class="btn small ghost" href="${spotMapLink(s)}" target="_blank" rel="noopener">🗺 地図</a>
       <a class="btn small ghost" href="${esc(dirUrl(s, { from: findHere }))}" target="_blank" rel="noopener">🧭 行き方</a>
-      ${s.source === "hp" && s.couponUrl ? affButton(s.couponUrl, "plain", s.coupon ? "🎟 クーポンを見る" : "🎟 クーポン・予約", "btn small rose-ghost") : ""}
+      ${s.source === "hp" && s.couponUrl && s.coupon ? affButton(s.couponUrl, "plain", "🎟 クーポンを見る", "btn small rose-ghost") : ""}
       ${s.website && /^https?:\/\//.test(s.website) ? (s.source === "hp" ? affButton(s.website, "hp", "🔗 ホットペッパーで見る", "btn small ghost") : `<a class="btn small ghost" href="${esc(s.website)}" target="_blank" rel="noopener">🔗 お店のページ</a>`) : ""}
     </div></div>`;
 }
@@ -2425,6 +2457,8 @@ function planFromSpot(s, wishId) {
   if (!s) return;
   resetForm();
   form.fromWish = wishId || null;
+  // ホットペッパーで選んだお店なら、そのお店のページを予定に残す（予定を開いたときに、探し直さずにお店のページへ行ける）
+  form.shop = hpShopUrl(s.website) ? { src: "hp", url: s.website, name: s.name } : null;
   $("fKind").value = "plan";
   form.cat = catForSpot(s.catKeys || (wishId ? [wishes.find(w => w.id === wishId)?.cat] : []));
   $("fPlace").value = s.name; form.geo = { lat: s.lat, lng: s.lng, place: s.name };
@@ -2464,7 +2498,7 @@ function renderWishes() {
         <a class="btn small ghost" href="${spotMapLink({ name: w.place, lat: w.lat, lng: w.lng })}" target="_blank" rel="noopener">🗺 地図</a>
         <button type="button" class="btn small ghost" data-wdel="${w.id}">消す</button></div></div>`;
   }).join("");
-  box.querySelectorAll("[data-wplan]").forEach(b => b.onclick = () => { const w = wishes.find(x => x.id === b.dataset.wplan); if (w) planFromSpot({ name: w.place, lat: w.lat, lng: w.lng, address: w.memo, catKeys: [w.cat] }, w.id); });
+  box.querySelectorAll("[data-wplan]").forEach(b => b.onclick = () => { const w = wishes.find(x => x.id === b.dataset.wplan); if (w) planFromSpot({ name: w.place, lat: w.lat, lng: w.lng, address: w.memo, catKeys: [w.cat], website: w.link }, w.id); });
   box.querySelectorAll("[data-open-plan]").forEach(b => b.onclick = () => { const w = wishes.find(x => x.id === b.dataset.openPlan); if (w) openDetail(w.planId); });
   box.querySelectorAll("[data-course-wish]").forEach(b => b.onclick = () => { const w = wishes.find(x => x.id === b.dataset.courseWish); if (w) toggleCourse(wishSpot(w), b); });
   box.querySelectorAll("[data-memory]").forEach(b => b.onclick = () => { const w = wishes.find(x => x.id === b.dataset.memory); if (w) editRecord(w.planId); });
@@ -2821,6 +2855,9 @@ async function saveRecord() {
   if (geo) { data.lat = geo.lat; data.lng = geo.lng; }
   else if (editingId) { data.lat = firebase.firestore.FieldValue.delete(); data.lng = firebase.firestore.FieldValue.delete(); }
   if (!data.title && !data.place) { toast("「どこで？」か「なにをする？」を入れてください"); $("fTitle").focus(); return; }
+  // お店のページは、場所がそのお店のままのときだけ残す（場所を直したら外す。別の店のページへ案内しない）
+  if (form.shop && data.place === form.shop.name) data.shop = form.shop;
+  else if (editingId && events.find(x => x.id === editingId)?.shop) data.shop = firebase.firestore.FieldValue.delete();
   if ($("saveBtn").disabled) return;
   if (!form.keepPhotos && form.photos.some(p => !p.full)) { toast("写真を読み込めませんでした。記録を開き直してください。"); return; }
   if (form.keepPhotos) delete data.thumbs; // 写真は元のまま
@@ -2882,6 +2919,7 @@ async function editRecord(id) {
   form.dateTouched = true;
   // 種類は保存されているまま（日が過ぎた予定を開いても「思い出」に変えない。行った／中止の結果も変えない）
   form.orig = { kind: e.kind, date: e.date, outcome: e.outcome };
+  form.shop = e.shop && hpShopUrl(e.shop.url) ? { ...e.shop } : null;
   $("fKind").value = e.kind === "memory" ? "memory" : "plan"; $("fDate").value = e.date; $("fTime").value = e.time || "";
   $("fPlace").value = e.place || ""; $("fTitle").value = e.title || ""; $("fMemo").value = e.memo || ""; $("fLink").value = e.link || "";
   $("fFav").classList.toggle("on", form.fav); $("fFav").setAttribute("aria-pressed", String(!!form.fav));
@@ -3023,12 +3061,13 @@ function filtered() {
   return events.filter(e => (!filterCat || e.cat === filterCat) && (!filterWho || (e.who || []).includes(filterWho)));
 }
 // 手段ごとの結果を短く（「送信済み」＝LINE・通知サービスが受け付けた。端末に届いたかまでは分からないので「届いた」とは書かない）
+const LINE_WORD = { sent: "送信済み", unknown: "送れたか不明", retry: "再試行中", cancelled: "取り消し済み", expired: "期限切れで送っていません" };
+const PUSH_WORD = { ok: "送信済み", unknown: "送れたか不明", fail: "送れませんでした", cancelled: "取り消し済み", expired: "期限切れで送っていません" };
 function sendParts(x) {
   const ids = x.friendIds || [], wantLine = ids.some(id => id !== PUSH_SELF), wantPush = ids.includes(PUSH_SELF);
-  const lineSent = x.lineResult ? x.lineResult === "sent" : x.status === "sent"; // 以前の版の行には lineResult がない
-  const line = !wantLine ? "" : lineSent ? "LINE：送信済み"
-    : x.lineResult === "unknown" ? "LINE：送れたか不明" : x.lineResult === "retry" ? "LINE：再試行中" : "LINE：送れませんでした";
-  const push = !wantPush ? "" : x.pushResult === "ok" ? "アプリ通知：送信済み" : x.pushResult === "unknown" ? "アプリ通知：送れたか不明" : x.pushResult === "fail" ? "アプリ通知：送れませんでした" : "";
+  const lr = x.lineResult || (x.status === "sent" ? "sent" : ""); // 以前の版の行には lineResult がない
+  const line = !wantLine ? "" : lr ? `LINE：${LINE_WORD[lr] || "送れませんでした"}` : x.status === "wait" ? "" : "LINE：送れませんでした";
+  const push = !wantPush || !x.pushResult ? "" : `アプリ通知：${PUSH_WORD[x.pushResult] || "送れませんでした"}`;
   return [line, push].filter(Boolean).join("・");
 }
 function sendRows(e) {
@@ -3039,13 +3078,18 @@ function sendRows(e) {
     const lineOnly = (x.friendIds || []).every(id => id !== PUSH_SELF), appOnly = (x.friendIds || []).every(id => id === PUSH_SELF);
     const how = appOnly ? "アプリ通知" : lineOnly ? "LINE" : "LINE・アプリ通知";
     const why = x.error ? `<br>${esc(x.error)}` : "";
+    const parts = sendParts(x), partsLine = parts ? `<br>${esc(parts)}` : "";
+    const asked = cancels.has(x.id) || x.cancelDone;
     // 以前の版の「片方だけ成功」も、一部として見せる
     const partial = x.status === "partial" || (x.status === "sent" && x.pushResult === "fail") || (x.status === "fail" && x.pushResult === "ok" && !appOnly);
-    if (x.status === "cancelled" || (x.status === "wait" && cancels.has(x.id))) return `<div class="sendrow"><span class="tag">— ${fmtAt(x.at)} ${esc(names)}へのお知らせは取り消しました${x.status === "cancelled" && x.lineResult === "unknown" ? why : ""}</span></div>`;
-    if (partial) return `<div class="sendrow"><span class="tag fail">⚠️ ${fmtAt(x.at)} 一部だけ送信しました（${esc(sendParts(x))}）${why}${said}</span></div>`;
+    // 取り消し：申し出の時点では「受け付けました」。止められたか・間に合わなかったかは、サーバーが確かめたあとに出す
+    if (x.status === "wait" && asked) return `<div class="sendrow"><span class="tag wait">⏳ ${fmtAt(x.at)} 取り消しを受け付けました（確認中）。送信が始まっていた場合は止められないことがあります${partsLine}${said}</span></div>`;
+    if (x.status === "cancelled") return `<div class="sendrow"><span class="tag">— ${fmtAt(x.at)} ${esc(names)}へのお知らせは取り消しました${/不明/.test(parts) ? partsLine : ""}</span></div>`;
+    if (asked && (partial || x.status === "sent")) return `<div class="sendrow"><span class="tag fail">⚠️ ${fmtAt(x.at)} 取り消しが間に合わなかった分があります${partsLine}${said}</span></div>`;
+    if (partial) return `<div class="sendrow"><span class="tag fail">⚠️ ${fmtAt(x.at)} 一部だけ送信しました（${esc(parts)}）${why}${said}</span></div>`;
     if (x.status === "sent") return `<div class="sendrow"><span class="tag sent">✓ ${fmtAt(x.at)} ${esc(names)}へ${how}送信済み${said}</span></div>`;
     if (x.status === "fail") return `<div class="sendrow"><span class="tag fail">⚠️ ${fmtAt(x.at)} ${esc(names)}へ送れませんでした${why}${said}</span></div>`;
-    const progress = x.pushResult === "ok" || x.lineResult ? `<br>${esc(sendParts(x))}` : "";
+    const progress = x.pushResult === "ok" || x.lineResult ? partsLine : "";
     return `<div class="sendrow"><span class="tag wait">🔔 ${fmtAt(x.at)} ${esc(names)}へ知らせる予定${progress}${said}</span><button class="x-btn" data-cancel="${e.id}|${x.id}" aria-label="${esc(fmtAt(x.at))}のお知らせを取り消す">取消</button></div>`;
   }).join("");
 }
@@ -3235,6 +3279,7 @@ async function openDetail(id) {
       ${e.place ? `<br>📍 <a href="${placeUrl(e)}" target="_blank" rel="noopener">${esc(e.place)}</a>` : ""}${(e.who || []).length ? `<br>👥 ${e.who.map(esc).join("・")}` : ""}
       ${e.memo ? `<br>📝 ${esc(e.memo).replace(/\n/g, "<br>")}` : ""}
       ${e.link ? `<br>🔗 <a href="${esc(e.link)}" target="_blank" rel="noopener">${esc(e.link)}</a>` : ""}</div>
+    ${plan ? shopRoute(e) : ""}
     ${outcomeButtons(e)}
     <div id="dWeather"></div>
     ${sendRows(e)}
@@ -3250,6 +3295,7 @@ async function openDetail(id) {
       <button class="btn ghost" id="dClose">閉じる</button>
     </div>`;
   if (plan) $("dSend").onclick = () => { closeSheets(); openSend(id); };
+  if ($("dShop")) { recordRoute("hp_plan", "shown", id); $("dShop").addEventListener("click", () => recordRoute("hp_plan", "clicks", id)); }
   $("dEdit").onclick = () => editRecord(id).catch(err => { console.error(err); toast(`直す画面を開けませんでした（${err?.code || err?.message || "error"}）。画面を見せてね`, 6000); });
   const fullPhotos = ownedQuery("photos").where("eventId", "==", id).get().then(ps => { const full = []; ps.forEach(d => { const x = d.data(); full[x.i] = x.data; }); return full.filter(Boolean); });
   $("dInsta").onclick = () => openInsta(e, fullPhotos.then(f => f[0] || (e.thumbs || [])[0] || "", () => (e.thumbs || [])[0] || ""));
@@ -3602,9 +3648,9 @@ async function cancelSend(evId, sendId) {
       // 取り消しの申し出を足すだけ。確保していたLINEの通数は、サーバーが確かめてから戻す
       tx.update(ref, { sendCancels: [...cancels, sendId], updatedAt: TS() });
     });
-    toast("取り消しました");
+    toast("取り消しを受け付けました。送信がもう始まっていた場合は止められないことがあります。結果はこの予定に出ます", 6000);
   }
-  catch { toast("取り消せませんでした"); }
+  catch { toast("取り消せませんでした。電波のよい所でもう一度お試しください"); }
 }
 
 /* =========================================================

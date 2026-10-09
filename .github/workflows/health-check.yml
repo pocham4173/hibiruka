@@ -39,6 +39,11 @@ jobs:
             const m=new Date(Date.now()+9*3600000).toISOString().slice(0,7).replace("-","");
             const hold=(await db.doc("lineQuota/hold_"+m).get()).data();
             console.log("::notice::app hold (reserved, not yet confirmed)="+(hold?.count||0)+" confirmed this month="+(hold?.sent||0));
+            // 導線の計測：直近30日の合計（日ごと・個人が分からない数だけ）。押された回数は成約数ではない
+            const days=[...Array(30)].map((_,i)=>new Date(Date.now()+9*3600000-i*86400000).toISOString().slice(0,10).replaceAll("-",""));
+            const rs=(await db.getAll(...days.map(d=>db.doc("routeStats/hp_plan_"+d)))).map(x=>x.data()||{});
+            const shown=rs.reduce((n,x)=>n+(x.shown||0),0),clicks=rs.reduce((n,x)=>n+(x.clicks||0),0);
+            console.log("::notice::route hp_plan last30days shown="+shown+" clicks="+clicks+" (approved conversions and rewards: check the ValueCommerce dashboard)");
             const wait=await db.collection("personalEvents").where("nextSendAt","!=",null).limit(50).get();
             console.log("::notice::personal events with pending sends="+wait.size);
             await admin.app().delete();
