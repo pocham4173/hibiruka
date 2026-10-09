@@ -30,7 +30,7 @@
       let before = resource.data.get('nextSendAt', null);
       let after = request.resource.data.get('nextSendAt', null);
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sends', 'nextSendAt', 'updatedAt'])
-        && n < 40 && neu.size() == n + 1 && neu[0:n] == old
+        && n < 40 && neu.size() == n + 1 && (n == 0 || neu[0:n] == old)
         && validNewSend(neu[n])
         && ((before == null && after == neu[n].at)
           || (before != null && neu[n].at < before && after == neu[n].at)
@@ -41,7 +41,7 @@
       let neu = request.resource.data.get('sendCancels', []);
       let n = old.size();
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sendCancels', 'updatedAt'])
-        && n < 40 && neu.size() == n + 1 && neu[0:n] == old
+        && n < 40 && neu.size() == n + 1 && (n == 0 || neu[0:n] == old)
         && neu[n] is string && neu[n].matches('^[A-Za-z0-9-]{1,64}$');
     }
     match /personalEvents/{id} {

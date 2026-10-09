@@ -114,6 +114,10 @@ test('new records cannot carry notification state',async()=>{
  await assertFails(setDoc(doc(A,'personalEvents/n4'),{ownerUid:'person-A',createdAt:serverTimestamp(),nextSendAt:'2000-01-01T00:00'}));
 });
 test('the owner can append one reservation, but cannot forge counts, status, locks or the schedule',async()=>{
+ // 最初の1件（空の予定に足す）
+ await seedEvent('s0');
+ await assertSucceeds(updateDoc(doc(A,'personalEvents/s0'),{sends:[SEND],nextSendAt:SEND.at}));
+ await assertFails(updateDoc(doc(A,'personalEvents/s0'),{sends:[SEND,{...SEND,id:'eeeeeeee-0000'}],nextSendAt:null}));
  const serverRow={id:'bbbbbbbb-1111-4222-8333-444444444444',at:'2099-01-01T08:00',friendIds:['self'],status:'wait',lineResult:'retry'};
  await seedEvent('s1',{sends:[serverRow],nextSendAt:'2099-01-01T08:00'});
  const ref=doc(A,'personalEvents/s1');
