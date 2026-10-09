@@ -174,6 +174,8 @@ test('route counters: signed-in users can only add one; nobody can read, reset o
  await assertFails(setDoc(ref,{route:'hp_plan',day:'20261009',shown:increment(1),clicks:increment(1)},{merge:true}));
  await assertFails(setDoc(ref,{route:'hp_plan',day:'20261009',uid:'person-A',shown:increment(1)},{merge:true}));
  await assertFails(setDoc(doc(A,'routeStats/other_20261009'),{route:'other',day:'20261009',shown:1}));
+ await assertSucceeds(setDoc(doc(A,'routeStats/rk_stay_20261010'),{route:'rk_stay',day:'20261010',clicks:increment(1)},{merge:true}));
+ await assertFails(setDoc(doc(A,'routeStats/rk_stay_20261010'),{route:'hp_plan',day:'20261010',clicks:increment(1)},{merge:true}));
  await assertFails(setDoc(doc(A,'routeStats/hp_plan_20261010'),{route:'hp_plan',day:'20261009',shown:1}));
  await assertFails(deleteDoc(ref));
  const anon=env.unauthenticatedContext().firestore();await assertFails(setDoc(doc(anon,'routeStats/hp_plan_20261011'),{route:'hp_plan',day:'20261011',shown:1}));

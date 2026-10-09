@@ -41,6 +41,10 @@
   .points li span { display: block; font-size: 24px; margin-bottom: 2px; }
 
   /* もくじ */
+  .flow { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; margin: 0 0 14px; }
+  .flow h2 { font-size: 16px; margin: 0 0 8px; }
+  .flow ol { margin: 0; padding-left: 1.4em; font-size: 14px; line-height: 1.8; }
+  .flow .sample-note { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
   .toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 8px; padding: 0; list-style: none; }
   .toc a { display: inline-block; text-decoration: none; background: var(--card); border: 1px solid var(--line); color: var(--navy); font-size: 13.5px; font-weight: 700; padding: 7px 12px; border-radius: 999px; }
 
@@ -128,6 +132,16 @@
       <li><span>🔍</span>行きたい場所を<br>天気と一緒に探す</li>
       <li><span>✨</span>AIが思い出の<br>文章を作る</li>
     </ul>
+    <section class="flow" aria-labelledby="flowTitle">
+      <h2 id="flowTitle">たとえば、こんなふうに使えます</h2>
+      <ol>
+        <li><b>探す</b>　週末に行きたいカフェを、行く日の天気と一緒に探す</li>
+        <li><b>予定にする</b>　「📅 予定に追加」で、日時と場所が入った予定になる</li>
+        <li><b>知らせる</b>　前の日の朝、一緒に行く家族のLINEへ予定が送られる</li>
+        <li><b>思い出に</b>　行ったあと「✅ 行った」を押して写真を足すと、アルバムと地図に残る</li>
+      </ol>
+      <p class="sample-note">このページの画面の写真は、すべて見本のデータです（実在の人の記録ではありません）。</p>
+    </section>
     <ul class="toc" aria-label="もくじ">
       <li><a href="#start">はじめかた</a></li>
       <li><a href="#plan">予定を入れる</a></li>
@@ -215,7 +229,7 @@
           <li><b>誰に？</b>　届けたい人を選ぶ（何人でも）</li>
           <li><b>いつ送る？</b>「前の日の朝 9:00」「当日の朝 7:00」「予定の1時間前」など。日付と時間を自由に決めることもできます</li>
         </ul>
-        <p><span class="btnlike">この日時に送る</span> で予約完了。その時間になると、ヒビルカのLINEから相手に届きます。</p>
+        <p><span class="btnlike">この日時に送る</span> で予約完了。その時間ごろに、ヒビルカのLINEから相手へ送られます（混み合うと10分以上遅れることがあります）。送ったかどうかは、予定の画面に「送信済み」などと出ます。</p>
         <ul>
           <li><b>💬 ひとこと</b>　「楽しみにしてるね！」のような一言を添えられます（100文字まで）</li>
           <li><b>📱 アプリ通知</b>　自分あてなら、LINEではなくスマホに直接届けることもできます（<a href="#notify">12章</a>）</li>
