@@ -36,7 +36,7 @@ jobs:
           tail -n 40 /tmp/rules-out.txt
           # 失敗の要点を注釈に出す（ログを開けなくても分かるように）
           if [ $status -ne 0 ]; then
-            msg=$(grep -E "not ok|Error|error:|expected|actual|Property|Invalid|evaluation|L[0-9]+:" /tmp/rules-out.txt | head -n 30 | cut -c1-220 | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')
+            msg=$( (grep -E "^# (pass|fail)" /tmp/rules-out.txt; grep -E -A14 "^not ok" /tmp/rules-out.txt | grep -vE "^\s*(duration_ms|type|location|failureType|code|name|stack|---|\.\.\.)") | grep -v "evaluation error" | head -n 40 | cut -c1-220 | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')
             echo "::error title=rules tests::${msg}"
           fi
           exit $status
