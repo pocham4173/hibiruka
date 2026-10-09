@@ -634,7 +634,7 @@ test('deals: local show-only coupons, Hotpepper coupon shops and travel coupons,
   assert.match(sheet.textContent,/この画面をスタッフに見せてください/);assert.match(sheet.textContent,/利用条件1回まで/);assert.match(d.getElementById('couponNow').textContent,/\d+:\d\d:\d\d 現在/);
   d.getElementById('couponClose').click();assert(sheet.classList.contains('hidden'));
   // travel links: plain while no ID
-  let links=[...d.querySelectorAll('#travelDeals a')];assert.equal(links[0].href,'https://travel.rakuten.co.jp/coupon/');assert(!d.querySelector('#travelDeals .pr'));
+  let links=[...d.querySelectorAll('#travelDeals a')];assert.equal(links.find(x=>x.textContent.includes('楽天トラベルのクーポン')).href,'https://travel.rakuten.co.jp/coupon/');assert(!d.querySelector('#travelDeals .pr'));
   const stayLink=()=>links.find(x=>x.textContent.startsWith('🔍'));assert.equal(stayLink().textContent,'🔍 宿を探す（全国）');
   d.getElementById('wherePick').click();d.getElementById('findPlaceQ').value='軽井沢駅';
   const f0=w.fetch;w.fetch=async(url,opt)=>String(url).includes('nominatim')?{ok:true,json:async()=>[{lat:'36.3428',lon:'138.6353'}]}:f0(url,opt);
@@ -650,8 +650,10 @@ test('deals: local show-only coupons, Hotpepper coupon shops and travel coupons,
   const btn=[...card.querySelectorAll('a')].find(x=>x.textContent.includes('クーポンを見る'));assert.equal(btn.href,'https://www.hotpepper.jp/strJ1/scoupon/');assert(!btn.querySelector('.pr'));
   shops=[];d.querySelector('[data-find="coupon"]').click();await settle();assert.match(d.getElementById('findNote').textContent,/クーポンのあるお店が見つかりませんでした/);
   // affiliate set up: links go through it and carry PR
-  Object.assign(w.h.config.affiliate,{vcSid:'111',vcPid:'222',vcOn:true,vcJalan:'333',vcIkyu:'444',rakuten:'aa.bb'});w.renderTravelDeals();
-  links=[...d.querySelectorAll('#travelDeals a')];assert.equal(links[0].href,'https://hb.afl.rakuten.co.jp/hgc/aa.bb/?pc=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&m=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&link_type=hybrid_url');assert.equal(d.querySelectorAll('#travelDeals .pr').length,links.length);assert.match(links[0].rel,/sponsored/);
+  Object.assign(w.h.config.affiliate,{vcSid:'111',vcPid:'222',vcJalan:'333',vcIkyu:'444',rakuten:'aa.bb',approved:{hp:true,jalan:true,ikyu:true}});w.renderTravelDeals();
+  links=[...d.querySelectorAll('#travelDeals a')];const coupon=links.find(x=>x.textContent.includes('楽天トラベルのクーポン'));
+  assert.equal(coupon.href,'https://hb.afl.rakuten.co.jp/hgc/aa.bb/?pc=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&m=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&link_type=hybrid_url');assert.equal(d.querySelectorAll('#travelDeals .pr').length,links.length);assert.match(coupon.rel,/sponsored/);
+  assert.match(links[0].textContent,/宿を探す/,'行き先の宿を先頭に');
   shops=[{id:'hp:J1',name:'森のごはん',lat:36.401,lng:138.251,url:'https://www.hotpepper.jp/strJ1/',coupon:true,couponUrl:'https://www.hotpepper.jp/strJ1/scoupon/'}];
   d.querySelector('[data-find="coupon"]').click();await settle();
   const c2=[...d.querySelectorAll('#findResults .spot a')].find(x=>x.textContent.includes('クーポンを見る'));
@@ -659,8 +661,8 @@ test('deals: local show-only coupons, Hotpepper coupon shops and travel coupons,
   assert.equal(c2.href,'https://www.hotpepper.jp/strJ1/scoupon/');assert(!c2.querySelector('.pr'));
   const s2=[...d.querySelectorAll('#findResults .spot a')].find(x=>x.textContent.includes('ホットペッパーで見る'));
   assert.equal(s2.href,'https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=111&pid=222&vc_url='+encodeURIComponent('https://www.hotpepper.jp/strJ1/?vos=nhppvccp99002'));assert(s2.querySelector('.pr'));assert.match(s2.rel,/sponsored/);
-  // 承認前（vcOn:false）はふつうのリンク
-  w.h.config.affiliate.vcOn=false;d.querySelector('[data-find="coupon"]').click();await settle();
+  // 提携を確かめていない（approved:false）ものは、ふつうのリンク
+  w.h.config.affiliate.approved.hp=false;d.querySelector('[data-find="coupon"]').click();await settle();
   assert.equal([...d.querySelectorAll('#findResults .spot a')].find(x=>x.textContent.includes('ホットペッパーで見る')).href,'https://www.hotpepper.jp/strJ1/');
   assert.match(d.querySelector('#tab-find .ad-note').textContent,/#PR この画面には広告が含まれます/);
   // the coupon filter chip goes to Hotpepper too
@@ -698,7 +700,7 @@ test('a search result list can be closed from the top or the bottom',async()=>{
 
 test('the real Rakuten affiliate ID is set, so travel links carry it and PR',async()=>{
  const a=app();try{const {w,d}=a;await w.h.startOwner();d.querySelector('.maintabs [data-tab="find"]').click();
-  const l=d.querySelector('#travelDeals a');assert.equal(l.href,'https://hb.afl.rakuten.co.jp/hgc/583df298.b5d045a3.583df299.c1b690a8/?pc=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&m=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&link_type=hybrid_url');
+  const l=[...d.querySelectorAll('#travelDeals a')].find(x=>x.textContent.includes('楽天トラベルのクーポン'));assert.equal(l.href,'https://hb.afl.rakuten.co.jp/hgc/583df298.b5d045a3.583df299.c1b690a8/?pc=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&m=https%3A%2F%2Ftravel.rakuten.co.jp%2Fcoupon%2F&link_type=hybrid_url');
   assert(l.querySelector('.pr'));assert.match(l.rel,/sponsored/);
  }finally{a.close();}
 });
@@ -727,8 +729,16 @@ test('area: choose a prefecture and city; food and outings search inside it, and
   const ev=d.getElementById('localEvents').textContent;assert.match(ev,/松本の秋まつり/);assert.doesNotMatch(ev,/上田のまつり|終わった/);
   assert(decodeURIComponent(d.querySelector('#eventSearch a').href).includes('長野県松本市 イベント'));
   const evLinks=[...d.querySelectorAll('#eventSearch a')];assert.equal(evLinks.length,5);
-  const tb=[...d.querySelectorAll('#giftLinks a')].find(x=>x.textContent.includes('食べログ'));
+  // 提携を確かめるまでは、普通のリンク（PRなし）
+  let tb=[...d.querySelectorAll('#giftLinks a')].find(x=>x.textContent.includes('食べログ'));
+  assert.equal(tb.href,'https://tabelog.com/nagano/rstLst/?SrtT=rt');assert(!tb.querySelector('.pr'));
+  for(const x of evLinks.slice(2,4))assert(!x.querySelector('.pr'),'未確認の提携は広告にしない');
+  // 提携を確かめたら（approved）、バリューコマースの広告リンクになる
+  Object.assign(w.h.config.affiliate.approved,{tabelog:true,ikyu:true,jalan:true,jalanAct:true,asoview:true});
+  await w.renderEvents();await new Promise(r=>setTimeout(r,30));w.renderTravelDeals();await new Promise(r=>setTimeout(r,30));
+  tb=[...d.querySelectorAll('#giftLinks a')].find(x=>x.textContent.includes('食べログ'));
   assert.equal(tb.href,'https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=3783775&pid=892722098&vc_url='+encodeURIComponent('https://tabelog.com/nagano/rstLst/?SrtT=rt'));
+  evLinks.splice(0,evLinks.length,...d.querySelectorAll('#eventSearch a'));
   const ik=[...d.querySelectorAll('#travelDeals a')].find(x=>x.textContent.includes('一休'));
   assert.equal(ik.href,'https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=3783775&pid=892722099&vc_url='+encodeURIComponent('https://www.ikyu.com/'));assert(ik.querySelector('.pr'));
   // じゃらん：長野県の宿ランキング（KEN_160000、vos つき、PR）
@@ -1129,10 +1139,10 @@ test('お店から入れた予定：開くとそのお店のページへ進め�
  w.closeSheets();await w.openDetail(id);await w.openDetail(id);assert.equal(stats().length,1,'同じ日・同じ予定の再表示は数えない');
  d.getElementById('dShop').dispatchEvent(new w.MouseEvent('click',{cancelable:true}));d.getElementById('dShop').dispatchEvent(new w.MouseEvent('click',{cancelable:true}));
  assert.equal(stats().length,2,'押下も1回だけ');assert.ok('clicks' in a.data.get(key));
- // 承認後（vcOn）は広告リンクになり、PRと sponsored を付ける
- w.h.config.affiliate.vcOn=true;await w.openDetail(id);
+ // 提携を確かめたら（approved.hp）広告リンクになり、PRと sponsored を付ける
+ w.h.config.affiliate.approved.hp=true;await w.openDetail(id);
  const ad=d.getElementById('dShop');assert.match(ad.href,/^https:\/\/ck\.jp\.ap\.valuecommerce\.com\//);assert.match(ad.textContent,/PR/);assert.match(ad.rel,/sponsored/);
- w.h.config.affiliate.vcOn=false;
+ w.h.config.affiliate.approved.hp=false;
  // 場所を別の名前に直したら、お店のページは外す（別の店へ案内しない）
  await w.h.editRecord(id);d.getElementById('fPlace').value='駅前の別の店';await w.h.saveRecord();assert.equal(a.data.get(path).shop,'__delete__');
  }finally{a.close();}
@@ -1145,5 +1155,51 @@ test('お店のページは、先の予定だけ・ホットペッパーのお�
  assert.equal(a.calls.filter(([op,p])=>op==='set'&&p.startsWith('routeStats/')).length,0,'出していないものは数えない');
  // お店のクーポンがないときに「予約」と書いたボタンを出さない
  assert.doesNotMatch(w.spotCard({id:'J',name:'店',source:'hp',website:hp.url,couponUrl:'https://www.hotpepper.jp/strJ001234567/map/',coupon:false},0),/予約/);
+ }finally{a.close();}
+});
+
+/* ===== 2026-10-10 提携の見直し ===== */
+test('提携を確かめたものだけ広告リンク（ホットペッパーは見送り）。楽天は審査なしで使えるので広告リンクのまま',async()=>{
+ const a=app();try{await a.w.h.startOwner();const w=a.w,cfg=w.h.config.affiliate;
+ assert.equal(cfg.approved.hp,false,'ホットペッパーは提携見送り');assert.equal('vcOn' in cfg,false);
+ for(const k of ['asoview','jalan','jalanAct','tabelog','ikyu'])assert.equal(cfg.approved[k],false,k+' は未確認');
+ const cases=[['https://www.hotpepper.jp/strJ001234567/','hp'],['https://www.asoview.com/location/prf160000/','asoview'],['https://www.jalan.net/','jalan'],['https://www.jalan.net/activity/160000/','jalanAct'],['https://tabelog.com/nagano/rstLst/','tabelog'],['https://www.ikyu.com/','ikyu']];
+ for(const [u,k] of cases){const l=w.affLink(u,k);assert.equal(l.href,u,k);assert.equal(l.pr,false,k);assert.doesNotMatch(w.affButton(u,k,'x','b'),/PR|sponsored|valuecommerce/,k);}
+ const r=w.affLink('https://travel.rakuten.co.jp/','rakuten');assert.match(r.href,/^https:\/\/hb\.afl\.rakuten\.co\.jp\//);assert.equal(r.pr,true);
+ // お店検索の結果：画像を使っているので、出典と画像提供を出す
+ assert.match(fs.readFileSync('index/index/index.html','utf8'),/Powered by ホットペッパーグルメ Webサービス<\/a>　【画像提供：ホットペッパー グルメ】/);
+ }finally{a.close();}
+});
+test('計測：保存に失敗したら「数えた」印を残さず、次の表示でもう一度数える。保存できたら同じ日はもう数えない',async()=>{
+ const a=app();try{await a.w.h.startOwner();const w=a.w,d=a.d;
+ const tries=[];let fail=true;const real=a.db.collection;
+ a.db.collection=name=>{const c=real(name);if(name!=='routeStats')return c;return {...c,doc:id=>({...c.doc(id),set:async(x,o)=>{tries.push([id,Object.keys(x)]);if(fail)throw new Error('offline');return c.doc(id).set(x,o);}})};};
+ w.recordRoute('rk_stay','shown','find');await tick();
+ assert.equal(tries.length,1);assert.equal(Object.keys(w.localStorage).filter(k=>k.startsWith('hibiruka-route:')).length,0,'失敗したら印を残さない');
+ fail=false;w.recordRoute('rk_stay','shown','find');await tick();assert.equal(tries.length,2,'もう一度数える');
+ assert.equal(Object.keys(w.localStorage).filter(k=>k.startsWith('hibiruka-route:')).length,1);
+ w.recordRoute('rk_stay','shown','find');w.recordRoute('rk_stay','shown','find');await tick();assert.equal(tries.length,2,'同じ日は数えない');
+ // 知らない導線・知らない種類は数えない。個人を表す値は送らない
+ w.recordRoute('other','shown','x');w.recordRoute('rk_stay','buy','x');await tick();assert.equal(tries.length,2);
+ assert.deepEqual(tries[1][1].sort(),['day','route','shown']);
+ }finally{a.close();}
+});
+test('楽天トラベル「行き先の宿を探す」：探す画面に出たときだけ表示を数え、押下を数える（隠れたタブでは数えない）',async()=>{
+ const a=app();try{await a.w.h.startOwner();const w=a.w,d=a.d;
+ const sets=()=>a.calls.filter(([op,p])=>op==='set'&&p.startsWith('routeStats/rk_stay_'));
+ w.goTab('list');w.renderTravelDeals();await tick();
+ const st=d.getElementById('rkStay');
+ if(st){assert.equal(sets().length,0,'見えていないときは数えない');}
+ w.goTab('find');await w.renderTravelDeals();await tick();
+ const st2=d.getElementById('rkStay');
+ if(st2){assert.equal(sets().length,1);st2.dispatchEvent(new w.MouseEvent('click',{cancelable:true}));await tick();assert.equal(sets().length,2);}
+ else assert.equal(sets().length,0,'行き先が分からないとき（全国）は数えない');
+ // 行き先が分かっているとき（場所を指定）
+ const before=sets().length;w.goTab('find');const f0=w.fetch;w.fetch=async(url,opt)=>String(url).includes('nominatim')?{ok:true,json:async()=>[{lat:'36.3428',lon:'138.6353'}]}:f0?f0(url,opt):{ok:false,json:async()=>({})};
+ d.getElementById('wherePick').click();d.getElementById('findPlaceQ').value='軽井沢駅';d.getElementById('findPlaceForm').dispatchEvent(new w.Event('submit',{cancelable:true}));for(let i=0;i<4;i++)await tick();
+ const st3=d.getElementById('rkStay');assert.ok(st3,'行き先の宿のボタンがある');assert.match(st3.textContent,/軽井沢駅の宿を探す/);
+ assert.equal(sets().length,Math.max(before,1),'表示は同じ日1回');const b2=sets().length;
+ st3.dispatchEvent(new w.MouseEvent('click',{cancelable:true}));st3.dispatchEvent(new w.MouseEvent('click',{cancelable:true}));await tick();assert.equal(sets().length,b2+(before>1?0:1),'押下も1回');
+ assert.ok(sets().every(([,p])=>/^routeStats\/rk_stay_\d{8}$/.test(p)));
  }finally{a.close();}
 });

@@ -83,7 +83,7 @@
     }
     // 導線の計測（2026-10-09）：日ごとの合計だけ。1回に1つ増やすことだけができ、だれも読めない（集計はサーバー側で読む）
     match /routeStats/{id} {
-      allow create: if request.auth != null && id.matches('^hp_plan_[0-9]{8}$')
+      allow create: if request.auth != null && id.matches('^(hp_plan|rk_stay)_[0-9]{8}$')
         && request.resource.data.route + '_' + request.resource.data.day == id
         && ((request.resource.data.keys().hasOnly(['route', 'day', 'shown']) && request.resource.data.shown == 1)
           || (request.resource.data.keys().hasOnly(['route', 'day', 'clicks']) && request.resource.data.clicks == 1));

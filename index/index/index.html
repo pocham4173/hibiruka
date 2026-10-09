@@ -1184,11 +1184,16 @@ const CONFIG = {
   weatherUrl: "https://hibiruka-line.okm-co.workers.dev/weather",
   accountUrl: "https://hibiruka-line.okm-co.workers.dev/account/delete",
   acceptUrl: "https://hibiruka-line.okm-co.workers.dev/line/accept",
-  // アフィリエイト（登録ができたら値を入れるだけ。空のあいだは普通のリンクで開く）
-  //   valuecommerce: バリューコマースの MyLink の sid と pid（ホットペッパーグルメのプログラム）
-  //   rakuten: 楽天アフィリエイトID（例 "1a2b3c4d.5e6f7a8b.1a2b3c4e.5f6a7b8c"）
-  // バリューコマース（ホットペッパー）：提携の承認が来たら vcOn を true にする
-  affiliate: { vcSid: "3783775", vcPid: "892722088", vcOn: false, vcAsoview: "892722093", vcJalan: "892722096", vcJalanAct: "892722097", vcTabelog: "892722098", vcIkyu: "892722099", rakuten: "583df298.b5d045a3.583df299.c1b690a8" },
+  // アフィリエイト。広告リンクにするのは「提携していると管理画面で確かめたもの」だけ（IDがあるだけでは広告にしない）。
+  //   approved が false のあいだは、PRを付けない普通のリンクで開く。くわしくは docs/affiliate-review.md
+  //   hp（ホットペッパー 飲食店ネット予約）：2026-10-10 提携見送りを確認。お店検索・お店のページへの普通のリンクは続ける
+  //   asoview・jalan・jalanAct・tabelog・ikyu（バリューコマース）：提携状態は未確認（管理画面で確かめたら true に）
+  //   rakuten：楽天アフィリエイト（楽天トラベル・楽天市場は提携の審査なしで使える、と楽天の公式案内にある）
+  affiliate: {
+    vcSid: "3783775", vcPid: "892722088", vcAsoview: "892722093", vcJalan: "892722096", vcJalanAct: "892722097", vcTabelog: "892722098", vcIkyu: "892722099",
+    approved: { hp: false, asoview: false, jalan: false, jalanAct: false, tabelog: false, ikyu: false },
+    rakuten: "583df298.b5d045a3.583df299.c1b690a8"
+  },
   defaultOwnerName: "理絵"
 };
 /* ========================================================= */
@@ -2021,10 +2026,12 @@ async function drawEvents() {
 /* ---------- お得・クーポン ---------- */
 // アフィリエイトのリンクに変える（IDが空なら元のリンクのまま）。変えたときは「PR」を付ける
 function affLink(url, kind) {
-  const a = CONFIG.affiliate || {};
+  const a = CONFIG.affiliate || {}, ok = a.approved || {};
   if (!/^https:\/\//.test(url || "")) return { href: "", pr: false };
+  // 提携を確かめていないものは、広告にしない（普通のリンク・PRなし）
+  if (kind !== "rakuten" && !ok[kind]) return { href: url, pr: false };
   // ホットペッパーのお店のページだけ（クーポンのページへの広告リンクは、ホットペッパーの決まりで禁止）。vos はホットペッパー指定の目印
-  if (kind === "hp" && a.vcOn && a.vcSid && a.vcPid && /^https:\/\/www\.hotpepper\.jp\//.test(url) && !/coupon/i.test(url)) {
+  if (kind === "hp" && a.vcSid && a.vcPid && /^https:\/\/www\.hotpepper\.jp\//.test(url) && !/coupon/i.test(url)) {
     const u = new URL(url); u.searchParams.set("vos", "nhppvccp99002");
     return { href: `https://ck.jp.ap.valuecommerce.com/servlet/referral?sid=${encodeURIComponent(a.vcSid)}&pid=${encodeURIComponent(a.vcPid)}&vc_url=${encodeURIComponent(u.toString())}`, pr: true };
   }
@@ -2054,27 +2061,39 @@ function shopRoute(e) {
   return `<div class="shop-route"><a class="btn sub" id="dShop" href="${esc(l.href)}" target="_blank" rel="noopener${l.pr ? " sponsored" : ""}">🍽 ホットペッパーでこのお店を見る${l.pr ? '<span class="pr">PR</span>' : ""}</a>
     <p class="note">外部サイトが開きます。空席・ネット予約ができるか・最新の情報は、開いた先で確かめてください。</p></div>`;
 }
-/* 導線の計測（2026-10-09）：日ごとの「表示」と「押された」回数の合計だけを数える。
-   だれが・どの予定か・お店の名前・場所は送らない。同じ端末・同じ予定・同じ日の2回目以降は数えない（再表示・連打で増やさない）。
-   押された回数は、予約や購入ができた数ではない */
-const ROUTES = ["hp_plan"], routeSeen = new Set();
+/* 導線の計測：日ごとの「表示」と「押された」回数の合計だけを数える（だれが・どの予定か・お店や場所の名前は送らない）。
+   hp_plan＝予定から「お店のページ」を開く便利さの指標（広告ではないので、売上・成約とは関係ない）
+   rk_stay＝探す画面の「行き先の宿を探す」（楽天トラベル。予約・報酬は楽天の管理画面でしか分からない）
+   同じ端末・同じ予定・同じ日の2回目以降は数えない。押された回数は、予約や購入ができた数ではない。
+   保存できたときだけ「数えた」印を残す（通信に失敗したら、次に表示・押したときにもう一度数える） */
+const ROUTES = ["hp_plan", "rk_stay"], routeSeen = new Set();
 let routePruned = false;
+const routeMark = (route, kind, key) => `hibiruka-route:${route}:${kind}:${key}:${todayStr().replaceAll("-", "")}`;
+function routeCounted(mark) { try { return !!localStorage.getItem(mark); } catch { return false; } }
 function recordRoute(route, kind, key) {
   try {
     if (!ROUTES.includes(route) || !["shown", "clicks"].includes(kind) || !auth?.currentUser) return;
-    const day = todayStr().replaceAll("-", ""), mark = `hibiruka-route:${route}:${kind}:${key}:${day}`;
-    if (routeSeen.has(mark)) return;
-    routeSeen.add(mark);
-    try {
-      if (localStorage.getItem(mark)) return;
-      localStorage.setItem(mark, "1");
-      if (!routePruned) { // 8日より前の印は消す
-        routePruned = true; const old = addDays(todayStr(), -8).replaceAll("-", "");
-        Object.keys(localStorage).filter(k => k.startsWith("hibiruka-route:") && k.slice(-8) < old).forEach(k => localStorage.removeItem(k));
-      }
-    } catch {}
-    db.collection("routeStats").doc(`${route}_${day}`).set({ route, day, [kind]: firebase.firestore.FieldValue.increment(1) }, { merge: true }).catch(() => {});
+    const day = todayStr().replaceAll("-", ""), mark = routeMark(route, kind, key);
+    if (routeSeen.has(mark) || routeCounted(mark)) return;
+    routeSeen.add(mark); // 送っている間の重ね押しを防ぐ
+    db.collection("routeStats").doc(`${route}_${day}`).set({ route, day, [kind]: firebase.firestore.FieldValue.increment(1) }, { merge: true })
+      .then(() => {
+        try {
+          localStorage.setItem(mark, "1");
+          if (!routePruned) { // 8日より前の印は消す
+            routePruned = true; const old = addDays(todayStr(), -8).replaceAll("-", "");
+            Object.keys(localStorage).filter(k => k.startsWith("hibiruka-route:") && k.slice(-8) < old).forEach(k => localStorage.removeItem(k));
+          }
+        } catch {}
+      })
+      .catch(() => { routeSeen.delete(mark); }); // 保存できなかった：印を残さない
   } catch {}
+}
+// 画面に実際に出たときだけ「表示」を数える（隠れたタブの中で描いただけでは数えない）
+function recordWhenVisible(el, route, key) {
+  if (typeof IntersectionObserver !== "function") { if (!el.closest(".hidden")) recordRoute(route, "shown", key); return; }
+  const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting) && !el.closest(".hidden")) { io.disconnect(); recordRoute(route, "shown", key); } }, { threshold: 0.6 });
+  io.observe(el);
 }
 const TRAVEL_DEALS = [
   ["🎟 楽天トラベルのクーポン", "https://travel.rakuten.co.jp/coupon/"],
@@ -2095,9 +2114,13 @@ async function renderTravelDeals() {
     // じゃらん：県の宿ランキング（毎日更新）。県が分からないときはトップ
     const pref = findArea ? findArea.pref : findPlace ? "" : findCity.pref, no = recruitPref(pref);
     const jalan = no > 0 ? [`🏆 じゃらんの${pref}の宿ランキング`, `https://www.jalan.net/ranking/yado/KEN_${String(no).padStart(2, "0")}0000.html`] : ["🏨 じゃらんで宿を探す", "https://www.jalan.net/"];
-    $("travelDeals").innerHTML = [...TRAVEL_DEALS, stay].map(([l, u]) => affButton(u, "rakuten", esc(l), "btn small sub")).join("")
+    // 行き先の宿を先頭に（行き先と一致するものを最初に。全国のクーポンはそのあと）
+    $("travelDeals").innerHTML = affButton(stay[1], "rakuten", esc(stay[0]), "btn small sub").replace("<a ", name ? '<a id="rkStay" ' : "<a ")
+      + TRAVEL_DEALS.map(([l, u]) => affButton(u, "rakuten", esc(l), "btn small sub")).join("")
       + affButton(jalan[1], "jalan", esc(jalan[0]), "btn small sub")
       + affButton("https://www.ikyu.com/", "ikyu", "✨ 特別な日の宿（一休.com）", "btn small sub");
+    const st = $("rkStay");
+    if (st) { recordWhenVisible(st, "rk_stay", "find"); st.addEventListener("click", () => recordRoute("rk_stay", "clicks", "find")); }
   };
   if (findPlace) return draw(findPlace.label);
   draw(findCity.name || "");
@@ -2309,7 +2332,7 @@ async function findSpots({ key = "", words = "" } = {}) {
     const wordsNote = (ors.length > 1 ? `（${ors.join("・")}のどれか）` : "") + (minus.length ? `（${minus.join("・")}をふくまない）` : "");
     if (usedHp && !rangeText && !cityMode) rangeText = { "3": "1km以内", "5": "3km以内" }[findRange] || "";
     note.textContent = `${centerLabel}${cityMode ? "で" : "のまわり"}${rangeText && !cityMode ? `（${rangeText}）で` : cityMode ? "" : "で"}${spots.length}件見つかりました${wordsNote}${cityMode ? "（近い順）" : ""}${!findHere && centerLabel === FIND_HOME.label ? "（現在地が使えないため、上田駅を基準にしています）" : ""}。`;
-    box.innerHTML = jt + mineBox(mine) + spots.map((s, i) => spotCard(s, i)).join("") + (usedHp ? '<p class="note center hp-credit"><a href="https://webservice.recruit.co.jp/" target="_blank" rel="noopener">Powered by ホットペッパーグルメ Webサービス</a></p>' : "");
+    box.innerHTML = jt + mineBox(mine) + spots.map((s, i) => spotCard(s, i)).join("") + (usedHp ? '<p class="note center hp-credit"><a href="https://webservice.recruit.co.jp/" target="_blank" rel="noopener">Powered by ホットペッパーグルメ Webサービス</a>　【画像提供：ホットペッパー グルメ】</p>' : "");
     bindMine();
     badgeWeather(spots);
     if (!usedHp && (findFilters.size || findBudget) && (FOOD.has(key) || !key)) note.textContent += "（こだわり・予算はホットペッパーのお店だけに使えます）";
