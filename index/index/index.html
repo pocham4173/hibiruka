@@ -582,7 +582,7 @@
     <details id="pinDetails" class="hidden"><summary>以前の記録を復元</summary>
     <h2 style="margin-top:0" id="pinTitle">暗証番号を入れてください</h2>
     <p id="pinText" style="text-align:left;font-size:15px">このブラウザに記録を引き継ぐため、設定済みの6けたの番号を入れてください。</p>
-    <input type="password" id="pinInput" inputmode="numeric" maxlength="6" placeholder="●●●●●●" autocomplete="off" style="text-align:center;font-size:26px;letter-spacing:.4em">
+    <input type="password" id="pinInput" aria-labelledby="pinTitle" inputmode="numeric" maxlength="6" placeholder="●●●●●●" autocomplete="off" style="text-align:center;font-size:26px;letter-spacing:.4em">
     <button class="btn" id="pinBtn" style="margin-top:14px">ひらく</button>
     <p class="err" id="pinErr"></p>
     <p class="note" id="pinNote" style="text-align:left"></p></details>
@@ -616,7 +616,7 @@
 
       <div class="step"><span class="n">1</span>いつ？<small>日付は必須</small></div>
       <div class="row2">
-        <input type="date" id="fDate">
+        <input type="date" id="fDate" aria-label="日付（必須）">
         <input type="time" id="fTime" aria-label="時間">
       </div>
       <p class="note">時間はなくてもOK</p>
@@ -626,14 +626,14 @@
       <p class="note"><span class="line-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--line-green)"></span> がついている人は、LINEで予定を送れる人です。</p>
 
       <div class="step"><span class="n">3</span>どこで？</div>
-      <input type="text" id="fPlace" placeholder="例：上田駅前のカフェ">
+      <input type="text" id="fPlace" aria-label="どこで？" placeholder="例：上田駅前のカフェ">
       <a class="maplink" id="fMapLink" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.1 6.3 9.9 4.2a2 2 0 0 0-1.8 0L3.6 6.5A1 1 0 0 0 3 7.4v12.1a1 1 0 0 0 1.4.9l3.7-1.9a2 2 0 0 1 1.8 0l4.2 2.1a2 2 0 0 0 1.8 0l4.5-2.3a1 1 0 0 0 .6-.9V5.4a1 1 0 0 0-1.4-.9l-3.7 1.9a2 2 0 0 1-1.8 0Z"/><path d="M15 6.8v14M9 3.2v14"/></svg>Googleマップで場所を確かめる</a>
 
       <div class="step"><span class="n">4</span>なにをする？・なにをした？</div>
-      <input type="text" id="fTitle" placeholder="例：ランチ、映画、髪を切る">
+      <input type="text" id="fTitle" aria-label="なにをする？・なにをした？" placeholder="例：ランチ、映画、髪を切る">
       <button type="button" class="ai-link" id="aiTitle">✨ 題名の案をAIに聞く</button>
       <div class="chips hidden" id="aiTitles" aria-live="polite"></div>
-      <label class="lbl">メモ<small>なくてもOK・LINEにも載ります</small></label>
+      <label class="lbl" for="fMemo">メモ<small>なくてもOK・LINEにも載ります</small></label>
       <textarea id="fMemo" placeholder="例：駐車場は裏側／パスタがおいしかった"></textarea>
       <button type="button" class="btn sub ai-btn" id="aiWrite">✨ AIで文章を作成</button>
       <div class="ai-box hidden" id="aiBox" aria-live="polite">
@@ -657,7 +657,7 @@
       <details class="more-opts"><summary>📷 SNS投稿・インスタのリンク</summary>
       <button type="button" class="btn sub insta-btn" id="fInsta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r=".6" fill="currentColor"/></svg>SNSに投稿する</button>
       <p class="note">写真・場所・日付を入れた画像を作って、iPhoneの共有からInstagram（フィード・ストーリーズ）やXに送れます。</p>
-      <label class="lbl">投稿したインスタのリンク<small>なくてもOK・あとからここで開けます</small></label>
+      <label class="lbl" for="fLink">投稿したインスタのリンク<small>なくてもOK・あとからここで開けます</small></label>
       <input type="url" id="fLink" placeholder="https://">
       </details>
 
@@ -676,7 +676,7 @@
     <aside id="backupHint" class="card hint hidden" role="note"><b>🔐 記録が増えてきました</b><p class="note" style="margin:4px 0 8px">スマホを替えたりブラウザのデータを消したりしても戻れるように、メールの登録をしておくと安心です（いつでも・無料）。</p><div class="btnrow"><button type="button" class="btn small" id="backupGo">登録する</button><button type="button" class="btn small ghost" id="backupLater">あとで</button></div></aside>
     <aside id="firstRecordGuide" class="card hidden" aria-labelledby="firstRecordTitle">
       <p class="note">はじめの1件</p><h2 id="firstRecordTitle">何を残しますか？</h2>
-      <p>種類（遊び・食事など）と日付を選べばOK。写真や通知の設定は、あとからでも。</p>
+      <p>種類（遊び・食事など）・日付と、「どこで？」か「なにをする？」を入れればOK。写真や通知は、あとからでも。</p>
       <div class="start-actions"><button class="btn" id="firstPlan" type="button">＋ 予定を入れる</button><button class="btn sub" id="firstMemory" type="button">思い出を残す</button></div>
       <button class="back-link" id="skipFirstRecord" type="button">あとで</button>
       <div class="disclaimer"><b>ご利用上の注意（免責事項）</b><p>本サービス（ヒビルカ）は、個人が無料で提供している試作開発アプリです。</p><ul><li>無料枠の範囲内で運用しているため、利用状況によっては通知の遅延・未達、一時的なアクセス制限、または予告のない機能変更・サービス停止が発生する場合があります。</li><li>本サービスのご利用により生じた損害等について、開発者は一切の責任を負いかねますのであらかじめご了承ください。</li></ul><p class="terms-link"><a href="../../terms/" target="_blank" rel="noopener">📄 利用規約・プライバシーポリシー</a>　<a href="../../terms/#contact" target="_blank" rel="noopener">✉️ お問い合わせ</a></p></div>
@@ -909,11 +909,11 @@
 
       <div id="lineWarn" class="setup-warn hidden">LINEの設定がまだなので、招待はまだ送れません。</div>
 
-      <label class="lbl">通知に表示するあなたの名前</label>
+      <label class="lbl" for="ownerName">通知に表示するあなたの名前</label>
       <input type="text" id="ownerName" placeholder="例：りえ">
       <p class="note">LINEに「◯◯さんから予定のお知らせ」と出ます。</p>
 
-      <label class="lbl">通知する人の名前</label>
+      <label class="lbl" for="inviteName">通知する人の名前</label>
       <input type="text" id="inviteName" placeholder="例：お母さん、みき">
       <button class="btn line" id="inviteBtn" style="margin-top:14px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.8 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>招待リンクを作る</button>
 
@@ -942,7 +942,7 @@
       <button class="btn sub" id="pinChangeBtn" style="margin-top:12px">暗証番号を変える</button>
     </div>
     <div class="card" id="exportCard"><h2>📦 記録を書き出す</h2>
-      <p class="note">自分の記録を、ファイルにまとめて取り出せます（見るため・保管用の控え）。写真は小さい版だけ入ります。このファイルから自動で元に戻す機能はありません。</p>
+      <p class="note">自分の記録を、ファイルにまとめて取り出せます。見るため・保管用の控えで、完全なバックアップではありません（写真は小さい版だけ。このファイルから元に戻すことはできません）。</p>
       <div class="btnrow"><button type="button" class="btn sub" id="exportJson">ファイル（JSON）</button><button type="button" class="btn sub" id="exportCsv">表（CSV）</button></div>
     </div>
     <div class="card" id="accountCard"><h2>機種変更・別の端末でも使う</h2>
@@ -1094,8 +1094,8 @@
   <div style="font-weight:900;margin:16px 0 6px">いつ送る？</div>
   <div class="chips" id="sQuick" style="margin-bottom:10px"></div>
   <div class="row2">
-    <div><label class="lbl" style="margin-top:4px">送る日</label><input type="date" id="sDate"></div>
-    <div><label class="lbl" style="margin-top:4px">送る時間</label><input type="time" id="sTime"></div>
+    <div><label class="lbl" style="margin-top:4px" for="sDate">送る日</label><input type="date" id="sDate"></div>
+    <div><label class="lbl" style="margin-top:4px" for="sTime">送る時間</label><input type="time" id="sTime"></div>
   </div>
   <p class="note" style="margin-bottom:4px">⏱ 定期的に送信します。混雑時は10分以上遅れることがあります。</p>
   <p class="note" id="sQuota" style="margin-bottom:16px"></p>
@@ -1133,7 +1133,7 @@
   <h2>項目を編集</h2>
   <div id="catList"></div>
   <div class="row2" style="margin-top:14px;grid-template-columns:1fr auto">
-    <input type="text" id="catNew" placeholder="例：ライブ、ナジャ">
+    <input type="text" id="catNew" aria-label="新しい項目の名前" placeholder="例：ライブ、ナジャ">
     <button class="btn small" id="catAddBtn">追加</button>
   </div>
   <button class="btn sub" id="catCloseBtn" style="margin-top:18px">閉じる</button>
@@ -1217,17 +1217,30 @@ function inviteUrl(token) { return `https://liff.line.me/${CONFIG.liffId}?invite
 function isPlan(e) { return e.kind !== "memory" && e.date >= todayStr(); }
 // 日が過ぎた予定。日付が過ぎただけでは「行った」にしない（行った／中止を本人が選べる。選ばなくても困らない）
 function isPastPlan(e) { return e.kind !== "memory" && e.kind !== "wish" && !!e.date && e.date < todayStr(); }
-// 実際にあったこと＝思い出として記録したもの、または予定で「行った」を選んだもの（AIのふりかえり・地図はこれだけ）
-function isDone(e) { return e.kind === "memory" || (isPastPlan(e) && e.outcome === "done"); }
+// 実際にあったこと＝思い出として記録したもの、または予定で「行った」を選んだもの（一覧・地図・ふりかえり・LINEのまとめで同じ判定）。
+// 「中止」が付いた記録は、種類が何であっても実施済みにしない（以前の版で種類だけ思い出に変わった記録も含む）
+function isDone(e) { return e.outcome !== "cancelled" && (e.kind === "memory" || (isPastPlan(e) && e.outcome === "done")); }
+// 行きたいリストの状態は、つながっている予定と、同じ場所の実施済みの記録から決める
+const samePlace = (a, b) => !!a && !!b && String(a).trim() === String(b).trim();
+function wishStatusFor(w, evs) {
+  const plan = w.planId ? evs.find(e => e.id === w.planId) : null;
+  if ((plan && isDone(plan)) || evs.some(e => e.id !== w.planId && e.kind !== "wish" && isDone(e) && samePlace(e.place, w.place))) return "visited";
+  if (plan && plan.outcome !== "cancelled") return "scheduled";
+  return "wished";
+}
 async function setOutcome(id, outcome) {
   const e = events.find(x => x.id === id); if (!e) return;
   try {
-    await recordCollection("events").doc(id).update({ outcome: outcome || firebase.firestore.FieldValue.delete(), updatedAt: TS() });
+    const after = events.map(x => x.id === id ? { ...x, outcome: outcome || undefined } : x);
+    const linked = wishes.filter(x => x.planId === id);
+    // 予定と、そこから入れた行きたいリストを同じ保存でそろえる（片方だけ変わる・食い違うことがない。やり直しても同じ結果）
+    const batch = db.batch();
+    batch.update(recordCollection("events").doc(id), { outcome: outcome || firebase.firestore.FieldValue.delete(), updatedAt: TS() });
+    const next = linked.map(w => [w, wishStatusFor(w, after)]).filter(([w, st]) => st !== w.status);
+    next.forEach(([w, st]) => batch.update(recordCollection("events").doc(w.id), { status: st, updatedAt: TS() }));
+    await batch.commit();
     e.outcome = outcome || undefined;
-    // 行きたいリストから入れた予定なら、そちらも合わせる（その1件だけ）
-    const w = wishes.find(x => x.planId === id);
-    if (w && outcome === "done" && w.status !== "visited") recordCollection("events").doc(w.id).update({ status: "visited", updatedAt: TS() }).catch(() => {});
-    if (w && outcome === "cancelled" && w.status !== "wished") recordCollection("events").doc(w.id).update({ status: "wished", planId: firebase.firestore.FieldValue.delete(), updatedAt: TS() }).catch(() => {});
+    next.forEach(([w, st]) => { w.status = st; });
     toast(outcome === "done" ? "「行った」にしました。思い出に入ります" : outcome === "cancelled" ? "「中止」にしました。思い出やふりかえりには入りません" : "元に戻しました");
     renderList();
   } catch (err) { toast(`保存できませんでした（${err?.code || "error"}）`); }
@@ -1267,7 +1280,7 @@ try { db.enablePersistence?.({ synchronizeTabs: true }).catch(() => {}); } catch
 const TS = () => firebase.firestore.FieldValue.serverTimestamp();
 
 const FEATURES = [
-  ["cal", "予定が、そのまま思い出に", "日付が過ぎた予定は、自然に「思い出」へ。写真やメモを足して、アルバムのように振り返れます。"],
+  ["cal", "予定から、思い出へ", "日が過ぎた予定で「✅ 行った」を押すと思い出に。写真やメモを足して、アルバムのように振り返れます。"],
   ["send", "大切な人に、LINEで予定を届ける", "「誰に」「いつ届けるか」を選ぶだけ。相手はアプリを入れなくても、いつものLINEに予定が届きます。家族の通院や美容院、ランチの約束も忘れません。"],
   ["users", "誰と・どこで・何をしたかが残る", "食事・カフェ・旅行などの分類と写真で整理。行った場所はGoogleマップですぐに開けます。"],
   ["heart", "「また行きたい」リスト", "気に入った場所に♥をつけておけば、次のお出かけ先に迷いません。"],
@@ -1566,11 +1579,11 @@ function setupForm() {
   $("cancelEditBtn").onclick = () => { resetForm(); goTab("list"); };
   $("fDate").oninput = () => {
     form.dateTouched = true;
-    if ($("fDate").value && $("fDate").value < todayStr()) $("fKind").value = "memory";
+    if ($("fDate").value && $("fDate").value < todayStr() && !keepsPastPlan()) $("fKind").value = "memory";
     updateSaveNote();
   };
   document.querySelectorAll('[data-kind]').forEach(b => b.onclick = () => {
-    $("fKind").value = b.dataset.kind; updateSaveNote();
+    $("fKind").value = b.dataset.kind; form.kindTouched = true; updateSaveNote();
   });
   $("fPlace").oninput = () => { if (form.geo && $("fPlace").value.trim() !== form.geo.place) form.geo = null; updateMapLink(); };
 }
@@ -1630,9 +1643,17 @@ function gcalUrl(e) {
   if (det) p.set("details", det);
   return "https://calendar.google.com/calendar/render?" + p.toString();
 }
+// 日が過ぎた予定を直しているとき：日付を過去のままにしても「予定」のまま保存できる（結果は予定の画面で選ぶ）
+function keepsPastPlan() { return !!editingId && !!form.orig && form.orig.kind !== "memory" && form.orig.kind !== "wish" && !!form.orig.date && form.orig.date < todayStr() && $("fKind").value === "plan"; }
 function updateSaveNote() {
   const k = $("fKind").value, d = $("fDate").value;
   const plan = k === "plan" && d >= todayStr();
+  if (k === "plan" && d && d < todayStr() && keepsPastPlan()) {
+    document.querySelectorAll('[data-kind]').forEach(b => { const on = b.dataset.kind === k; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
+    $("saveBtn").textContent = "変更を保存する";
+    $("saveNote").textContent = form.orig.outcome === "done" ? "「行った」予定のまま保存します。" : form.orig.outcome === "cancelled" ? "「中止」の予定のまま保存します。" : "日が過ぎた予定のまま保存します。行った・中止は予定の画面で選べます。";
+    return;
+  }
   document.querySelectorAll('[data-kind]').forEach(b => {
     const on = b.dataset.kind === k; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on));
   });
@@ -2417,11 +2438,14 @@ function planFromSpot(s, wishId) {
 function renderWishes() {
   const box = $("wishList"); if (!box) return;
   const today = todayStr();
-  // 予定で「行った」を選んだら「行った」にする（日が過ぎただけでは変えない）
+  // 「予定あり」のものだけ、予定の結果に合わせて直す（行った→行った、中止・予定が消えた→行きたい）。
+  // 「行った」になっているものは、ここでは戻さない（以前の訪問実績を推測で消さない）
   wishes.forEach(w => {
     if (w.status !== "scheduled" || !w.planId) return;
     const plan = events.find(e => e.id === w.planId);
-    if (plan && isDone(plan)) { w.status = "visited"; recordCollection("events").doc(w.id).update({ status: "visited", updatedAt: TS() }).catch(() => {}); }
+    if (!plan) return;
+    const st = wishStatusFor(w, events);
+    if (st !== w.status) { w.status = st; recordCollection("events").doc(w.id).update({ status: st, updatedAt: TS() }).catch(() => {}); }
   });
   const order = { wished: 0, scheduled: 1, visited: 2 };
   const list = wishes.slice().sort((a, b) => (order[a.status] ?? 0) - (order[b.status] ?? 0));
@@ -2784,7 +2808,7 @@ async function saveRecord() {
   const date = $("fDate").value;
   if (!date) { toast("日付を入れてください"); return; }
   const kindSel = $("fKind").value;
-  if (kindSel === "plan" && date < todayStr()) { toast("過去の日付は「思い出」を選んでください"); return; }
+  if (kindSel === "plan" && date < todayStr() && !keepsPastPlan()) { toast("過去の日付は「思い出」を選んでください"); return; }
   const data = {
     cat: form.cat, kind: kindSel,
     date, time: $("fTime").value || "",
@@ -2800,6 +2824,10 @@ async function saveRecord() {
   if ($("saveBtn").disabled) return;
   if (!form.keepPhotos && form.photos.some(p => !p.full)) { toast("写真を読み込めませんでした。記録を開き直してください。"); return; }
   if (form.keepPhotos) delete data.thumbs; // 写真は元のまま
+  if (editingId && form.orig?.outcome) {
+    // 先の日付へ動かした（延期）予定は、行った／中止の結果を外す。自分で「思い出」に切り替えた中止の記録も、中止を外す
+    if ((kindSel === "plan" && date >= todayStr()) || (kindSel === "memory" && form.kindTouched && form.orig.outcome === "cancelled")) data.outcome = firebase.firestore.FieldValue.delete();
+  }
   const savingForm = form;
   const photos = form.photos.map(p => ({...p}));
   const controls = [...document.querySelectorAll('#tab-rec input, #tab-rec textarea, #tab-rec select, #tab-rec button')].filter(el => !el.disabled);
@@ -2825,7 +2853,13 @@ async function saveRecord() {
     const photoIds = new Set(photos.map((p, i) => `${id}_${i}`));
     old.forEach(d => { if (!photoIds.has(d.id)) batch.delete(d.ref); });
     if (!keep) photos.forEach((p, i) => batch.set(recordCollection("photos").doc(`${id}_${i}`), ownedData({ eventId: id, i, data: p.full })));
+    // この予定から入れた行きたいリストも、同じ保存でそろえる（延期で先の日付にした等）
+    const prev = events.find(x => x.id === id);
+    const savedEv = { ...(prev || {}), ...data, id, outcome: "outcome" in data ? undefined : prev?.outcome };
+    const wishFix = wasNew ? [] : wishes.filter(w => w.planId === id).map(w => [w, wishStatusFor(w, events.map(x => x.id === id ? savedEv : x))]).filter(([w, st]) => st !== w.status);
+    wishFix.forEach(([w, st]) => batch.update(recordCollection("events").doc(w.id), { status: st, updatedAt: TS() }));
     await batch.commit();
+    wishFix.forEach(([w, st]) => { w.status = st; });
     if (savingForm.fromWish && isPlan(data)) recordCollection("events").doc(savingForm.fromWish).update({ status: "scheduled", planId: id, updatedAt: TS() }).catch(e => console.warn(e));
     if (form !== savingForm) { toast("記録を保存しました"); return; }
     const saved = { ...data, id, sends: events.find(x => x.id === id)?.sends || [] };
@@ -2846,7 +2880,9 @@ async function editRecord(id) {
   form.photos = (e.thumbs || []).map(t => ({ thumb: t, full: null }));
   form.geo = Number.isFinite(e.lat) && Number.isFinite(e.lng) ? { lat: e.lat, lng: e.lng, place: e.place || "" } : null;
   form.dateTouched = true;
-  $("fKind").value = isPlan(e) ? "plan" : "memory"; $("fDate").value = e.date; $("fTime").value = e.time || "";
+  // 種類は保存されているまま（日が過ぎた予定を開いても「思い出」に変えない。行った／中止の結果も変えない）
+  form.orig = { kind: e.kind, date: e.date, outcome: e.outcome };
+  $("fKind").value = e.kind === "memory" ? "memory" : "plan"; $("fDate").value = e.date; $("fTime").value = e.time || "";
   $("fPlace").value = e.place || ""; $("fTitle").value = e.title || ""; $("fMemo").value = e.memo || ""; $("fLink").value = e.link || "";
   $("fFav").classList.toggle("on", form.fav); $("fFav").setAttribute("aria-pressed", String(!!form.fav));
   $("saveBtn").textContent = "変更を保存する"; $("cancelEditBtn").classList.remove("hidden");
@@ -2986,18 +3022,31 @@ function renderWhoFilter() {
 function filtered() {
   return events.filter(e => (!filterCat || e.cat === filterCat) && (!filterWho || (e.who || []).includes(filterWho)));
 }
+// 手段ごとの結果を短く（「送信済み」＝LINE・通知サービスが受け付けた。端末に届いたかまでは分からないので「届いた」とは書かない）
+function sendParts(x) {
+  const ids = x.friendIds || [], wantLine = ids.some(id => id !== PUSH_SELF), wantPush = ids.includes(PUSH_SELF);
+  const lineSent = x.lineResult ? x.lineResult === "sent" : x.status === "sent"; // 以前の版の行には lineResult がない
+  const line = !wantLine ? "" : lineSent ? "LINE：送信済み"
+    : x.lineResult === "unknown" ? "LINE：送れたか不明" : x.lineResult === "retry" ? "LINE：再試行中" : "LINE：送れませんでした";
+  const push = !wantPush ? "" : x.pushResult === "ok" ? "アプリ通知：送信済み" : x.pushResult === "unknown" ? "アプリ通知：送れたか不明" : x.pushResult === "fail" ? "アプリ通知：送れませんでした" : "";
+  return [line, push].filter(Boolean).join("・");
+}
 function sendRows(e) {
+  const cancels = new Set(e.sendCancels || []);
   return (e.sends || []).slice().sort((a, b) => a.at < b.at ? -1 : 1).map(x => {
     const names = (x.friendIds || []).map(id => recipientName(id)).filter(Boolean).join("・") || "（削除された人）";
     const said = x.note ? `<br>💬 ${esc(x.note)}` : "";
     const lineOnly = (x.friendIds || []).every(id => id !== PUSH_SELF), appOnly = (x.friendIds || []).every(id => id === PUSH_SELF);
     const how = appOnly ? "アプリ通知" : lineOnly ? "LINE" : "LINE・アプリ通知";
-    // 片方だけ届いたときは、全部「送信済み」に見せない
-    if (x.status === "sent" && x.pushResult === "fail") return `<div class="sendrow"><span class="tag fail">⚠️ ${fmtAt(x.at)} LINEは送信済み・アプリ通知は届けられませんでした${x.error ? `<br>${esc(x.error)}` : ""}${said}</span></div>`;
+    const why = x.error ? `<br>${esc(x.error)}` : "";
+    // 以前の版の「片方だけ成功」も、一部として見せる
+    const partial = x.status === "partial" || (x.status === "sent" && x.pushResult === "fail") || (x.status === "fail" && x.pushResult === "ok" && !appOnly);
+    if (x.status === "cancelled" || (x.status === "wait" && cancels.has(x.id))) return `<div class="sendrow"><span class="tag">— ${fmtAt(x.at)} ${esc(names)}へのお知らせは取り消しました${x.status === "cancelled" && x.lineResult === "unknown" ? why : ""}</span></div>`;
+    if (partial) return `<div class="sendrow"><span class="tag fail">⚠️ ${fmtAt(x.at)} 一部だけ送信しました（${esc(sendParts(x))}）${why}${said}</span></div>`;
     if (x.status === "sent") return `<div class="sendrow"><span class="tag sent">✓ ${fmtAt(x.at)} ${esc(names)}へ${how}送信済み${said}</span></div>`;
-    if (x.status === "fail" && x.pushResult === "ok" && !appOnly) return `<div class="sendrow"><span class="tag fail">⚠️ ${fmtAt(x.at)} アプリ通知は届きました・LINEは送れませんでした${x.error ? `<br>${esc(x.error)}` : ""}${said}</span></div>`;
-    if (x.status === "fail") return `<div class="sendrow"><span class="tag fail">⚠️ ${fmtAt(x.at)} ${esc(names)}へ送れませんでした${x.error ? `<br>${esc(x.error)}` : ""}${said}</span></div>`;
-    return `<div class="sendrow"><span class="tag wait">🔔 ${fmtAt(x.at)} ${esc(names)}へ知らせる予定${said}</span><button class="x-btn" data-cancel="${e.id}|${x.id}">取消</button></div>`;
+    if (x.status === "fail") return `<div class="sendrow"><span class="tag fail">⚠️ ${fmtAt(x.at)} ${esc(names)}へ送れませんでした${why}${said}</span></div>`;
+    const progress = x.pushResult === "ok" || x.lineResult ? `<br>${esc(sendParts(x))}` : "";
+    return `<div class="sendrow"><span class="tag wait">🔔 ${fmtAt(x.at)} ${esc(names)}へ知らせる予定${progress}${said}</span><button class="x-btn" data-cancel="${e.id}|${x.id}" aria-label="${esc(fmtAt(x.at))}のお知らせを取り消す">取消</button></div>`;
   }).join("");
 }
 function card(e) {
@@ -3223,6 +3272,35 @@ async function openDetail(id) {
   } catch {}
 }
 function closeSheets() { closeInsta(); clearInterval(couponClock); ["detailSheet", "catSheet", "sendSheet", "couponSheet", "courseSheet"].forEach(x => $(x).classList.add("hidden"));  renderCourseBar(); }
+// 下から出る画面（ダイアログ）：開いたら中へフォーカスを移し、閉じたら開く前のボタンへ戻す。Escキーで閉じる
+function setupSheetFocus() {
+  const opener = new Map();
+  document.querySelectorAll(".sheet-bg").forEach(bg => {
+    const box = bg.querySelector(".sheet"); if (!box) return;
+    box.setAttribute("role", "dialog"); box.setAttribute("aria-modal", "true"); if (!box.hasAttribute("tabindex")) box.tabIndex = -1;
+    new MutationObserver(() => {
+      const open = !bg.classList.contains("hidden");
+      if (open && !opener.has(bg)) {
+        opener.set(bg, document.activeElement);
+        setTimeout(() => { // 中身を描いたあとで
+          if (bg.classList.contains("hidden") || bg.contains(document.activeElement)) return;
+          const h = box.querySelector("h2, h3");
+          if (h) { h.id ||= bg.id + "Title"; box.setAttribute("aria-labelledby", h.id); h.tabIndex = -1; h.focus({ preventScroll: true }); }
+          else box.focus({ preventScroll: true });
+        }, 0);
+      } else if (!open && opener.has(bg)) {
+        const back = opener.get(bg); opener.delete(bg);
+        if (back && back.isConnected && back !== document.body && !back.closest(".hidden") && !document.querySelector(".sheet-bg:not(.hidden)")) back.focus({ preventScroll: true });
+      }
+    }).observe(bg, { attributes: true, attributeFilter: ["class"] });
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    const open = [...document.querySelectorAll(".sheet-bg:not(.hidden)")].pop(); if (!open) return;
+    e.preventDefault(); if (open.id === "instaSheet") closeInsta(); else closeSheets();
+  });
+}
+setupSheetFocus();
 
 /* =========================================================
    インスタに投稿：画像を作ってiPhoneの共有画面へ
@@ -3443,7 +3521,9 @@ async function pushTest() {
 const LINE_MONTHLY = 30;
 function lineUsedThisMonth() {
   const ym = todayStr().slice(0, 7);
-  const local = events.reduce((n, e) => n + (e.sends || []).filter(x => String(x.at || "").startsWith(ym) && x.status !== "fail").reduce((m, x) => m + (x.friendIds || []).filter(id => id !== PUSH_SELF).length, 0), 0);
+  // 予約中・送信済み・送れたか不明の分だけ数える（取り消し・送れなかった分は数えない）
+  const mayCount = (e, x) => x.status === "wait" ? !(e.sendCancels || []).includes(x.id) : x.lineResult ? ["sent", "unknown"].includes(x.lineResult) : x.status === "sent";
+  const local = events.reduce((n, e) => n + (e.sends || []).filter(x => String(x.at || "").startsWith(ym) && mayCount(e, x)).reduce((m, x) => m + (x.friendIds || []).filter(id => id !== PUSH_SELF).length, 0), 0);
   // サーバーが数えた「今月送った数」と、画面で数えた「予約中も含めた数」の多いほう
   return Math.max(local, lineServer.month === ym.replace("-", "") ? lineServer.used : 0);
 }
@@ -3500,8 +3580,9 @@ async function addSend(now) {
     await db.runTransaction(async tx => {
       const snap = await tx.get(ref);
       if (!snap.exists) throw new Error("予定が見つかりません");
-      const sends = [...(snap.data().sends || []), item];
-      tx.update(ref, { sends, nextSendAt: nextSendAt(sends) });
+      // 末尾に1件足すだけ（既存の行・送信状態はサーバーが管理していて、ここからは変えられない）
+      const cur = snap.data().nextSendAt || null;
+      tx.update(ref, { sends: [...(snap.data().sends || []), item], nextSendAt: !cur || item.at < cur ? item.at : cur });
     });
     const names = item.friendIds.map(id => recipientName(id)).filter(Boolean).join("・");
     toast(now ? `${names}への送信を予約しました。混雑時は遅れることがあります。` : `${fmtAt(at)}以降に、${names}へ送信する予約をしました`, 5000);
@@ -3511,13 +3592,15 @@ async function addSend(now) {
 }
 async function cancelSend(evId, sendId) {
   const e = events.find(x => x.id === evId); if (!e) return;
-  if (!confirm("このLINEの予約を取り消しますか？")) return;
+  if (!confirm("このお知らせの予約を取り消しますか？")) return;
   try {
     const ref = recordCollection("events").doc(evId);
     await db.runTransaction(async tx => {
       const snap = await tx.get(ref); if (!snap.exists) return;
-      const sends = (snap.data().sends || []).filter(x => x.id !== sendId);
-      tx.update(ref, { sends, nextSendAt: nextSendAt(sends) });
+      const d = snap.data(), cancels = d.sendCancels || [];
+      if (cancels.includes(sendId) || !(d.sends || []).some(x => x.id === sendId && x.status === "wait")) return;
+      // 取り消しの申し出を足すだけ。確保していたLINEの通数は、サーバーが確かめてから戻す
+      tx.update(ref, { sendCancels: [...cancels, sendId], updatedAt: TS() });
     });
     toast("取り消しました");
   }
@@ -3619,7 +3702,7 @@ function setupSettings() {
   $("selfAddFriend").href = OA_URL;
   renderSelfLine();
   $("shareLineBtn").addEventListener("click", markSent);
-  const introText = () => `「ヒビルカ」を紹介します📖\n\nヒビルカは、予定と思い出をひとつにまとめて、大切な人とLINEでつながるアプリです。\n\n・予定が、日付が過ぎるとそのまま思い出に\n・家族や友だちに、LINEで予定を届けられる（相手はアプリ不要）\n・誰と・どこで・何をしたかを写真と一緒に残せる\n・「また行きたい」リストとカレンダーで振り返れる\n\nくわしくはこちら\n${APP_URL}?intro=1`;
+  const introText = () => `「ヒビルカ」を紹介します📖\n\nヒビルカは、予定と思い出をひとつにまとめて、大切な人とLINEでつながるアプリです。\n\n・過ぎた予定は「行った」を押すだけで思い出に\n・家族や友だちに、LINEで予定を届けられる（相手はアプリ不要）\n・誰と・どこで・何をしたかを写真と一緒に残せる\n・「また行きたい」リストとカレンダーで振り返れる\n\nくわしくはこちら\n${APP_URL}?intro=1`;
   $("introLineBtn").onclick = () => { $("introLineBtn").href = "https://line.me/R/share?text=" + encodeURIComponent(introText()); };
   $("introLineBtn").href = "https://line.me/R/share?text=" + encodeURIComponent(introText());
   $("introLineBtn").href = "https://line.me/R/share?text=" + encodeURIComponent(introText());

@@ -1,0 +1,16 @@
+// 隔離テスト専用の「仮の旧ルール」。本番の旧ルールの写しではない（isOwner() の形だけ合わせている）。
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/members/$(request.auth.uid))
+        && get(/databases/$(database)/documents/members/$(request.auth.uid)).data.pinHash
+           == get(/databases/$(database)/documents/config/secret).data.pinHash;
+    }
+    match /events/{id} { allow read, write: if isOwner(); }
+    match /photos/{id} { allow read, write: if isOwner(); }
+    match /friends/{id} { allow read, write: if isOwner(); }
+    match /members/{uid} { allow read: if request.auth != null && request.auth.uid == uid; }
+  }
+}

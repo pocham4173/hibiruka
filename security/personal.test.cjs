@@ -101,3 +101,63 @@ test('LINE link codes: legacy owner may create a legacy code',async()=>{
  const L=env.authenticatedContext('legacy-line').firestore();
  await assertSucceeds(setDoc(doc(L,'lineLinkCodes/LBCDEFGH23'),{ownerUid:'legacy-line',scope:'legacy',expiresAt:Timestamp.fromMillis(Date.now()+9*60000),createdAt:serverTimestamp()}));
 });
+
+/* ===== 2026-10-09 通知の内部管理情報はサーバーだけ ===== */
+const SEND={id:'aaaaaaaa-1111-4222-8333-444444444444',at:'2099-01-01T09:00',friendIds:['self'],from:'A',status:'wait'};
+async function seedEvent(id,extra={}){
+ await env.withSecurityRulesDisabled(async c=>{await setDoc(doc(c.firestore(),'personalEvents/'+id),{ownerUid:'person-A',createdAt:new Date(0),title:'t',sends:[],nextSendAt:null,...extra});});
+}
+test('new records cannot carry notification state',async()=>{
+ await assertSucceeds(setDoc(doc(A,'personalEvents/n1'),{ownerUid:'person-A',createdAt:serverTimestamp(),sends:[],nextSendAt:null}));
+ await assertFails(setDoc(doc(A,'personalEvents/n2'),{ownerUid:'person-A',createdAt:serverTimestamp(),sends:[SEND],nextSendAt:SEND.at}));
+ await assertFails(setDoc(doc(A,'personalEvents/n3'),{ownerUid:'person-A',createdAt:serverTimestamp(),sendCancels:['x']}));
+ await assertFails(setDoc(doc(A,'personalEvents/n4'),{ownerUid:'person-A',createdAt:serverTimestamp(),nextSendAt:'2000-01-01T00:00'}));
+});
+test('the owner can append one reservation, but cannot forge counts, status, locks or the schedule',async()=>{
+ // 最初の1件（空の予定に足す）
+ await seedEvent('s0');
+ await assertSucceeds(updateDoc(doc(A,'personalEvents/s0'),{sends:[SEND],nextSendAt:SEND.at}));
+ await assertFails(updateDoc(doc(A,'personalEvents/s0'),{sends:[SEND,{...SEND,id:'eeeeeeee-0000'}],nextSendAt:null}));
+ const serverRow={id:'bbbbbbbb-1111-4222-8333-444444444444',at:'2099-01-01T08:00',friendIds:['self'],status:'wait',lineResult:'retry'};
+ await seedEvent('s1',{sends:[serverRow],nextSendAt:'2099-01-01T08:00'});
+ const ref=doc(A,'personalEvents/s1');
+ // 正規：末尾に1件、次の送信時刻は早いほう
+ await assertSucceeds(updateDoc(ref,{sends:[serverRow,SEND],nextSendAt:'2099-01-01T08:00'}));
+ // 偽装：既存の行の状態・確保数・ロックを変える
+ const now=[serverRow,SEND];
+ await assertFails(updateDoc(ref,{sends:[{...serverRow,status:'sent'},SEND]}));
+ await assertFails(updateDoc(ref,{sends:[{...serverRow,reserved:1},SEND]}));
+ await assertFails(updateDoc(ref,{sends:[{...serverRow,leaseUntil:0},SEND]}));
+ await assertFails(updateDoc(ref,{sends:[SEND]}),'行を消して取り消すことはできない');
+ await assertFails(updateDoc(ref,{nextSendAt:null}),'次の送信時刻だけを変えられない');
+ await assertFails(updateDoc(ref,{schedulerError:'x'}));
+ // 偽装：新しい行に内部の値を入れる・待ち以外で入れる・2件いっぺん
+ const id2='cccccccc-1111-4222-8333-444444444444';
+ await assertFails(updateDoc(ref,{sends:[...now,{...SEND,id:id2,reserved:3}],nextSendAt:'2099-01-01T08:00'}));
+ await assertFails(updateDoc(ref,{sends:[...now,{...SEND,id:id2,status:'sent'}],nextSendAt:'2099-01-01T08:00'}));
+ await assertFails(updateDoc(ref,{sends:[...now,{...SEND,id:id2},{...SEND,id:id2+'x'}],nextSendAt:'2099-01-01T08:00'}));
+ await assertFails(updateDoc(ref,{sends:[...now,{...SEND,id:id2,at:'2099-01-01T07:00'}],nextSendAt:'2099-01-01T08:00'}),'早い予約なのに次の送信時刻が古いまま');
+ await assertSucceeds(updateDoc(ref,{sends:[...now,{...SEND,id:id2,at:'2099-01-01T07:00'}],nextSendAt:'2099-01-01T07:00'}));
+ // 他の人は予約も読み書きもできない
+ await assertFails(getDoc(doc(B,'personalEvents/s1')));
+ await assertFails(updateDoc(doc(B,'personalEvents/s1'),{sendCancels:[SEND.id]}));
+ // 予約と一緒でなければ、題名やメモ・結果は今までどおり直せる
+ await assertSucceeds(updateDoc(ref,{title:'直した',memo:'メモ',outcome:'done',updatedAt:serverTimestamp()}));
+});
+test('the owner can request a cancel (append only); the request cannot be withdrawn or rewritten',async()=>{
+ await seedEvent('c1',{sends:[SEND],nextSendAt:SEND.at});
+ const ref=doc(A,'personalEvents/c1');
+ await assertSucceeds(updateDoc(ref,{sendCancels:[SEND.id],updatedAt:serverTimestamp()}));
+ await assertFails(updateDoc(ref,{sendCancels:[]}));
+ await assertFails(updateDoc(ref,{sendCancels:['other-0001']}));
+ await assertFails(updateDoc(ref,{sendCancels:[SEND.id,'a','b']}));
+ await assertFails(updateDoc(ref,{sendCancels:[SEND.id,'x'],nextSendAt:null}),'取り消しと一緒に時刻は変えない');
+ await assertSucceeds(updateDoc(ref,{sendCancels:[SEND.id,'dddddddd-0000']}));
+});
+test('the send ledger and the app hold are server-only',async()=>{
+ await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();await setDoc(doc(d,'sendLedger/x'),{ownerUid:'person-A',lineCount:1});await setDoc(doc(d,'lineQuota/hold_202610'),{count:1,sent:0});});
+ await assertFails(getDoc(doc(A,'sendLedger/x')));await assertFails(setDoc(doc(A,'sendLedger/x'),{ownerUid:'person-A',lineCount:0}));
+ await assertFails(setDoc(doc(A,'sendLedger/new'),{ownerUid:'person-A',lineState:'sent'}));
+ await assertFails(setDoc(doc(A,'lineQuota/hold_202610'),{count:0}));
+ await assertFails(setDoc(doc(A,'lineUsage/202610_person-A'),{ownerUid:'person-A',count:0}));
+});
