@@ -11,6 +11,14 @@ const LEASE_MS = 180000;
 const MAX_LINE_ATTEMPTS = 5;
 const MAX_PUSH_TRIES = 3;
 const monthKey = () => nowJst().slice(0, 7).replace('-', '');
+/* 月の境目（日本時間）。LINEが受け付けた時刻が翌月になると、確保した月と実際に使った月がずれる。
+   境目の前3分〜後1分はLINEの送信要求を出さない（アプリ通知はそのまま送る）。 */
+const EDGE_BEFORE_MS = 3 * 60000, EDGE_AFTER_MS = 60000;
+function nearMonthEdge(ms = Date.now()) {
+  const j = new Date(ms + 9 * 3600000), y = j.getUTCFullYear(), m = j.getUTCMonth();
+  const start = Date.UTC(y, m, 1) - 9 * 3600000, next = Date.UTC(y, m + 1, 1) - 9 * 3600000;
+  return next - ms < EDGE_BEFORE_MS || ms - start < EDGE_AFTER_MS;
+}
 const cleanUid = uid => String(uid).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
 const usageRef = (db, uid, month = monthKey()) => db.collection('lineUsage').doc(`${month}_${cleanUid(uid)}`);
 // アプリ内の「予約枠」：通数を確保したが、まだLINEの実使用量に反映されていない分（送信確定・返却で減らす）
@@ -33,7 +41,8 @@ const TEXT = {
   pushUnknown: 'アプリ通知の送信結果を確認できませんでした。重ねて送らないよう、再送はしていません。',
   changed: '送り先のLINE登録が変わったため、このお知らせはLINEでは送りませんでした。必要なら、もう一度予約してください。',
   legacy: '送信の仕組みを更新したため、このお知らせはLINEでは送りませんでした。必要なら、もう一度予約してください。',
-  waiting: 'LINEの状態を確認できないため、LINEはあとで送ります。'
+  waiting: 'LINEの状態を確認できないため、LINEはあとで送ります。',
+  edge: '月の変わり目のため、LINEは少しあとで送ります。'
 };
 
 // 公式アカウント全体の今月の残り（LINEに聞く。無料プランの上限を超えて送らないため）
@@ -159,7 +168,7 @@ function mirror(item, l, closedReason) {
   const out = { ...rest };
   const lineWanted = l.lineState !== 'off', pushWanted = l.pushState !== 'off';
   const pending = !closedReason && ((lineWanted && linePending(l)) || (pushWanted && pushPending(l)));
-  const waiting = l.lineState === 'todo' && ['quota_check', 'line_down'].includes(l.lineReason);
+  const waiting = l.lineState === 'todo' && ['quota_check', 'line_down', 'month_edge'].includes(l.lineReason);
   out.lineResult = !lineWanted ? '' : l.lineState === 'sent' ? 'sent' : l.lineState === 'unknown' ? 'unknown'
     : ['returned', 'blocked'].includes(l.lineState) ? (l.lineReason || 'fail') : (l.attempts > 0 && l.lineState === 'held') || waiting ? 'retry' : '';
   out.pushResult = !pushWanted ? '' : l.pushState === 'ok' ? 'ok' : l.pushState === 'unknown' ? 'unknown' : l.pushState === 'fail' ? 'fail'
@@ -172,7 +181,7 @@ function mirror(item, l, closedReason) {
   else out.status = ok === wanted ? 'sent' : ok > 0 ? 'partial' : 'fail';
   const lineText = { quota_all: TEXT.quota_all, quota_user: TEXT.quota_user, limit: TEXT.limit, nobody: TEXT.nobody, rejected: TEXT.rejected, busy: TEXT.busy, unknown: TEXT.unknown, expired: TEXT.expired, cancelled: TEXT.cancelled, changed: TEXT.changed, legacy: TEXT.legacy }[out.lineResult] || '';
   const pushText = out.pushResult === 'fail' && !pushPending(l) ? TEXT.pushFail : out.pushResult === 'unknown' ? TEXT.pushUnknown : '';
-  out.lineError = ['sent', 'retry', 'cancelled'].includes(out.lineResult) ? (waiting ? TEXT.waiting : '') : lineText;
+  out.lineError = ['sent', 'retry', 'cancelled'].includes(out.lineResult) ? (waiting ? (l.lineReason === 'month_edge' ? TEXT.edge : TEXT.waiting) : '') : lineText;
   out.pushError = pushText;
   if (l.lineState === 'unknown') out.lineError = TEXT.unknown;
   out.error = out.status === 'cancelled' ? [TEXT.cancelled, out.lineError, out.pushError].filter(Boolean).join('\n')
@@ -208,7 +217,7 @@ function deadlinePassed(ev) {
 }
 // 今月の枠で n 通を確保できるか（分からなければ 'quota_check'）。できるなら d に足す
 function reserveIn(d, cs, month, n, quota, isPersonal) {
-  if (!quota) return 'quota_check';
+  if (!quota || quota.month !== month) return 'quota_check'; // 前の月に取った残りは使わない
   const c = cs[month], held = countOf(c.h) + (d[month]?.hold || 0), used = countOf(c.u) + (d[month]?.usage || 0);
   const sentSince = Math.max(0, countOf(c.h, 'sent') - (quota.sentMark || 0));
   // 全体：LINEの実使用量の残りから、確定前の予約分と、聞いた後に確定した分を引いて足りるか。個人：今月30通まで
@@ -254,10 +263,11 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
   // LINEに残りを聞く。聞く直前の「アプリが送信確定した数」を控え、その後に確定した分は自分で引く（同時実行でも上限を超えない）
   const fetchQuota = async () => {
     if (!lineOk) return null;
-    const h = await holdRef(db, monthKey()).get().catch(() => null), hd = h?.exists ? h.data() : {};
+    const month = monthKey();
+    const h = await holdRef(db, month).get().catch(() => null), hd = h?.exists ? h.data() : {};
     const q = await accountQuota(token).catch(() => null);
     if (!q) return null;
-    q.sentMark = Number(hd.sent) || 0;
+    q.sentMark = Number(hd.sent) || 0; q.month = month;
     await saveQuota(db, q, Number(hd.count) || 0).catch(() => {});
     return q;
   };
@@ -294,6 +304,7 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
       const validMap = new Map(valid.map(x => [x.id, x.f]));
       const need = new Set(valid.map(x => x.f.lineUserId)).size;
       const mayNeedQuota = lineOk && (!preL || preL.lineState === 'todo' || (preL.lineState === 'held' && !holdsOf(preL).some(h => h.month === monthKey())));
+      if (quota && quota.month !== monthKey()) quota = undefined; // 月が変わった：全体の残りを取り直す
       if (mayNeedQuota && need && quota === undefined) quota = await fetchQuota();
       const token0 = randomUUID();
       const claimed = await db.runTransaction(async tx => {
@@ -314,7 +325,7 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
         }
         // 以前の版の台帳（初回の時刻・本文の控えがない）で、もう送ったことがあるもの
         if (l.lineState === 'held' && !l.linePayload && (l.attempts || 0) > 0) l.keyWindowUnknown = true;
-        const d = {}, cur = monthKey();
+        const d = {}, cur = monthKey(), edge = nearMonthEdge();
         const closed = cancelsOf(ev).has(item.id) ? 'cancelled' : deadlinePassed(ev) ? 'expired' : '';
         let reserveCur = 0, probe = false, lineWait = false;
         if (closed) {
@@ -323,7 +334,7 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
           if (!keyUsable(l)) closeLine(l, 'unknown', d); // 24時間を過ぎた・初回の時刻が分からない：同じキーで確かめられないので、結果不明で終える
           else if (!l.linePayload) closeLine(l, 'legacy', d); // 本文の控えがない以前の台帳：同じキーで別の内容を送らない
           else if (!l.linePayload.friends.every(f => sameFriend(f, validMap.get(f.id)))) closeLine(l, 'changed', d); // 相手の登録が変わった
-          else if (!lineOk) lineWait = true;
+          else if (!lineOk || edge) lineWait = true;
           else if (!holdsOf(l).some(h => h.month === cur)) {
             // 月をまたいだ再送
             if (!everUnsure(l)) { holdsOf(l).forEach(h => refundHold(d, h)); l.holds = []; reserveCur = l.linePayload.to.length; } // 前月は受け付けられていない：今月で確保し直す
@@ -333,6 +344,7 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
         } else if (l.lineState === 'todo') {
           if (!need) { l.lineState = 'blocked'; l.lineReason = 'nobody'; }
           else if (!lineOk) { lineWait = true; l.lineReason = 'line_down'; }
+          else if (edge) { lineWait = true; l.lineReason = 'month_edge'; } // 月の境目：どちらの月で使うか決まらないので、少し待つ
           else reserveCur = need;
         }
         const cs = await readCounters(tx, db, l, d, isPersonal && typeof ev.ownerUid === 'string', [...(reserveCur ? [cur] : []), ...holdsOf(l).map(h => h.month)]);
@@ -374,12 +386,12 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
           writeCounters(tx, l, d, cs);
           writeItem(tx, doc.ref, ev, item.id, next);
         }
-        return doLine || doPush ? {ev, item, l, doLine, doPush, closed} : {done: next.status, closed};
+        return doLine || doPush ? {ev, item, l, doLine, doPush, closed, sendMonth: cur} : {done: next.status, closed};
       });
       if (!claimed) continue;
       if (claimed.done) { if (claimed.done === 'fail') failed++; continue; }
       processed++;
-      const {ev, item, l, doLine, doPush} = claimed;
+      const {ev, item, l, doLine, doPush, sendMonth} = claimed;
       // 1) アプリ通知（Web Push）：LINEの枠や障害に関係なく実行する。成功は「送信処理の成功」（端末に届いたかは分からない）
       let pushOk = null;
       if (doPush) {
@@ -388,7 +400,9 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
       }
       // 2) LINE：初回に固定した本文・宛先を、同じ再送キーで送る
       let lineOutcome = null, reqId = '';
-      if (doLine) {
+      // 送る直前に、確保した月のままか・月の境目でないかを確かめる（アプリ通知の間に月が変わることがある）
+      if (doLine && (monthKey() !== sendMonth || nearMonthEdge())) lineOutcome = {kind:'skipped'};
+      else if (doLine) {
         try {
           const response = await lineRequest('/v2/bot/message/multicast',token,{
             method:'POST', headers:{'X-Line-Retry-Key':retryKey(isPersonal ? `personal:${ev.ownerUid}:${doc.id}` : doc.id,item.id)},
@@ -413,7 +427,13 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
         const l2 = {...ledger.data()}, d = {};
         if (l2.leaseToken !== token0) return null; // 別の実行に引き継がれた
         if (doPush) { l2.pushInflight = false; l2.pushTries = (l2.pushTries || 0) + 1; l2.pushState = pushOk ? 'ok' : 'fail'; }
-        if (doLine && l2.lineState === 'held') {
+        if (doLine && l2.lineState === 'held' && lineOutcome.kind === 'skipped') {
+          // 送っていない：試行を「送らず」にして、次の回に新しい月の枠で確かめ直す（確保はそのまま。次の回で返す・取り直す）
+          l2.lineInflight = false;
+          l2.tries = triesOf(l2).map((t, i, a) => i === a.length - 1 && t.result === 'inflight' ? {...t, result: 'skipped'} : t);
+          l2.attempts = Math.max(0, (l2.attempts || 0) - 1);
+          if (!triesOf(l2).some(t => t.result !== 'skipped')) l2.firstSentMs = null;
+        } else if (doLine && l2.lineState === 'held') {
           l2.lineInflight = false;
           const tries = triesOf(l2), last = tries[tries.length - 1];
           const res = lineOutcome.kind === 'sent' ? (lineOutcome.now ? 'accepted' : 'clear') : lineOutcome.unsure ? 'unsure' : 'clear';
@@ -443,10 +463,20 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
   console.log(`完了：受付 ${sent}件 / 未完了 ${failed}件${lineOk ? '' : '（LINEは確認できず保留）'}`);
   return {sent,failed,lineOk};
 }
-// 見回り：処理中でない「確保済み」の台帳のうち、予定が消えた・行が消えた・取り消し済み・期限切れのものを閉じて返す
+// 見回り：処理中でない「確保済み」の台帳のうち、予定が消えた・行が消えた・取り消し済み・期限切れのものを閉じて返す。
+// 1回に見る数は少しだけ。台帳のIDの順に、前回の続きから見る（先頭の台帳が残っていても、全部に順番が回る）
+const SWEEP_STATE = ['schedulerStatus', 'sweep'];
 async function sweepHeld(db, limit = 2) {
-  const rows = await db.collection(LEDGER).where('lineState', '==', 'held').limit(limit).get();
-  for (const row of rows.docs) {
+  const stRef = db.collection(SWEEP_STATE[0]).doc(SWEEP_STATE[1]);
+  const st = await stRef.get().catch(() => null), after = st?.exists && typeof st.data().after === 'string' ? st.data().after : '';
+  let q = db.collection(LEDGER).where('lineState', '==', 'held').orderBy('__name__');
+  if (after) q = q.startAfter(after);
+  const rows = (await q.limit(limit).get()).docs;
+  // 最後まで見たら、次は先頭から
+  const next = rows.length < limit ? '' : rows[rows.length - 1].id;
+  const value = { after: next, checkedAt: new Date() };
+  if (typeof db.set === 'function') await db.set(stRef, value).catch(() => {}); else await stRef.set(value).catch(() => {});
+  for (const row of rows) {
     const r = row.data();
     if ((r.leaseUntil || 0) > Date.now() || Date.now() - (r.updatedMs || 0) < 10 * 60000) continue;
     if (!['events', 'personalEvents'].includes(r.coll) || typeof r.eventId !== 'string' || !r.eventId || r.eventId.includes('/')) continue;
@@ -469,4 +499,4 @@ async function sweepHeld(db, limit = 2) {
     });
   }
 }
-module.exports = { retryKey, nextSendAt, buildText, updateSend, runSender, sweepHeld, ledgerId, PER_USER_MONTHLY, LEDGER, KEY_TTL_MS };
+module.exports = { retryKey, nextSendAt, buildText, updateSend, runSender, sweepHeld, ledgerId, nearMonthEdge, PER_USER_MONTHLY, LEDGER, KEY_TTL_MS };

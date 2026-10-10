@@ -36,3 +36,12 @@ test('OAuth targets only the fixed Google token endpoint and caches a valid toke
  assert.equal(await googleToken(JSON.stringify(sa),fetcher),'test');assert.equal(await googleToken(JSON.stringify(sa),fetcher),'test');assert.equal(calls,1);
  await assert.rejects(()=>googleToken(JSON.stringify({...sa,project_id:'other'}),fetcher));
 });
+test('sweep cursor query: ordered by document name and continues after the last ID (no composite index needed)',async()=>{
+ let body;const db=firestore('fake',async(u,o)=>{body=JSON.parse(o.body);return response([]);});
+ await db.collection('sendLedger').where('lineState','==','held').orderBy('__name__').startAfter('L02').limit(2).get();
+ const q=body.structuredQuery;
+ assert.deepEqual(q.orderBy,[{field:{fieldPath:'__name__'},direction:'ASCENDING'}]);
+ assert.equal(q.startAt.before,false);assert.match(q.startAt.values[0].referenceValue,/\/documents\/sendLedger\/L02$/);
+ assert.equal(q.where.fieldFilter.field.fieldPath,'lineState');assert.equal(q.limit,2);
+ assert.throws(()=>db.collection('sendLedger').orderBy('updatedMs'));assert.throws(()=>db.collection('sendLedger').startAfter('x'));
+});
