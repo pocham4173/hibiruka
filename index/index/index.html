@@ -2466,6 +2466,8 @@ async function addWish(s, btn) {
     const ref = recordCollection("events").doc();
     await ref.set(ownedData({
       kind: "wish", status: "wished", placeId: s.id, title: "", place: s.name, genre: s.genre || "", memo: s.address || "", imageUrl: /^https:\/\//.test(s.photo || "") ? s.photo : "",
+      // 写真の出典（ホットペッパーの画像は「画像提供」を出す決まり）
+      imageSource: s.source === "hp" && /^https:\/\//.test(s.photo || "") ? "hp" : "", infoSource: s.source === "hp" ? "hp" : "",
       cat: catForSpot(s.catKeys), lat: s.lat, lng: s.lng, link: /^https?:\/\//.test(s.website || "") ? s.website : "",
       date: "", time: "", who: [], fav: false, thumbs: [], sends: [], nextSendAt: null, createdAt: TS(), updatedAt: TS()
     }));
@@ -2492,15 +2494,26 @@ function planFromSpot(s, wishId) {
   toast(findDay && !wishId ? `${dayWord(findDay)}で入れました。時間を選んで「予定を保存する」を押してください` : "日付と時間を選んで「予定を保存する」を押してください", 4500);
   setTimeout(() => $("fDate").focus(), 300);
 }
+const wishFixing = new Set();
+// ホットペッパーの写真を出すときの「画像提供」。以前の版で保存した写真は、ホットペッパーの検索結果からしか保存できなかったので同じ扱い
+const wishPhotoFromHp = w => !!w.imageUrl && (w.imageSource === "hp" || w.imageSource === undefined);
 function renderWishes() {
   const box = $("wishList"); if (!box) return;
   const today = todayStr();
-  // 「予定あり」のものだけ、予定の結果に合わせて直す（行った→行った、中止・予定が消えた→行きたい）。
+  // 「予定あり」のものだけ、予定の結果に合わせて直す（行った→行った、中止→行きたい）。
   // 「行った」になっているものは、ここでは戻さない（以前の訪問実績を推測で消さない）
   wishes.forEach(w => {
     if (w.status !== "scheduled" || !w.planId) return;
     const plan = events.find(e => e.id === w.planId);
-    if (!plan) return;
+    if (!plan) {
+      // 予定が見つからない：サーバーから全部読み終わったとき（読み込み中・端末の控えだけのときは直さない）だけ、消えた予定として直す
+      if (recordsState !== "ready" || wishFixing.has(w.id)) return;
+      const st = wishStatusFor({ ...w, planId: "" }, events);
+      wishFixing.add(w.id);
+      recordCollection("events").doc(w.id).update({ status: st, planId: firebase.firestore.FieldValue.delete(), updatedAt: TS() })
+        .then(() => { w.status = st; delete w.planId; renderWishes(); }).catch(() => {}).finally(() => wishFixing.delete(w.id));
+      return;
+    }
     const st = wishStatusFor(w, events);
     if (st !== w.status) { w.status = st; recordCollection("events").doc(w.id).update({ status: st, updatedAt: TS() }).catch(() => {}); }
   });
@@ -2520,7 +2533,7 @@ function renderWishes() {
         ${w.status !== "visited" && Number.isFinite(w.lat) ? `<button type="button" class="btn small sub ${inCourse({ name: w.place }) ? "on-course" : ""}" data-course-wish="${w.id}">${inCourse({ name: w.place }) ? "✓ コースに入っています" : "🧭 コースに入れる"}</button>` : ""}
         <a class="btn small ghost" href="${spotMapLink({ name: w.place, lat: w.lat, lng: w.lng })}" target="_blank" rel="noopener">🗺 地図</a>
         <button type="button" class="btn small ghost" data-wdel="${w.id}">消す</button></div></div>`;
-  }).join("");
+  }).join("") + (list.some(wishPhotoFromHp) ? '<p class="note center hp-credit"><a href="https://webservice.recruit.co.jp/" target="_blank" rel="noopener">Powered by ホットペッパーグルメ Webサービス</a>　【画像提供：ホットペッパー グルメ】</p>' : "");
   box.querySelectorAll("[data-wplan]").forEach(b => b.onclick = () => { const w = wishes.find(x => x.id === b.dataset.wplan); if (w) planFromSpot({ name: w.place, lat: w.lat, lng: w.lng, address: w.memo, catKeys: [w.cat], website: w.link }, w.id); });
   box.querySelectorAll("[data-open-plan]").forEach(b => b.onclick = () => { const w = wishes.find(x => x.id === b.dataset.openPlan); if (w) openDetail(w.planId); });
   box.querySelectorAll("[data-course-wish]").forEach(b => b.onclick = () => { const w = wishes.find(x => x.id === b.dataset.courseWish); if (w) toggleCourse(wishSpot(w), b); });
@@ -2968,7 +2981,12 @@ async function deleteRecord(id) {
   if (!confirm(`「${e.title || e.place || catLabel(e.cat)}」を消しますか？`)) return;
   try {
     const ps = await ownedQuery("photos").where("eventId", "==", id).get();
-    const b = db.batch(); ps.forEach(d => b.delete(d.ref)); b.delete(recordCollection("events").doc(id)); await b.commit();
+    const b = db.batch(); ps.forEach(d => b.delete(d.ref)); b.delete(recordCollection("events").doc(id));
+    // この予定から入れた行きたいリストも、同じ保存でそろえる（別の「行った」記録があれば「行った」のまま、なければ「行きたい」へ）
+    const rest = events.filter(x => x.id !== id), fix = wishes.filter(w => w.planId === id).map(w => [w, wishStatusFor({ ...w, planId: "" }, rest)]);
+    fix.forEach(([w, st]) => b.update(recordCollection("events").doc(w.id), { status: st, planId: firebase.firestore.FieldValue.delete(), updatedAt: TS() }));
+    await b.commit();
+    fix.forEach(([w, st]) => { w.status = st; delete w.planId; });
     closeSheets(); toast("消しました");
   } catch { toast("消せませんでした"); }
 }
