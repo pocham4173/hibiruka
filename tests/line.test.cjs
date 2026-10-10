@@ -29,14 +29,15 @@ function fixture({infoStatus=200,quotaStatus=200,quotaBody=null,onSend=null,line
   records.personalEvents={}; records.personalFriends={}; records.lineUsage={}; records.lineQuota={}; records.sendLedger={};
   const month=new Date(Date.now()+9*3600000).toISOString().slice(0,7).replace('-','');if(usedThisMonth)records.lineUsage[month+'_owner-A']={ownerUid:'owner-A',count:usedThisMonth};
   if(personal){records.personalEvents.event={...records.events.event,ownerUid:'owner-A'};records.events={};records.personalFriends.self={...records.friends.self,ownerUid:foreign?'owner-B':'owner-A'};}
-  const clone=x=>x===undefined?undefined:structuredClone(x), calls=[], versions=new Map();
+  const clone=x=>x===undefined?undefined:structuredClone(x), calls=[], versions=new Map(), f_reads={n:0};
   const col=c=>(records[c] ||= {});
   const ver=(c,id)=>versions.get(c+'/'+id)||0, bump=(c,id)=>versions.set(c+'/'+id,ver(c,id)+1);
   const ref=(collection,id)=>({id,collection,parent:{id:collection},get:async()=>snap(collection,id),set:async v=>{col(collection)[id]=clone(v);bump(collection,id);}});
   const snap=(c,id)=>({id,ref:ref(c,id),exists:!!col(c)[id],data:()=>clone(col(c)[id])});
-  const query=(c,filters=[],n=Infinity)=>({
-    where:(field,op,value)=>query(c,[...filters,[field,op,value]],n), limit:k=>query(c,filters,Math.min(n,k)),
-    get:async()=>({docs:Object.keys(col(c)).filter(id=>filters.every(([f,op,v])=>{const x=col(c)[id][f];return op==='=='?x===v:op==='<='?(x!=null&&x<=v):op==='!='?x!==v:true;})).slice(0,n).map(id=>snap(c,id))})
+  const query=(c,filters=[],n=Infinity,after=null)=>({
+    where:(field,op,value)=>query(c,[...filters,[field,op,value]],n,after), limit:k=>query(c,filters,Math.min(n,k),after),
+    orderBy:()=>query(c,filters,n,after), startAfter:id=>query(c,filters,n,id),
+    get:async()=>{f_reads.n++;return {docs:Object.keys(col(c)).sort().filter(id=>after==null||id>after).filter(id=>filters.every(([f,op,v])=>{const x=col(c)[id][f];return op==='=='?x===v:op==='<='?(x!=null&&x<=v):op==='!='?x!==v:true;})).slice(0,n).map(id=>snap(c,id))};}
   });
   // 本物に近いトランザクション：読んだ文書が途中で書き換わっていたら、全部やり直す（同時実行の検査用）
   const db = {
@@ -80,7 +81,7 @@ function fixture({infoStatus=200,quotaStatus=200,quotaBody=null,onSend=null,line
   const hold=()=>records.lineQuota['hold_'+month]?.count||0;
   const multicastCount=()=>calls.filter(x=>x.url.endsWith('/multicast')).length;
   const expireLease=()=>{for(const l of Object.values(records.sendLedger))l.leaseUntil=0;};
-  return {main:context.module.exports.main,records,calls,db,engine,ledger,usage,hold,multicastCount,expireLease,month};
+  return {main:context.module.exports.main,records,calls,db,engine,ledger,usage,hold,multicastCount,expireLease,month,reads:f_reads};
 }
 
 test('validation uses real credential checks without sending or changing records',async()=>{
@@ -487,4 +488,88 @@ test('R5 LINEの接続確認が失敗しても、アプリ通知は送る（LINE
   let up=false;f=fixture({personal:true,infoStatus:()=>up?200:503});item(f).friendIds=['push:self','self'];pushes=0;
   await run(f,{push:async()=>{pushes++;return 1;}});up=true;f.expireLease();await run(f,{push:async()=>{pushes++;return 1;}});
   assert.equal(pushes,1);assert.equal(f.multicastCount(),1);assert.equal(item(f).status,'sent');
+});
+
+
+/* ===== 2026-10-10 再審査（094f889）の再現テスト ===== */
+const mk=ms=>new Date(ms+9*3600000).toISOString().slice(0,7).replace('-','');
+async function withClock(start,fn){const real=Date.now;const c={t:start};Date.now=()=>c.t;try{return await fn(c);}finally{Date.now=real;}}
+const use=(f,month)=>f.records.lineUsage[month+'_'+P]?.count;
+
+test('M1 月末23:59:59に始まり、アプリ通知の間に10月になっても、9月の枠でLINEを送らない（10月が30通なら送らない）',async()=>{
+  await withClock(Date.parse('2026-09-30T23:59:59+09:00'),async c=>{
+    const f=fixture({personal:true});item(f).friendIds=['push:self','self'];
+    f.records.lineUsage['202609_'+P]={ownerUid:P,month:'202609',count:5};f.records.lineUsage['202610_'+P]={ownerUid:P,month:'202610',count:30};
+    let pushes=0;const push=async()=>{pushes++;c.t+=2000;return 1;};
+    await run(f,{push});
+    assert.equal(f.multicastCount(),0,'月の境目ではLINEの送信要求を出さない');assert.equal(pushes,1,'アプリ通知は送る');
+    assert.equal(use(f,'202609'),5,'9月に数えない');assert.equal(use(f,'202610'),30);
+    // 10月になってから：10月の枠で確かめる → 30通使用済みなので送らない
+    c.t=Date.parse('2026-10-01T00:05:00+09:00');f.expireLease();await run(f,{push});
+    assert.equal(f.multicastCount(),0);assert.equal(pushes,1,'アプリ通知は重ねない');assert.equal(item(f).lineResult,'quota_user');assert.equal(use(f,'202610'),30);assert.equal(use(f,'202609'),5);
+  });
+});
+test('M1 10月に空きがあれば、10月に1回だけ確保・計上して送る',async()=>{
+  await withClock(Date.parse('2026-09-30T23:59:59+09:00'),async c=>{
+    const f=fixture({personal:true});item(f).friendIds=['push:self','self'];
+    f.records.lineUsage['202610_'+P]={ownerUid:P,month:'202610',count:5};
+    const push=async()=>{c.t+=2000;return 1;};
+    await run(f,{push});c.t=Date.parse('2026-10-01T00:05:00+09:00');f.expireLease();
+    await Promise.all([run(f,{push}),run(f,{push})]);
+    assert.equal(f.multicastCount(),1);assert.equal(use(f,'202610'),6);assert.equal(use(f,'202609'),undefined);assert.equal(item(f).status,'sent');
+  });
+});
+test('M1 確保してから送るまでに月が変わったら、送らずに次の回で新しい月の枠を確かめ直す（全体の残りも取り直す）',async()=>{
+  await withClock(Date.parse('2026-09-30T23:40:00+09:00'),async c=>{
+    let quotaCalls=0;
+    const f=fixture({personal:true,quotaBody:url=>{quotaCalls++;return url.endsWith('/consumption')?{totalUsage:0}:{type:'limited',value:200};}});item(f).friendIds=['push:self','self'];
+    f.records.lineUsage['202610_'+P]={ownerUid:P,month:'202610',count:30};
+    const push=async()=>{c.t=Date.parse('2026-10-01T00:10:00+09:00');return 1;}; // アプリ通知の間に月が変わる
+    await run(f,{push});
+    assert.equal(f.multicastCount(),0,'送る直前に月を確かめて、送らない');assert.equal(use(f,'202609'),1,'9月の確保はまだ残る');
+    const q0=quotaCalls;f.expireLease();await run(f,{push});
+    assert.ok(quotaCalls>q0,'10月の全体の残りを取り直す');
+    assert.equal(f.multicastCount(),0);assert.equal(use(f,'202609'),0,'送っていない9月分は返す');assert.equal(use(f,'202610'),30);assert.equal(item(f).lineResult,'quota_user');
+  });
+});
+test('M1 月をまたいだ後に全体の残りが取れなければ、LINEは保留',async()=>{
+  await withClock(Date.parse('2026-09-30T23:40:00+09:00'),async c=>{
+    let ok=true;const f=fixture({personal:true,quotaStatus:()=>ok?200:503});item(f).friendIds=['push:self','self'];
+    const push=async()=>{c.t=Date.parse('2026-10-01T00:10:00+09:00');return 1;};
+    await run(f,{push});ok=false;f.expireLease();await run(f,{push});
+    assert.equal(f.multicastCount(),0);assert.equal(item(f).status,'wait');assert.equal(use(f,'202609'),0);assert.equal(use(f,'202610'),undefined);
+  });
+});
+
+function sweepFixture(n,{deleted=[],unsure=[]}={}){
+  const f=fixture({personal:true});const cur=f.month,old=Date.now()-11*60000;
+  delete f.records.personalEvents.event;f.records.lineUsage[cur+'_'+P]={ownerUid:P,month:cur,count:n};f.records.lineQuota['hold_'+cur]={month:cur,count:n,sent:0};
+  for(let i=1;i<=n;i++){
+    const id='e'+i,lid='L'+String(i).padStart(2,'0');
+    if(!deleted.includes(i))f.records.personalEvents[id]={ownerUid:P,date:'2099-01-01',time:'12:00',kind:'plan',title:'t',sends:[{id:'s'+i,friendIds:['self'],at:'2099-01-01T10:00',status:'wait'}],nextSendAt:'2099-01-01T10:00'};
+    f.records.sendLedger[lid]={v:2,coll:'personalEvents',eventId:id,sendId:'s'+i,ownerUid:P,month:cur,holds:[{month:cur,count:1}],lineState:'held',lineCount:1,lineUnsure:unsure.includes(i),lineInflight:false,tries:unsure.includes(i)?[{ms:old,month:cur,result:'unsure'}]:[],pushState:'off',attempts:1,leaseUntil:0,updatedMs:old};
+  }
+  return f;
+}
+test('S2 見回りは全件に順番が回る（先頭の2件が残っていても、3件目の削除済み予定を返す）',async()=>{
+  let f=sweepFixture(3,{deleted:[3]});
+  for(let i=0;i<5;i++)await f.engine.sweepHeld(f.db);
+  assert.equal(f.records.sendLedger.L03.lineState,'returned','3件目にも順番が回る');assert.equal(use(f,f.month),2,'1回だけ返す');
+  assert.equal(f.records.sendLedger.L01.lineState,'held');assert.equal(f.records.sendLedger.L02.lineState,'held','送信待ちの有効な予定は返さない');
+  // 5件以上：削除済みの全部に順番が回る
+  f=sweepFixture(7,{deleted:[2,5,7],unsure:[5]});
+  for(let i=0;i<6;i++)await f.engine.sweepHeld(f.db);
+  assert.equal(f.records.sendLedger.L02.lineState,'returned');assert.equal(f.records.sendLedger.L07.lineState,'returned');
+  assert.equal(f.records.sendLedger.L05.lineState,'unknown','結果不明は返さない');assert.equal(use(f,f.month),5,'返したのは未送信と確定した2件だけ');
+});
+test('S2 途中で止まっても続きから回る／同時実行・再実行で二重に返さない／送信中の台帳は返さない',async()=>{
+  const f=sweepFixture(5,{deleted:[1,4]});
+  f.records.sendLedger.L04.leaseUntil=Date.now()+60000; // 送信処理中
+  await f.engine.sweepHeld(f.db);const cursor=f.records.schedulerStatus?.sweep?.after;assert.ok(cursor,'巡回の位置を残す');
+  // 止まった想定：位置から再開
+  await Promise.all([f.engine.sweepHeld(f.db),f.engine.sweepHeld(f.db)]);await f.engine.sweepHeld(f.db);await f.engine.sweepHeld(f.db);
+  assert.equal(f.records.sendLedger.L01.lineState,'returned');assert.equal(f.records.sendLedger.L04.lineState,'held','送信中は返さない');
+  assert.equal(use(f,f.month),4,'二重に返さない');
+  f.records.sendLedger.L04.leaseUntil=0;for(let i=0;i<4;i++)await f.engine.sweepHeld(f.db);
+  assert.equal(f.records.sendLedger.L04.lineState,'returned');assert.equal(use(f,f.month),3);
 });

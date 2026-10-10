@@ -37,14 +37,19 @@ export function firestore(accessToken, fetcher=fetch, limit=4){
   function snapshot(doc,c,id){return {id:id||doc.name.split('/').pop(),exists:!!doc,ref:ref(c,id||doc.name.split('/').pop()),updateTime:doc?.updateTime,data:()=>data(doc?.fields)};}
   const ops={'<=':'LESS_THAN_OR_EQUAL','==':'EQUAL','in':'IN'};
   // select(): only these fields come back (keeps big photo strings out of the Worker's CPU budget)
-  function collection(c,filters=[],n=limit,only=null){return {
-    doc:id=>ref(c,id),limit:size=>collection(c,filters,Math.min(size,limit),only),
-    select:(...names)=>collection(c,filters,n,names),
-    where:(field,op,value)=>{if(!ops[op])throw Error('Unsupported query');return collection(c,[...filters,{fieldFilter:{field:{fieldPath:field},op:ops[op],value:encode(value)}}],n,only);},
+  // orderBy('__name__')・startAfter(id)：IDの順に、前回の続きから読む（見回り用。複合インデックスはいらない）
+  function collection(c,filters=[],n=limit,only=null,byName=false,after=null){return {
+    doc:id=>ref(c,id),limit:size=>collection(c,filters,Math.min(size,limit),only,byName,after),
+    select:(...names)=>collection(c,filters,n,names,byName,after),
+    where:(field,op,value)=>{if(!ops[op])throw Error('Unsupported query');return collection(c,[...filters,{fieldFilter:{field:{fieldPath:field},op:ops[op],value:encode(value)}}],n,only,byName,after);},
+    orderBy:field=>{if(field!=='__name__')throw Error('Unsupported order');return collection(c,filters,n,only,true,after);},
+    startAfter:id=>{if(!byName||typeof id!=='string'||!id||id.includes('/'))throw Error('Unsupported cursor');return collection(c,filters,n,only,byName,id);},
     get:async()=>{
       const where=filters.length>1?{compositeFilter:{op:'AND',filters}}:filters[0];
       const select=only?{select:{fields:only.map(f=>({fieldPath:f}))}}:{};
-      return {docs:(await call(':runQuery',{structuredQuery:{from:[{collectionId:c}],limit:n,...select,...(where?{where}:{})}})||[]).filter(x=>x.document).map(x=>snapshot(x.document,c))};
+      const order=byName?{orderBy:[{field:{fieldPath:'__name__'},direction:'ASCENDING'}]}:{};
+      const cursor=after?{startAt:{values:[{referenceValue:root+'/'+c+'/'+after}],before:false}}:{};
+      return {docs:(await call(':runQuery',{structuredQuery:{from:[{collectionId:c}],limit:n,...select,...(where?{where}:{}),...order,...cursor}})||[]).filter(x=>x.document).map(x=>snapshot(x.document,c))};
     }
   };}
   const write=list=>call(':commit',{writes:list});
