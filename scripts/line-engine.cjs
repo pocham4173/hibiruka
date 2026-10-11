@@ -228,6 +228,14 @@ function reserveIn(d, cs, month, n, quota, isPersonal) {
   return '';
 }
 const sameFriend = (a, b) => !!b && b.lineUserId === a.lineUserId;
+/* Firestore の通信回数の見積もり（Worker の REST アダプタ：1回の実行で使える回数に上限がある）。
+   トランザクション1回 = 予定と台帳の読み2回 ＋ 月ごとの通数（個人・予約枠の読み2回）＋ 書き込み1回。
+   LINEへ送ったあとの結果の保存は、やり直し1回分まで含めて先に確保しておく（受け付け後に保存できない送信を始めない）。
+   アプリ通知は、通知先の読み1回・鍵の読み（初回だけ作成も）・使えなくなった通知先の削除（最大5件）で最大8回。 */
+const txCost = months => 3 + 2 * months;
+const PUSH_FS = 8;
+function sendCost(months, withPush) { return txCost(months) + (withPush ? PUSH_FS : 0) + 2 * txCost(months); }
+const isBudgetError = e => e && e.code === 'BUDGET';
 
 async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=Infinity, push=null}) {
   // LINEの接続確認。失敗しても、アプリ通知は止めない（LINEだけあとで送る）。確認だけの実行・自分宛ての復旧は、従来どおり止める
@@ -273,9 +281,9 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
   };
   // 30分ごとに、全体の残りを画面用に控える（送信がなくても「残り」が分かるように。LINEへの問い合わせは無料）
   if (!recoveryAt && lineOk && minute % 30 === 0) quota = (await fetchQuota()) || undefined;
-  // 取り残された確保分（予定を消した・取り消した後に止まった等）を返す。数分に1回、少しずつ
-  if (!recoveryAt && minute % 5 === 2) await sweepHeld(db).catch(() => {});
-  for (const doc of snapshot.docs) {
+  const left = () => db.budget ? db.budget.left() : Infinity;
+  let budgetStop = false;
+  outer: for (const doc of snapshot.docs) {
     const isPersonal = doc.ref.parent?.id === "personalEvents";
     const coll = isPersonal ? 'personalEvents' : 'events';
     if (!Array.isArray(doc.data().sends) || sendList(doc.data().sends).length !== doc.data().sends.length || sendList(doc.data().sends).some(s => s.status === 'wait' && !validSend(s))) {
@@ -290,7 +298,11 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
     }
     for (const candidate of sendList(doc.data().sends)) {
       if (!validSend(candidate) || candidate.status !== 'wait' || candidate.at > now || !recoveryMatches(doc.data(), candidate)) continue;
-      if (processed >= maxSends) return {sent,failed,lineOk};
+      if (processed >= maxSends) break outer;
+      const maybePush = isPersonal && typeof push === 'function' && (candidate.friendIds || []).includes(PUSH_SELF);
+      // 残りの通信回数で、この予約を最後（結果の保存まで）処理できるか。できなければ次の回に回す（まだ何も変えていない）
+      if (left() < 2 + sendCost(1, maybePush)) { budgetStop = true; break outer; }
+      try {
       const lRef = db.collection(LEDGER).doc(ledgerId(coll, doc.id, candidate.id));
       const pre = await lRef.get(), preL = pre.exists ? pre.data() : null;
       const fixed = Array.isArray(preL?.linePayload?.friends) ? preL.linePayload.friends : null;
@@ -305,6 +317,9 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
       const need = new Set(valid.map(x => x.f.lineUserId)).size;
       const mayNeedQuota = lineOk && (!preL || preL.lineState === 'todo' || (preL.lineState === 'held' && !holdsOf(preL).some(h => h.month === monthKey())));
       if (quota && quota.month !== monthKey()) quota = undefined; // 月が変わった：全体の残りを取り直す
+      const months = new Set([monthKey(), ...(preL ? holdsOf(preL).map(h => h.month) : [])]).size;
+      const withPush = maybePush && (!preL || pushPending(preL));
+      if (left() < (mayNeedQuota && need && quota === undefined ? 2 : 0) + sendCost(months, withPush)) { budgetStop = true; break outer; }
       if (mayNeedQuota && need && quota === undefined) quota = await fetchQuota();
       const token0 = randomUUID();
       const claimed = await db.runTransaction(async tx => {
@@ -458,45 +473,61 @@ async function runSender({db, token, validateOnly=false, recoveryAt, maxSends=In
       });
       if (lineOutcome?.kind === 'rejected' && lineOutcome.reason === 'limit' && quota) quota.left = 0;
       if (result === 'sent' || result === 'partial') sent++; else if (result !== 'wait') failed++; else if (lineOutcome?.kind === 'retry' || pushOk === false) failed++;
+      } catch (e) {
+        // 通信回数を使い切った（見積もりを超えるやり直しが続いた等）：この回はここまで。続きは次の回（1分後）
+        if (!isBudgetError(e)) throw e;
+        budgetStop = true; break outer;
+      }
     }
   }
+  // 取り残された確保分（予定を消した・取り消した後に止まった等）を返す。送信を先に済ませ、残った通信回数の中で少しずつ
+  if (!recoveryAt && minute % 5 === 2 && !budgetStop) await sweepHeld(db, 2, { left }).catch(() => {});
+  if (budgetStop) console.log('通信回数の上限に近いため、残りの予約は次の回に送ります。');
   console.log(`完了：受付 ${sent}件 / 未完了 ${failed}件${lineOk ? '' : '（LINEは確認できず保留）'}`);
   return {sent,failed,lineOk};
 }
 // 見回り：処理中でない「確保済み」の台帳のうち、予定が消えた・行が消えた・取り消し済み・期限切れのものを閉じて返す。
 // 1回に見る数は少しだけ。台帳のIDの順に、前回の続きから見る（先頭の台帳が残っていても、全部に順番が回る）
 const SWEEP_STATE = ['schedulerStatus', 'sweep'];
-async function sweepHeld(db, limit = 2) {
+async function sweepHeld(db, limit = 2, { left = () => Infinity } = {}) {
+  if (left() < 3 + txCost(1)) return; // 位置の読み・台帳の検索・位置の保存＋最低1件分
   const stRef = db.collection(SWEEP_STATE[0]).doc(SWEEP_STATE[1]);
   const st = await stRef.get().catch(() => null), after = st?.exists && typeof st.data().after === 'string' ? st.data().after : '';
   let q = db.collection(LEDGER).where('lineState', '==', 'held').orderBy('__name__');
   if (after) q = q.startAfter(after);
   const rows = (await q.limit(limit).get()).docs;
-  // 最後まで見たら、次は先頭から
-  const next = rows.length < limit ? '' : rows[rows.length - 1].id;
-  const value = { after: next, checkedAt: new Date() };
-  if (typeof db.set === 'function') await db.set(stRef, value).catch(() => {}); else await stRef.set(value).catch(() => {});
+  let lastSeen = '', all = true;
   for (const row of rows) {
     const r = row.data();
+    // 残りの通信回数で、この1件を最後まで（＋位置の保存1回）できるか。できなければ、ここから次の回に
+    if (left() < 1 + txCost(new Set([monthKey(), ...holdsOf(r).map(h => h.month)]).size)) { all = false; break; }
+    lastSeen = row.id;
     if ((r.leaseUntil || 0) > Date.now() || Date.now() - (r.updatedMs || 0) < 10 * 60000) continue;
     if (!['events', 'personalEvents'].includes(r.coll) || typeof r.eventId !== 'string' || !r.eventId || r.eventId.includes('/')) continue;
     const eRef = db.collection(r.coll).doc(r.eventId);
-    await db.runTransaction(async tx => {
-      const ledger = await tx.get(row.ref);
-      const ev = await tx.get(eRef);
-      if (!ledger.exists) return;
-      const l = {...ledger.data()};
-      if (l.lineState !== 'held' || (l.leaseUntil || 0) > Date.now()) return;
-      const e = ev.exists ? ev.data() : null, item = e && sendList(e.sends).find(s => s.id === l.sendId);
-      const closed = !e || !item || item.status !== 'wait' ? 'cancelled' : cancelsOf(e).has(l.sendId) ? 'cancelled' : deadlinePassed(e) ? 'expired' : '';
-      if (!closed) return; // まだ送る予定の行は、通常の送信処理に任せる
-      const d = {};
-      closeLine(l, closed, d); closePush(l); l.updatedMs = Date.now();
-      const c = await readCounters(tx, db, l, d, r.coll === 'personalEvents');
-      tx.set(row.ref, l);
-      writeCounters(tx, l, d, c);
-      if (item && item.status === 'wait') writeItem(tx, eRef, e, l.sendId, mirror(item, l, closed));
-    });
+    try {
+      await db.runTransaction(async tx => {
+        const ledger = await tx.get(row.ref);
+        const ev = await tx.get(eRef);
+        if (!ledger.exists) return;
+        const l = {...ledger.data()};
+        if (l.lineState !== 'held' || (l.leaseUntil || 0) > Date.now()) return;
+        const e = ev.exists ? ev.data() : null, item = e && sendList(e.sends).find(s => s.id === l.sendId);
+        const closed = !e || !item || item.status !== 'wait' ? 'cancelled' : cancelsOf(e).has(l.sendId) ? 'cancelled' : deadlinePassed(e) ? 'expired' : '';
+        if (!closed) return; // まだ送る予定の行は、通常の送信処理に任せる
+        const d = {};
+        closeLine(l, closed, d); closePush(l); l.updatedMs = Date.now();
+        const c = await readCounters(tx, db, l, d, r.coll === 'personalEvents');
+        tx.set(row.ref, l);
+        writeCounters(tx, l, d, c);
+        if (item && item.status === 'wait') writeItem(tx, eRef, e, l.sendId, mirror(item, l, closed));
+      });
+    } catch (e) { if (isBudgetError(e)) { all = false; break; } throw e; }
   }
+  // 見たところまでを残す。最後まで見たら、次は先頭から。1件も見られなかったら位置は動かさない
+  if (!lastSeen && rows.length) return;
+  const next = all && rows.length < limit ? '' : lastSeen;
+  const value = { after: next, checkedAt: new Date() };
+  if (typeof db.set === 'function') await db.set(stRef, value).catch(() => {}); else await stRef.set(value).catch(() => {});
 }
 module.exports = { retryKey, nextSendAt, buildText, updateSend, runSender, sweepHeld, ledgerId, nearMonthEdge, PER_USER_MONTHLY, LEDGER, KEY_TTL_MS };
