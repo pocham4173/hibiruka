@@ -25,9 +25,14 @@ export function decode(v){
 const data=f=>Object.fromEntries(Object.entries(f||{}).map(([k,v])=>[k,decode(v)]));
 export function firestore(accessToken, fetcher=fetch, limit=4){
   const root='projects/hibiruka-f66fb/databases/(default)/documents';
+  // 1回の実行で外部へ出せる通信は、Cloudflare Workers の無料プランで50回まで。
+  // Firestore はそのうち38回まで（残りは Google 認証・LINE・アプリ通知の送り先に使う）。
+  // 最後の1回は heartbeat（動作の記録）のために取っておき、ふつうの通信は37回で止める。
+  const LIMIT=38, KEEP=1;
   let requests=0;
-  async function call(path,body){
-    if(++requests>38)throw Error('Firestore request budget reached; retry next minute');
+  async function call(path,body,{reserved=false}={}){
+    if(requests>=(reserved?LIMIT:LIMIT-KEEP)){const e=Error('Firestore request budget reached; retry next minute');e.code='BUDGET';throw e;}
+    requests++;
     const r=await fetcher('https://firestore.googleapis.com/v1/'+root+path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(15000)});
     if(r.status===404 && !body)return null;
     if(!r.ok){const detail=await r.json().catch(()=>({}));const e=Error('Firestore HTTP '+r.status);e.status=r.status;e.code=detail.error?.status;throw e;}
@@ -76,7 +81,9 @@ export function firestore(accessToken, fetcher=fetch, limit=4){
         try{await call(':commit',{writes});return result;}catch(e){if((![409,412].includes(e.status)&&!['ABORTED','FAILED_PRECONDITION','ALREADY_EXISTS'].includes(e.code))||attempt===4)throw e;}
       }
     },
-    heartbeat:async value=>call(':commit',{writes:[{update:{name:root+'/schedulerStatus/cloudflare',fields:fields(value)}}]}),
+    heartbeat:async value=>call(':commit',{writes:[{update:{name:root+'/schedulerStatus/cloudflare',fields:fields(value)}}]},{reserved:true}),
+    // 送信処理が、残りの通信回数を見て「この回に送れる件数」を決めるため
+    budget:{limit:LIMIT-KEEP,used:()=>requests,left:()=>Math.max(0,LIMIT-KEEP-requests)},
     // Webhook helpers. create() fails when the document already exists (LINE redelivery).
     create:async(r,value)=>write([{update:{name:root+'/'+r.path,fields:fields(value)},currentDocument:{exists:false}}]),
     set:async(r,value)=>write([{update:{name:root+'/'+r.path,fields:fields(value)}}]),
