@@ -31,6 +31,14 @@
     return {holiday:data?.holidays?.[date]||'',rokuyo:c.showRokuyo?rokuyo:'',kind,label:labels[kind]||'',
       off:kind==='all'||kind==='off'||(!!c.team&&kind===c.team)};
   }
+  // Explicit correction requested for the three old image-reading mistakes.
+  // Do not infer holidays after the paper calendar's confirmed end date.
+  function unconfirmedCompanyPatch(config) {
+    const patch={}, days=cleanConfig(config).days;
+    for(const [date,kind] of Object.entries({'2027-03-23':'A','2027-03-27':'B','2027-03-30':'A'}))
+      if(days[date]===kind) patch[date]='';
+    return patch;
+  }
   // Transcribed from the supplied Sekine Store paper calendar. Only boxed dates;
   // the printed but unmarked dates outside this work year are not inferred.
   function verifiedCompanyCalendar() {
@@ -53,7 +61,7 @@
     }
     return {from:'2026-03-21',to:'2027-03-20',rows:rows.sort((a,b)=>a.date.localeCompare(b.date))};
   }
-  const api={verifiedCompanyCalendar,validDate,cleanConfig,mergeConfig,dayInfo,kinds,labels};
+  const api={verifiedCompanyCalendar,unconfirmedCompanyPatch,validDate,cleanConfig,mergeConfig,dayInfo,kinds,labels};
   root.HibirukaCalendar=api;
   if(typeof module!=='undefined') module.exports=api;
 })(globalThis);
