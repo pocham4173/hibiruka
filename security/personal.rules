@@ -6,13 +6,28 @@
       allow read: if request.auth != null && request.auth.uid == uid;
       allow create, update: if request.auth != null && request.auth.uid == uid
         && request.resource.data.keys().hasOnly(['ownerName', 'cats', 'people', 'selfFriendId', 'createdAt', 'version', 'calendar'])
-        && (!('calendar' in request.resource.data) || validCalendar(request.resource.data.calendar));
+        && (!('calendar' in request.resource.data) || validCalendar(request.resource.data.calendar))
+        && (!exists(/databases/$(database)/documents/personalConfig/$(uid))
+          || !('calendar' in resource.data) || !('business' in resource.data.calendar)
+          || ('calendar' in request.resource.data && 'business' in request.resource.data.calendar));
     }
     function validCalendar(c) {
-      return c is map && c.keys().hasOnly(['version','configured','team','showRokuyo','days'])
+      return c is map && c.keys().hasOnly(['version','configured','team','showRokuyo','days','business'])
         && c.keys().hasAll(['version','configured','team','showRokuyo','days'])
-        && c.version == 1 && c.configured is bool && c.team in ['','A','B']
-        && c.showRokuyo is bool && c.days is map && c.days.size() <= 1200;
+        && c.version == 1 && c.configured is bool && c.team in ['','A','B','C1','C2','C3','C4','C5','C6','C7','C8']
+        && c.showRokuyo is bool && c.days is map && c.days.size() <= 1200
+        && (!('business' in c) || validBusinessCalendar(c.business));
+    }
+    function validBusinessCalendar(b) {
+      return b is map && b.keys().hasOnly(['version','yearStart','leaveStart','confirmedFrom','confirmedThrough','labels','personal','entries'])
+        && b.keys().hasAll(['version','yearStart','leaveStart','confirmedFrom','confirmedThrough','labels','personal','entries'])
+        && b.version == 1 && b.yearStart is string && b.yearStart.matches('^[0-9]{2}-[0-9]{2}$')
+        && b.leaveStart is string && b.leaveStart.matches('^[0-9]{2}-[0-9]{2}$')
+        && b.confirmedFrom is string && b.confirmedThrough is string
+        && b.confirmedFrom.size() <= 10 && b.confirmedThrough.size() <= 10
+        && b.labels is map && b.labels.size() <= 13
+        && b.personal is map && b.personal.size() <= 1200
+        && b.entries is map && b.entries.size() <= 500;
     }
     // 通知の予約（2026-10-09）：送信状態・通数・処理中の印はサーバーだけが書く。
     // 本人ができるのは「予約を1件、末尾に足す」と「取り消しの申し出を1件足す」だけ（既存の行は変えられない）。

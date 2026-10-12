@@ -3,74 +3,23 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const {JSDOM}=require(process.env.HIBIRUKA_JSDOM_PATH || 'jsdom');
 const html=fs.readFileSync('index/index/index.html','utf8');
-test('calendar: tapping a date then a colored button updates only that day in both account modes',async()=>{
- for(const legacy of [false,true]) {
-  const a=app({legacy,returning:!legacy});try {
-   const days=Object.fromEntries(a.w.HibirukaCalendar.verifiedCompanyCalendar().rows.map(r=>[r.date,r.kind]));
-   a.data.set('personalConfig/A',{ownerName:'Alice',calendar:{version:1,configured:true,team:'B',showRokuyo:false,days}});
-   a.data.set('events/safe',{title:'Shared plan'});
-   a.data.set('personalEvents/safe',{ownerUid:'A',date:'2027-03-23',title:'My plan'});
-   await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,2);
-   a.d.querySelector('[data-d="2027-03-23"]').click();
-   assert.equal(a.d.getElementById('calendarQuick').disabled,false);
-   await a.d.querySelector('[data-holiday="off"]').onclick();
-   assert(a.d.getElementById('calendarSheet').classList.contains('hidden'));
-   const saved=a.data.get('personalConfig/A');
-   assert.equal(saved.calendar.days['2027-03-23'],'off');
-   assert.equal(saved.calendar.days['2027-03-20'],'B');
-   assert.equal(saved.calendar.showRokuyo,false);assert.equal(saved.calendar.team,'B');
-   assert.equal(saved.ownerName,'Alice');
-   assert.equal(a.d.querySelector('[data-d="2027-03-23"] .off-label').textContent,'休');
-   assert.equal(a.d.querySelector('[data-holiday="off"]').getAttribute('aria-pressed'),'true');
-   for(const kind of ['A','B','all','work','']) {
-    await a.d.querySelector(`[data-holiday="${kind}"]`).onclick();
-    assert.equal(a.data.get('personalConfig/A').calendar.days['2027-03-23'],kind||undefined);
-   }
-   assert.equal(a.data.get('events/safe').title,'Shared plan');assert.equal(a.data.get('personalEvents/safe').title,'My plan');
-   await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,2);
-   assert.equal(a.d.querySelector('[data-d="2027-03-23"] .off-label').textContent,'');
-  }finally{a.close();}
- }
-});
-test('calendar: quick edit locks repeated taps, keeps its target when another date is selected, and can retry failure',async()=>{
- const a=app({returning:true});try {
-  await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,2);
-  a.d.querySelector('[data-d="2027-03-23"]').click();
-  const original=a.db.runTransaction;let release,calls=0;
-  a.db.runTransaction=async fn=>{calls++;await new Promise(r=>release=r);return original(fn);};
-  const pending=a.d.querySelector('[data-holiday="off"]').onclick();
-  assert(a.d.getElementById('calendarQuick').disabled);
-  await a.d.querySelector('[data-holiday="B"]').onclick();assert.equal(calls,1);
-  a.d.querySelector('[data-d="2027-03-24"]').click();
-  release();await pending;
-  assert.equal(a.data.get('personalConfig/A').calendar.days['2027-03-23'],'off');
-  assert.equal(a.data.get('personalConfig/A').calendar.days['2027-03-24'],undefined);
-  a.db.runTransaction=async()=>{throw Error('offline');};
-  await a.d.querySelector('[data-holiday="off"]').onclick();
-  assert.equal(a.data.get('personalConfig/A').calendar.days['2027-03-24'],undefined);
-  assert.match(a.d.getElementById('calendarQuickStatus').textContent,/保存できませんでした/);
-  assert.equal(a.d.getElementById('calendarQuick').disabled,false);
-  a.db.runTransaction=original;await a.d.querySelector('[data-holiday="off"]').onclick();
-  assert.equal(a.data.get('personalConfig/A').calendar.days['2027-03-24'],'off');
- }finally{a.close();}
-});
 test('calendar: owner-only settings preserve events and support deleting a mark',async()=>{
  const a=app({returning:true});try{
   a.data.set('personalConfig/A',{ownerName:'Alice',people:['Bob'],calendar:{version:1,configured:true,team:'A',showRokuyo:true,days:{'2026-10-10':'A','2027-01-09':'B'}}});
   a.data.set('personalEvents/safe',{ownerUid:'A',date:'2026-10-10',title:'お出かけ'});
-  await a.w.h.startOwner();a.d.getElementById('calendarSettingsOpen').click();
+  await a.w.h.startOwner();a.d.getElementById('calendarSettingsOpen').click();a.d.getElementById('businessImport').click();
   assert.equal(a.d.getElementById('calendarTeam').value,'A');
   a.d.getElementById('calendarDate').value='2026-10-10';a.d.getElementById('calendarKind').value='';
   a.d.getElementById('calendarManualSave').click();await new Promise(r=>setTimeout(r,25));
   const p=a.data.get('personalConfig/A');assert.equal(p.calendar.days['2026-10-10'],undefined);assert.equal(p.calendar.days['2027-01-09'],'B');
   assert.equal(p.ownerName,'Alice');assert.deepEqual(p.people,['Bob']);assert.equal(a.data.get('personalEvents/safe').title,'お出かけ');
-  a.d.getElementById('calendarSettingsOpen').click();a.d.getElementById('calendarTeam').value='B';a.d.getElementById('calendarSave').click();await new Promise(r=>setTimeout(r,25));
+  a.d.getElementById('calendarSettingsOpen').click();a.d.getElementById('businessImport').click();a.d.getElementById('calendarClose').click();a.d.getElementById('businessSettingsToggle').click();a.d.getElementById('businessTeam').value='B';await a.d.getElementById('businessSettingsForm').onsubmit({preventDefault(){}});
   assert.equal(a.data.get('personalConfig/A').calendar.team,'B');
  }finally{a.close();}
 });
 test('calendar: photo draft needs confirmation and unresolved rows block saving',async()=>{
  const a=app({returning:true});try{
-  await a.w.h.startOwner();a.d.getElementById('calendarSettingsOpen').click();a.d.getElementById('calendarChooseImport').click();
+  await a.w.h.startOwner();a.d.getElementById('calendarSettingsOpen').click();a.d.getElementById('businessImport').click();a.d.getElementById('calendarChooseImport').click();
   a.w.URL.createObjectURL=()=> 'blob:test';a.w.URL.revokeObjectURL=()=>{};
   a.w.Image=class {naturalWidth=400;naturalHeight=600;async decode(){}};
   a.w.HTMLCanvasElement.prototype.getContext=()=>({fillRect(){},drawImage(){}});
@@ -107,7 +56,7 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
  const authFn=()=>auth;authFn.Auth={Persistence:{LOCAL:'local'}};authFn.EmailAuthProvider={credential:(email,password)=>({email,password})};
  const firestore=()=>db;firestore.FieldValue={delete:()=>'__delete__',serverTimestamp:()=>1,arrayUnion:x=>[x],arrayRemove:()=>[],increment:x=>x};
  w.firebase={initializeApp:()=>{},auth:authFn,firestore};w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.console.error=(...args)=>errors.push(args);w.liff={init:async()=>{},isLoggedIn:()=>true,getProfile:async()=>({userId:'U'+'a'.repeat(32),displayName:'A'}),getAccessToken:()=>'line-access-token',isInClient:()=>false};
- for(const file of ['calendar-data.js','calendar-core.js','calendar-settings.js']) w.eval(fs.readFileSync('index/index/'+file,'utf8'));
+ for(const file of ['calendar-data.js','calendar-core.js','calendar-settings.js','business-calendar.js']) w.eval(fs.readFileSync('index/index/'+file,'utf8'));
  const script=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean).pop();
  w.testNavigate=url=>calls.push(['navigate',url]);
  w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={setCalendarMonth:(year,month)=>{calMonth=new Date(year,month,1);selectView("cal");goTab("list");},addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setWishes:value=>wishes=value,setShown:value=>findShown=value,spotMapLink,setFriends:(value,self)=>{friends=value;selfFriendId=self;},config:CONFIG,setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
@@ -1343,14 +1292,14 @@ test('calendar: legacy account can open, save and reload private holidays withou
   await a.w.h.startOwner();
   const button=a.d.getElementById('calendarSettingsOpen');
   assert.equal(button.classList.contains('hidden'),false);assert.equal(button.disabled,false);
-  button.click();assert.equal(a.d.getElementById('calendarSheet').classList.contains('hidden'),false);
+  button.click();a.d.getElementById('businessImport').click();assert.equal(a.d.getElementById('calendarSheet').classList.contains('hidden'),false);
   a.d.getElementById('calendarTeam').value='A';
   a.d.getElementById('calendarDate').value='2026-10-24';a.d.getElementById('calendarKind').value='A';
   a.d.getElementById('calendarManualSave').click();await new Promise(r=>setTimeout(r,25));
   assert.equal(a.data.get('personalConfig/A').calendar.days['2026-10-24'],'A');
   assert.deepEqual(a.data.get('config/app'),shared);assert.equal(a.data.get('events/safe').title,'Existing plan');
   await a.w.h.startOwner();assert.equal(a.w.h.personal,false);
-  button.click();assert.equal(a.d.getElementById('calendarTeam').value,'A');
+  button.click();a.d.getElementById('businessImport').click();assert.equal(a.d.getElementById('calendarTeam').value,'');
   a.d.getElementById('calendarDate').value='2026-10-24';a.d.getElementById('calendarKind').value='';
   a.d.getElementById('calendarManualSave').click();await new Promise(r=>setTimeout(r,25));
   assert.equal(a.data.get('personalConfig/A').calendar.days['2026-10-24'],undefined);
@@ -1362,7 +1311,7 @@ test('calendar: confirmed month correction removes wrong marks only in that mont
  const a=app({legacy:true});try{
   a.data.set('personalConfig/A',{calendar:{version:1,configured:true,team:'A',showRokuyo:true,days:{'2026-10-02':'B','2026-10-05':'A','2026-11-07':'A'}}});
   a.data.set('events/safe',{title:'Keep me'});await a.w.h.startOwner();
-  a.d.getElementById('calendarSettingsOpen').click();
+  a.d.getElementById('calendarSettingsOpen').click();a.d.getElementById('businessImport').click();
   a.d.getElementById('calendarCorrectionText').value='2026-10 A:10,24 B:3,12,17,31 全休:4,11,18,25';
   a.d.getElementById('calendarCorrectionRead').click();
   a.d.getElementById('calendarSave').click();assert.equal(a.data.get('personalConfig/A').calendar.days['2026-10-02'],'B');
@@ -1379,7 +1328,7 @@ test('calendar: full paper calendar imports both teams and clears shifted dates 
   const a=app({legacy:true});try {
    a.data.set('personalConfig/A',{calendar:{version:1,configured:true,team,days:{'2026-10-02':'B','2026-10-05':'A','2026-03-20':'off','2027-03-21':'off','2027-03-23':'A','2027-03-27':'B','2027-03-30':'A'}}});
    a.data.set('events/safe',{title:'Keep plan'});await a.w.h.startOwner();
-   a.d.getElementById('calendarSettingsOpen').click();
+   a.d.getElementById('calendarSettingsOpen').click();a.d.getElementById('businessImport').click();
    assert.equal(a.d.getElementById('calendarTeam').hidden,true);
    a.d.getElementById('calendarVerified').click();
    const rows=a.w.HibirukaCalendar.verifiedCompanyCalendar().rows;
@@ -1425,7 +1374,7 @@ test('calendar: requested March repair persists in both account modes, preserves
    assert.equal(a.data.get('events/safe').title,'Shared plan');assert.equal(a.data.get('personalEvents/safe').sends[0].status,'wait');
    assert(!a.w.location.search.includes('calendarFix'));
    // A later manual change is allowed, and an ordinary reload does not undo it.
-   a.d.getElementById('calendarSettingsOpen').click();
+   a.d.getElementById('calendarSettingsOpen').click();a.d.getElementById('businessImport').click();
    a.d.getElementById('calendarDate').value='2027-03-23';a.d.getElementById('calendarKind').value='A';
    a.d.getElementById('calendarManualSave').click();await tick();
    await a.w.h.startOwner();await tick();
@@ -1465,5 +1414,55 @@ test('calendar: an account change during the correction prevents the write',asyn
   assert.equal(a.data.get('personalConfig/A').calendar.days['2027-03-23'],'A');
   assert(a.w.location.search.includes('calendarFix'));
   assert.equal(a.calls.filter(c=>c[0]==='update').length,0);
+ }finally{a.close();}
+});
+
+test('business: switching preserves selected date, half-day overlay survives reload and restores original in both modes',async()=>{
+ for(const legacy of [false,true]){const a=app({legacy,returning:!legacy});try{
+  a.data.set('personalConfig/A',{ownerName:'Alice',calendar:{version:1,configured:true,team:'A',showRokuyo:false,days:{'2027-03-20':'B'}}});
+  a.data.set('personalEvents/safe',{ownerUid:'A',title:'Keep memory'});a.data.set('config/app',{ownerName:'Shared'});
+  await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,2);a.d.querySelector('[data-d="2027-03-20"]').click();a.d.getElementById('businessOpenDay').click();
+  assert(!a.d.getElementById('businessEditor').classList.contains('hidden'));assert.match(a.d.getElementById('calendarSelected').textContent,/3月20日/);
+  a.d.getElementById('businessPersonalCategory').value='paid';a.d.getElementById('businessPart').value='am';a.d.getElementById('businessPersonalTitle').value='通院の有給';
+  await a.d.getElementById('businessPersonalForm').onsubmit({preventDefault(){}});
+  const saved=a.data.get('personalConfig/A');assert.equal(saved.calendar.days['2027-03-20'],'B');assert.equal(saved.calendar.business.personal['2027-03-20'].part,'am');assert.equal(saved.calendar.team,'A');assert.equal(saved.ownerName,'Alice');
+  assert.match(a.d.querySelector('[data-d="2027-03-20"] .business-personal-badge').textContent,/通院の有給・午前/);
+  a.d.getElementById('businessModeOff').click();assert(a.d.getElementById('businessEditor').classList.contains('hidden'));assert(a.d.querySelector('[data-d="2027-03-20"] .business-personal-badge'));
+  await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,2);a.d.querySelector('[data-d="2027-03-20"]').click();a.d.getElementById('businessOpenDay').click();assert.equal(a.d.getElementById('businessPart').value,'am');
+  await a.d.getElementById('businessRestore').onclick();assert.equal(a.data.get('personalConfig/A').calendar.business.personal['2027-03-20'],undefined);assert.equal(a.data.get('personalConfig/A').calendar.days['2027-03-20'],'B');
+  assert.equal(a.data.get('personalEvents/safe').title,'Keep memory');assert.equal(a.data.get('config/app').ownerName,'Shared');
+ }finally{a.close();}}
+});
+test('business: repeating deadlines, completion, editing one occurrence, and safe custom labels',async()=>{
+ const a=app({returning:true});try{
+  await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,0);a.d.querySelector('[data-d="2027-01-31"]').click();a.d.getElementById('businessOpenDay').click();
+  a.d.querySelector('[data-btab="entry"]').click();a.d.getElementById('businessEntryType').value='deadline';a.d.getElementById('businessEntryTitle').value='希望休の提出';a.d.getElementById('businessRepeat').value='monthly';a.d.getElementById('businessRepeatCount').value='3';
+  await a.d.getElementById('businessEntryForm').onsubmit({preventDefault(){}});
+  let entries=a.data.get('personalConfig/A').calendar.business.entries;assert.deepEqual(Object.values(entries).map(e=>e.date),['2027-01-31','2027-02-28','2027-03-31']);
+  await a.d.querySelector('[data-complete]').onclick();entries=a.data.get('personalConfig/A').calendar.business.entries;assert(Object.values(entries)[0].done);
+  a.d.querySelector('[data-edit-business]').click();a.d.getElementById('businessEntryTitle').value='提出しました';await a.d.getElementById('businessEntryForm').onsubmit({preventDefault(){}});
+  entries=a.data.get('personalConfig/A').calendar.business.entries;assert.equal(Object.values(entries)[0].title,'提出しました');assert.equal(Object.values(entries)[1].title,'希望休の提出');
+  a.d.getElementById('businessSettingsToggle').click();a.d.getElementById('businessYear').value='2026-03-21';a.d.getElementById('businessTeam').value='C1';
+  const row=a.d.querySelector('[data-label="C1"]');row.querySelector('[type=checkbox]').checked=true;row.querySelector('[type=text]').value='<img src=x>';row.querySelector('[type=color]').value='#aabbcc';
+  await a.d.getElementById('businessSettingsForm').onsubmit({preventDefault(){}});assert.equal(a.data.get('personalConfig/A').calendar.team,'C1');assert.equal(a.data.get('personalConfig/A').calendar.business.yearStart,'03-21');
+  a.d.querySelector('[data-btab="company"]').click();await a.d.querySelector('[data-company="C1"]').onclick();assert.equal(a.data.get('personalConfig/A').calendar.days['2027-01-31'],'C1');assert.equal(a.d.querySelector('[data-d="2027-01-31"] .off-label').textContent,'<img src=x>');assert(!a.d.querySelector('[data-d="2027-01-31"] img'));
+ }finally{a.close();}
+});
+test('business: failed save retains draft, locks duplicate taps and targets original day',async()=>{
+ const a=app({returning:true});try{
+  await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,2);a.d.querySelector('[data-d="2027-03-23"]').click();a.d.getElementById('businessOpenDay').click();
+  const original=a.db.runTransaction;let release,calls=0;a.db.runTransaction=async fn=>{calls++;await new Promise(r=>release=r);return original(fn);};
+  const pending=a.d.getElementById('businessPersonalForm').onsubmit({preventDefault(){}});await a.d.getElementById('businessPersonalForm').onsubmit({preventDefault(){}});assert.equal(calls,1);
+  a.d.querySelector('[data-d="2027-03-24"]').click();release();await pending;assert(a.data.get('personalConfig/A').calendar.business.personal['2027-03-23']);assert(!a.data.get('personalConfig/A').calendar.business.personal['2027-03-24']);
+  a.d.getElementById('businessPersonalTitle').value='夏季休暇';a.db.runTransaction=async()=>{throw Error('通信を確認してください');};await a.d.getElementById('businessPersonalForm').onsubmit({preventDefault(){}});assert.equal(a.d.getElementById('businessPersonalTitle').value,'夏季休暇');assert.match(a.d.getElementById('businessStatus').textContent,/通信/);
+  a.db.runTransaction=original;await a.d.getElementById('businessPersonalForm').onsubmit({preventDefault(){}});assert.equal(a.data.get('personalConfig/A').calendar.business.personal['2027-03-24'].title,'夏季休暇');
+ }finally{a.close();}
+});
+test('business: account change before transaction read prevents writing the former account',async()=>{
+ const a=app({returning:true});try{
+  await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,2);a.d.querySelector('[data-d="2027-03-23"]').click();a.d.getElementById('businessOpenDay').click();
+  const original=a.db.runTransaction;let release;a.db.runTransaction=async fn=>{await new Promise(r=>release=r);return original(fn);};
+  const pending=a.d.getElementById('businessPersonalForm').onsubmit({preventDefault(){}});a.w.firebase.auth().currentUser.uid='B';release();await pending;
+  assert.equal(a.data.get('personalConfig/A').calendar,undefined);assert.match(a.d.getElementById('businessStatus').textContent,/アカウント/);
  }finally{a.close();}
 });

@@ -191,3 +191,15 @@ test('route counters: signed-in users can only add one; nobody can read, reset o
  const anon=env.unauthenticatedContext().firestore();await assertFails(setDoc(doc(anon,'routeStats/hp_plan_20261011'),{route:'hp_plan',day:'20261011',shown:1}));
  await env.withSecurityRulesDisabled(async c=>{const v=(await getDoc(doc(c.firestore(),'routeStats/hp_plan_20261009'))).data();require('node:assert/strict').equal(v.shown,2);require('node:assert/strict').equal(v.clicks,1);});
 });
+
+test('business calendar: owner-only extension, bounded data, and old clients cannot erase business data',async()=>{
+ const calendar={version:1,configured:true,team:'C1',showRokuyo:true,days:{'2026-10-13':'C1'},business:{version:1,yearStart:'03-21',leaveStart:'04-01',confirmedFrom:'',confirmedThrough:'',labels:{C1:{name:'第1班',color:'#e2efd3',enabled:true}},personal:{'2026-10-13':{title:'有給',category:'paid',part:'am'}},entries:{}}};
+ const ref=doc(A,'personalConfig/person-A');
+ await assertSucceeds(updateDoc(ref,{calendar}));
+ await assertFails(updateDoc(doc(B,'personalConfig/person-A'),{calendar}));
+ const {business,...old}=calendar;await assertFails(updateDoc(ref,{calendar:old}));
+ await assertSucceeds(updateDoc(ref,{ownerName:'Renamed'}));
+ await assertFails(updateDoc(ref,{calendar:{...calendar,business:{...business,entries:Object.fromEntries(Array.from({length:501},(_,i)=>['e'+i,{}]))}}}));
+ await assertFails(updateDoc(ref,{calendar:{...calendar,business:{...business,unexpected:'no'}}}));
+ await assertSucceeds(updateDoc(ref,{calendar:{...calendar,business:{...business,personal:{}}}}));
+});

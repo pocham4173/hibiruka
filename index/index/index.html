@@ -393,17 +393,10 @@
   .calendar-key span { padding:4px 8px; border-radius:5px; color:#243044; }
   .calendar-key .a { background:#e2efd3; } .calendar-key .b { background:#dceef9; } .calendar-key .all { background:#f5dbe5; }
   #calendarSelected { font-size:16px; font-weight:700; color:var(--navy); background:#f4f5f8; padding:12px; border-radius:10px; line-height:1.7; }
-  #calendarQuick { border:0; padding:0; margin:0 0 16px; min-width:0; }
-  #calendarQuick legend { font-weight:700; margin-bottom:8px; }
   .calendar-quick-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
   .calendar-quick-grid button { min-height:48px; padding:10px 4px; border:1px solid var(--line); border-radius:10px; background:#f4f5f8; color:var(--navy); font:inherit; font-weight:700; cursor:pointer; }
-  .calendar-quick-grid [data-holiday="off"], .calendar-quick-grid [data-holiday="A"] { background:#e2efd3; color:#285c31; }
-  .calendar-quick-grid [data-holiday="B"] { background:#dceef9; color:#255783; }
-  .calendar-quick-grid [data-holiday="all"] { background:#f5dbe5; color:#95344f; }
   .calendar-quick-grid [aria-pressed="true"] { outline:2px solid var(--navy); outline-offset:-2px; }
   .calendar-quick-grid button:active { transform:scale(.97); }
-  #calendarQuick:disabled button { opacity:.55; cursor:wait; }
-  #calendarQuickStatus { min-height:1.5em; margin:8px 0 0; }
   #calendarPreview { max-width:100%; max-height:420px; object-fit:contain; display:block; margin:12px auto; }
   #calendarPreview:not([src]) { display:none; }
   .calendar-review-row { display:grid; grid-template-columns:28px minmax(0,1fr) 94px; align-items:center; gap:6px; margin:6px 0; }
@@ -592,6 +585,7 @@
   .shop-route { margin: 12px 0 0; } .shop-route .note { margin: 6px 0 0; font-size: 12px; }
   .terms-link { margin:8px 0 0; font-size:13px; } .terms-link a { color:var(--rose, #a9536a); font-weight:700; }
 </style>
+<link rel="stylesheet" href="./business-calendar.css?v=20261013-business">
 </head>
 <body>
 
@@ -736,6 +730,7 @@
       <p class="note">通知・ホーム追加は、あとから設定でもできます。</p><button type="button" id="dismissNextSteps" class="back-link">閉じる</button>
     </aside>
 
+    <div class="business-mode-switch" role="group" aria-label="カレンダーのモード"><button id="businessModeOff" type="button" aria-pressed="true">ふだん</button><button id="businessModeOn" type="button" aria-pressed="false">ビジネス</button></div>
     <div class="eyebrow">過去も、これからも</div>
     <div class="hero">
       <div style="flex:1"><h2 id="listHeading">これからの予定<span class="sparkle">✦</span></h2><p id="listIntro">カレンダーで確認。新しい予定や思い出は「記録する」から。</p></div>
@@ -753,6 +748,8 @@
     <div id="whoFilterBox" class="hidden" style="margin-top:10px"><div class="chips" id="whoFilter"></div></div>
     <button class="chip add" id="catEditBtn2" style="margin-top:12px">✏️ 項目を編集</button>
 
+    
+    <section id="businessSummary" class="card hidden" aria-label="仕事と休み"></section><p id="businessGlobalStatus" class="note" role="status" aria-live="polite"></p>
     <div id="calBox" class="card hidden" style="margin-top:16px">
       <div class="cal-head"><button type="button" id="calPrev" aria-label="前の月">‹</button><b id="calTitle"></b><button type="button" id="calNext" aria-label="次の月">›</button></div>
       <div id="calendarWelcome" class="hidden">
@@ -762,31 +759,22 @@
         <button type="button" class="back-link" id="calendarLater">あとで</button>
       </div>
       <div class="cal" id="calGrid"></div>
-      <div class="calendar-key" aria-label="休日の色分け"><span class="a">A：A班休み</span><span class="b">B：B班休み</span><span class="all">全休</span></div>
+      <div id="calendarKey" class="calendar-key" aria-label="休日の色分け"><span class="a">A：A班休み</span><span class="b">B：B班休み</span><span class="all">全休</span></div>
       <p class="calendar-legend" id="calendarLegend"></p>
       <p class="note" id="calendarCoverage"></p>
       <button type="button" class="chip" id="calendarOpen">自分の休日を設定</button>
       <p class="note center">日付を押すと、休みの変更・予定の追加ができます</p>
       <div id="calActions" class="hidden">
         <p class="note" id="calendarSelected"></p>
-        <fieldset id="calendarQuick" disabled>
-          <legend>この日の休みを変更</legend>
-          <div class="calendar-quick-grid">
-            <button type="button" data-holiday="off">休みにする</button>
-            <button type="button" data-holiday="work">出勤にする</button>
-            <button type="button" data-holiday="A">A班休み</button>
-            <button type="button" data-holiday="B">B班休み</button>
-            <button type="button" data-holiday="all">全休</button>
-            <button type="button" data-holiday="">印を消す</button>
-          </div>
-          <p class="note" id="calendarQuickStatus" role="status" aria-live="polite">押すと、この日だけ保存します</p>
-        </fieldset>
+        <button type="button" class="btn sub" id="businessOpenDay">仕事・休みを変更</button><div id="businessEditor" class="hidden"></div>
+
         <button type="button" class="plus-btn" id="calAdd">この日に追加</button>
         <button type="button" class="chip" id="calAll" style="margin-top:12px">これからの予定をすべて見る</button>
       </div>
     </div>
 
-    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:22px">
+    <section id="businessAgenda" class="card hidden" aria-label="仕事の予定"></section>
+    <div id="listResults" style="display:flex;align-items:baseline;justify-content:space-between;margin-top:22px">
       <h2 id="listTitle" style="margin:0 0 12px">これからの予定</h2><span id="listCount" style="color:var(--muted);font-weight:700"></span>
     </div>
     <div id="monthAi" class="card ai-month hidden">
@@ -1273,9 +1261,10 @@
   <button type="button" class="btn ghost" id="calendarClose">あとで・閉じる</button>
   <p class="note">祝日と会社の休みは別です。祝日データ：<a href="https://www8.cao.go.jp/chosei/shukujitsu/gaiyou.html" target="_blank" rel="noopener">内閣府</a>。六曜は日本の旧暦に基づく参考表示です。</p>
 </div></div>
+<script src="./business-calendar.js?v=20261013-business"></script>
 <script src="./calendar-data.js"></script>
-<script src="./calendar-core.js?v=20261012-march-end"></script>
-<script src="./calendar-settings.js?v=20261012-march-end"></script>
+<script src="./calendar-core.js?v=20261013-business"></script>
+<script src="./calendar-settings.js?v=20261013-business"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1586,7 +1575,7 @@ function showPin() {
 }
 
 function enterApp() {
-  calendarQuickPending = null;
+  businessUI.reset();
   calendarUI.reset(); calendarConfig = HibirukaCalendar.cleanConfig(null); calendarLoaded = false;
   renderCalendarSetup();
   unsub.forEach(stop=>stop()); unsub=[];
@@ -1600,6 +1589,7 @@ function enterApp() {
   if (["rec", "list", "set"].includes(t0)) goTab(t0);
   if (t0 === "find") { goTab("find"); renderWishes(); showWeather(); renderLocalCoupons(); renderEvents(); }
   if (["up", "cal", "mem", "fav", "map"].includes(v0)) selectView(v0 === "up" ? "cal" : v0);
+  if(qs.get('mode')==='business')businessUI.open();
   const denied = (e) => { console.error(e); if (e.code === "permission-denied") toast("読み込めませんでした。もう一度開き直してください。", 6000); };
   unsub.push((personalMode ? ownedQuery("friends") : recordCollection("friends").orderBy("createdAt")).onSnapshot(s => {
     friends = s.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1709,13 +1699,38 @@ async function saveCalendarConfig(patch, settings = {}, replaceMonth = '') {
         if (!/^20\d{2}-(0[1-9]|1[0-2])$/.test(replaceMonth) || Object.keys(patch).some(d => !d.startsWith(replaceMonth+'-'))) throw Error('修正する月を確認してください');
         for (const day of Object.keys(current.days)) if (day.startsWith(replaceMonth+'-') && !Object.hasOwn(changes,day)) changes[day]='';
       }
-      const next = HibirukaCalendar.mergeConfig(current, changes, settings);
+      let next = HibirukaCalendar.mergeConfig(current, changes, settings);
+      if(replaceMonth && typeof replaceMonth==='object' && replaceMonth.correctUnconfirmed)
+        next=HibirukaCalendar.businessPatch(next,{...(!current.business?{yearStart:replaceMonth.from.slice(5)}:{}),confirmedFrom:replaceMonth.from,confirmedThrough:replaceMonth.to});
       if (snap.exists) tx.update(ref, {calendar: next});
       else tx.set(ref, {calendar: next});
       return next;
     });
     if (myUid === uid) { calendarConfig = saved; renderCalendarSetup(); renderList(); }
 }
+async function saveBusinessCalendar(patch, settings={}, completeId='') {
+  if(!myUid || !calendarLoaded) throw Error('カレンダーの読み込みを待ってから、もう一度お試しください');
+  const uid=myUid,ref=calendarRef();
+  const saved=await db.runTransaction(async tx=>{
+    const snap=await tx.get(ref);
+    if(auth.currentUser?.uid!==uid||myUid!==uid)throw Error('アカウントが変わりました。開き直してください');
+    const current=HibirukaCalendar.cleanConfig(snap.exists?snap.data().calendar:null);
+    let changes=patch;
+    if(completeId){const entry=current.business?.entries?.[completeId];if(!entry)throw Error('この予定は削除されています');changes={entries:{[completeId]:{...entry,done:!entry.done}}};}
+    const next=HibirukaCalendar.businessPatch(HibirukaCalendar.mergeConfig(current,{},settings),changes);
+    if(snap.exists)tx.update(ref,{calendar:next});else tx.set(ref,{calendar:next});
+    return next;
+  });
+  if(myUid===uid){calendarConfig=saved;renderCalendarSetup();renderList();}
+}
+const businessUI=createBusinessCalendar({
+  esc,config:()=>calendarConfig,ready:()=>!!myUid&&calendarLoaded,selected:()=>calSel,
+  month:()=>ymd(new Date(calMonth.getFullYear(),calMonth.getMonth(),1)),today:todayStr,toast,
+  save:saveBusinessCalendar,complete:id=>saveBusinessCalendar({}, {},id),company:saveCalendarConfig,
+  import:()=>calendarUI.open(calSel||undefined),
+  mode:()=>{if(view!=='cal')selectView('cal');goTab('list');},
+  select:date=>{calMonth=new Date(date+'T12:00:00');calSel=date;renderList();}
+});
 const calendarUI = createCalendarSettings({
   canEdit: () => !!myUid && calendarLoaded,
   getConfig: () => calendarConfig,
@@ -1724,40 +1739,15 @@ const calendarUI = createCalendarSettings({
   toast,
   save: saveCalendarConfig
 });
-let calendarQuickPending = null;
-function renderQuickHoliday() {
-  $('calendarQuick').classList.toggle('hidden', !myUid);
-  $('calendarQuick').disabled = !myUid || !calendarLoaded || !HibirukaCalendar.validDate(calSel) || !!calendarQuickPending;
-  const kind = calendarConfig.days[calSel] || '';
-  $('calendarQuick').querySelectorAll('[data-holiday]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.holiday === kind)));
-}
-$('calendarQuick').querySelectorAll('[data-holiday]').forEach(button => button.onclick = async () => {
-  if ($('calendarQuick').disabled || calendarQuickPending) return;
-  const pending = {uid:myUid,date:calSel}, kind = button.dataset.holiday;
-  calendarQuickPending = pending;
-  renderQuickHoliday();
-  $('calendarQuickStatus').textContent = '保存しています…';
-  try {
-    // Use the latest stored settings, never the unopened import form or draft.
-    await saveCalendarConfig({[pending.date]:kind});
-    if (calendarQuickPending !== pending || myUid !== pending.uid) return;
-    const text = fmtDate(pending.date) + (kind ? 'を「'+button.textContent.replace('にする','')+'」にしました' : 'の印を消しました');
-    $('calendarQuickStatus').textContent = text; toast(text);
-  } catch(e) {
-    if (calendarQuickPending === pending && myUid === pending.uid) $('calendarQuickStatus').textContent = '保存できませんでした。通信を確認して、もう一度押してください';
-  } finally {
-    if (calendarQuickPending === pending) { calendarQuickPending = null; renderQuickHoliday(); }
-  }
-});
 function renderCalendarSetup() {
   const editable = !!myUid && calendarLoaded;
   ['calendarOpen','calendarSettingsOpen'].forEach(id => $(id).classList.toggle('hidden', !myUid));
   ['calendarOpen','calendarSettingsOpen','calendarStart'].forEach(id => $(id).disabled = !editable);
-  renderQuickHoliday();
+  businessUI.render();
   $('calendarWelcome').classList.toggle('hidden', !editable || calendarConfig.configured || lsGet('hibiruka:calendar-later:' + myUid) === '1');
 }
-['calendarOpen','calendarSettingsOpen','calendarStart'].forEach(id => $(id).onclick = () => calendarUI.open());
-$('calendarOpen').onclick = () => { calendarUI.open(); if (!Object.keys(calendarConfig.days).length) $('calendarChooseImport').click(); };
+['calendarOpen','calendarSettingsOpen','calendarStart'].forEach(id => $(id).onclick = () => businessUI.openSettings());
+$('calendarOpen').onclick = () => businessUI.openSettings();
 $('calendarLater').onclick = () => { lsSet('hibiruka:calendar-later:' + myUid, '1'); renderCalendarSetup(); };
 
 // Optional guidance belongs to this browser and UID, not shared records.
@@ -3297,6 +3287,7 @@ async function saveCats(a) {
 let view = "cal", filterCat = "", filterWho = "", calMonth = null, calSel = null;
 
 function selectView(next) {
+  if(next!=='cal')businessUI.leave();
   view = next; calSel = null;
   document.querySelectorAll(".tile").forEach(x => {
     const on = x.dataset.view === view;
@@ -3483,7 +3474,7 @@ function renderList() {
     html = items.length ? items.map(card).join("") : emptyBox("heart", "「また行きたい」はまだありません。", "記録するときに ♥ を押すとここに集まります");
   } else {
     title = fmtDate(calSel); items = list.filter(e => e.date === calSel).sort((a,b) => (a.time || "").localeCompare(b.time || ""));
-    $("calAdd").textContent = calSel < t ? "＋ この日の思い出を残す" : "＋ この日に予定を追加";
+    $("calAdd").textContent = calSel < t ? "＋ この日の思い出を残す" : businessUI.active ? "＋ この日にお出かけの予定を追加" : "＋ この日に予定を追加";
     html = items.length ? items.map(card).join("") : `<p class="note center">この日の記録はありません</p>`;
   }
   $("monthAi").classList.toggle("hidden", view !== "mem");
@@ -3544,22 +3535,26 @@ function renderCal(list) {
     const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i), s = ymd(d);
     const es = list.filter(e => e.date === s);
     const info = HibirukaCalendar.dayInfo(s, calendarConfig, HibirukaCalendarData);
-    h += `<button type="button" aria-label="${esc([fmtDate(s),info.holiday,info.rokuyo,info.label,es.length+'件'].filter(Boolean).join(' '))}" aria-pressed="${s === calSel}" class="day shift-${info.kind} ${d.getDay()===0?'sun':d.getDay()===6?'sat':''} ${info.holiday?'holiday':''} ${info.off?'mine':''} ${d.getMonth() !== m ? "other" : ""} ${s === todayStr() ? "today" : ""} ${s === calSel ? "sel" : ""}" data-d="${s}"><b class="day-number">${d.getDate()}</b><span class="holiday-name">${esc(info.holiday)}</span>${info.holiday?'<span class="holiday-badge">祝日</span>':''}<span class="rokuyo">${esc(info.rokuyo)}</span><span class="off-label ${info.kind}">${esc(info.label)}</span>
+    const company=HibirukaCalendar.companyStyle(calendarConfig,info.kind), personal=HibirukaCalendar.personalInfo(s,calendarConfig);
+    const workCount=businessUI.active?Object.values(calendarConfig.business?.entries||{}).filter(e=>e.date===s).length:0;
+    info.label=info.kind?company.name:'';
+    h += `<button type="button" aria-label="${esc([fmtDate(s),info.holiday,info.rokuyo,info.label,personal?.label,workCount?workCount+'件の仕事':'',es.length+'件'].filter(Boolean).join(' '))}" aria-pressed="${s === calSel}" style="${info.kind?`background:${company.color};color:${company.textColor}`: ''}" class="day shift-${info.kind} ${d.getDay()===0?'sun':d.getDay()===6?'sat':''} ${info.holiday?'holiday':''} ${info.off?'mine':''} ${d.getMonth() !== m ? "other" : ""} ${s === todayStr() ? "today" : ""} ${s === calSel ? "sel" : ""}" data-d="${s}"><b class="day-number">${d.getDate()}</b><span class="holiday-name">${esc(info.holiday)}</span>${info.holiday?'<span class="holiday-badge">祝日</span>':''}<span class="rokuyo">${esc(info.rokuyo)}</span><span class="off-label ${info.kind}" style="color:${company.textColor}">${esc(info.label)}</span>
+      ${personal?`<span class="business-personal-badge">${esc(personal.label)}</span>`:''}${workCount?`<span class="business-event-badge">仕事 ${workCount}</span>`:''}
       <div class="dots">${es.slice(0, 3).map(e => `<i class="${isDone(e) ? "p" : ""}"></i>`).join("")}</div></button>`;
     if (i === 34 && new Date(start.getFullYear(), start.getMonth(), start.getDate() + 35).getMonth() !== m) break;
   }
   $("calGrid").innerHTML = h;
   const monthKey = `${y}-${String(m+1).padStart(2,'0')}`;
-  const offCount = Object.keys(calendarConfig.days).filter(date => date.startsWith(monthKey) && ['A','B','all','off'].includes(calendarConfig.days[date])).length;
-  $('calendarLegend').textContent = (offCount ? `A・B・全休などの印 ${offCount}日` : 'この月の会社の休日は未登録') + '　● 予定・記録あり';
-  $('calendarOpen').textContent = Object.keys(calendarConfig.days).length ? '休日の登録・変更' : '会社のカレンダー写真を登録';
+  const offCount = Object.keys(calendarConfig.days).filter(date => date.startsWith(monthKey) && calendarConfig.days[date] !== 'work').length;
+  $('calendarKey').innerHTML = [...new Set(Object.values(calendarConfig.days))].filter(k=>k!=='work').map(k=>{const x=HibirukaCalendar.companyStyle(calendarConfig,k);return `<span style="background:${x.color};color:${x.textColor}">${esc(x.name)}</span>`;}).join('') + (Object.keys(calendarConfig.business?.personal||{}).length?'<span style="background:#eee3f8">自分の休み・変更</span>':'');
+  $('calendarLegend').textContent = (offCount ? `会社の休日の印 ${offCount}日` : 'この月の会社の休日は未登録') + '　● 予定・記録あり';
+  $('calendarOpen').textContent = '仕事・休みの設定';
   $('calendarCoverage').textContent = [y < HibirukaCalendarData.holidayFrom || y > HibirukaCalendarData.holidayThrough ? 'この年の祝日データは未収録です。' : '', y<2020 || y>2032 ? 'この年の六曜は未収録です。' : ''].join('');
   const selected = calSel && HibirukaCalendar.dayInfo(calSel, calendarConfig, HibirukaCalendarData);
-  $('calendarSelected').textContent = selected ? [fmtDate(calSel),selected.label,selected.holiday,selected.rokuyo].filter(Boolean).join('・') : '';
-  renderQuickHoliday();
+  $('calendarSelected').textContent = selected ? [fmtDate(calSel),selected.kind?HibirukaCalendar.companyStyle(calendarConfig,selected.kind).name:'',HibirukaCalendar.personalInfo(calSel,calendarConfig)?.label,selected.holiday,selected.rokuyo].filter(Boolean).join('・') : '';
+  businessUI.render();
   $("calGrid").querySelectorAll("[data-d]").forEach(el => el.onclick = () => {
     calSel = el.dataset.d;
-    $('calendarQuickStatus').textContent = calendarQuickPending ? '保存しています…' : '押すと、この日だけ保存します';
     renderList();
     $('calActions').scrollIntoView?.({block:'nearest',behavior:'smooth'});
   });
