@@ -368,7 +368,7 @@
   
 
   /* 思い出アルバム */
-  .cal .day { aspect-ratio:auto; min-height:78px; border-radius:9px; justify-content:flex-start; padding:5px 1px; gap:2px; }
+  .cal .day { aspect-ratio:auto; height:90px; min-height:90px; box-sizing:border-box; border-radius:9px; justify-content:flex-start; padding:5px 1px; gap:2px; }
   .cal .day.sun .day-number, .cal .day.holiday .day-number { color:#ad343d; }
   .cal .day.sat .day-number { color:#315e96; }
   .cal .day { background:var(--day-fill,transparent); }
@@ -1214,6 +1214,13 @@
     <button type="button" class="btn sub" id="calendarChooseImport">写真・PDFから登録</button>
     <button type="button" class="btn sub" id="calendarChooseManual">手入力で登録</button>
   </div>
+  <details id="calendarCorrection">
+    <summary>確認済みの日付データで修正する</summary>
+    <p class="note">修正データを貼り付けると、1か月分の休日だけを入れ替えられます。保存前に日付を確認できます。</p>
+    <label for="calendarCorrectionText">修正データ</label>
+    <textarea id="calendarCorrectionText" placeholder="2026-10 A:10,24 B:3,12,17,31 全休:4,11,18,25"></textarea>
+    <button type="button" class="btn sub" id="calendarCorrectionRead">修正内容を確認する</button>
+  </details>
   <div id="calendarImport" class="hidden">
     <label for="calendarFile">会社のカレンダーを添付</label>
     <input type="file" id="calendarFile" accept="image/*,application/pdf">
@@ -1225,7 +1232,7 @@
     <p class="note">1日4回まで。PDFは1ページずつ確認・保存できます。</p>
     <div id="calendarReview" class="hidden">
       <h3>読み取り結果を確認</h3>
-      <p class="note">写真と比べて、間違いを直してください。取り込まない日はチェックを外せます。同じ日の休日設定だけを置き換え、予定・思い出は変更しません。</p>
+      <p class="note">写真と比べて、間違いを直してください。取り込まない日はチェックを外せます。写真の再読み取りでは同じ日の印を更新します。修正データでは指定月の休日を入れ替えます。予定・思い出は変更しません。</p>
       <div id="calendarRows"></div>
       <label><input type="checkbox" id="calendarConfirm"> 写真と比べて、日付・休日の種類・抜けを確認しました</label>
     </div>
@@ -1630,13 +1637,19 @@ const calendarUI = createCalendarSettings({
   token: () => auth.currentUser.getIdToken(),
   endpoint: new URL('/ai/calendar', CONFIG.aiUrl).href,
   toast,
-  save: async (patch, settings) => {
+  save: async (patch, settings, replaceMonth) => {
     if (!myUid || !calendarLoaded) throw Error('カレンダーを読み込んでから、もう一度お試しください');
     const uid = myUid, ref = calendarRef();
     const saved = await db.runTransaction(async tx => {
       const snap = await tx.get(ref);
       if (auth.currentUser?.uid !== uid || myUid !== uid) throw Error('アカウントが変わりました。開き直してください');
-      const next = HibirukaCalendar.mergeConfig(snap.exists ? snap.data().calendar : null, patch, settings);
+      const current = HibirukaCalendar.cleanConfig(snap.exists ? snap.data().calendar : null);
+      const changes = {...patch};
+      if (replaceMonth) {
+        if (!/^20\d{2}-(0[1-9]|1[0-2])$/.test(replaceMonth) || Object.keys(patch).some(d => !d.startsWith(replaceMonth+'-'))) throw Error('修正する月を確認してください');
+        for (const day of Object.keys(current.days)) if (day.startsWith(replaceMonth+'-') && !Object.hasOwn(changes,day)) changes[day]='';
+      }
+      const next = HibirukaCalendar.mergeConfig(current, changes, settings);
       if (snap.exists) tx.update(ref, {calendar: next});
       else tx.set(ref, {calendar: next});
       return next;

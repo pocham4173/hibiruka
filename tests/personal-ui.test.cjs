@@ -1306,3 +1306,19 @@ test('calendar: legacy account can open, save and reload private holidays withou
   assert.deepEqual(a.data.get('config/app'),shared);
  }finally{a.close();}
 });
+
+test('calendar: confirmed month correction removes wrong marks only in that month',async()=>{
+ const a=app({legacy:true});try{
+  a.data.set('personalConfig/A',{calendar:{version:1,configured:true,team:'A',showRokuyo:true,days:{'2026-10-02':'B','2026-10-05':'A','2026-11-07':'A'}}});
+  a.data.set('events/safe',{title:'Keep me'});await a.w.h.startOwner();
+  a.d.getElementById('calendarSettingsOpen').click();
+  a.d.getElementById('calendarCorrectionText').value='2026-10 A:10,24 B:3,12,17,31 全休:4,11,18,25';
+  a.d.getElementById('calendarCorrectionRead').click();
+  a.d.getElementById('calendarSave').click();assert.equal(a.data.get('personalConfig/A').calendar.days['2026-10-02'],'B');
+  a.d.getElementById('calendarConfirm').checked=true;a.d.getElementById('calendarSave').click();await new Promise(r=>setTimeout(r,25));
+  const days=a.data.get('personalConfig/A').calendar.days;
+  assert.equal(days['2026-10-02'],undefined);assert.equal(days['2026-10-05'],undefined);
+  assert.equal(days['2026-10-10'],'A');assert.equal(days['2026-10-12'],'B');assert.equal(days['2026-10-11'],'all');
+  assert.equal(days['2026-11-07'],'A');assert.equal(Object.keys(days).length,11);assert.equal(a.data.get('events/safe').title,'Keep me');
+ }finally{a.close();}
+});

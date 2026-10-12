@@ -1,9 +1,9 @@
 /* Calendar setup: drafts stay in memory until the user explicitly saves. */
 globalThis.createCalendarSettings = function(hooks) {
   const $=id=>document.getElementById(id), C=globalThis.HibirukaCalendar;
-  let generation=0, busy=false, image='', pdf=null, pdfTask=null, controller=null;
+  let replaceMonth='', generation=0, busy=false, image='', pdf=null, pdfTask=null, controller=null;
   const message=text=>{$('calendarStatus').textContent=text;};
-  function invalidate(){generation++;controller?.abort();controller=null;image='';pdfTask?.destroy().catch(()=>{});pdfTask=null;pdf=null;$('calendarPreview').removeAttribute('src');$('calendarFile').value='';}
+  function invalidate(){replaceMonth='';generation++;controller?.abort();controller=null;image='';pdfTask?.destroy().catch(()=>{});pdfTask=null;pdf=null;$('calendarPreview').removeAttribute('src');$('calendarFile').value='';}
   function close(){if(busy&&$('calendarSave').disabled)return;invalidate();$('calendarSheet').classList.add('hidden');}
   function setBusy(value){busy=value;for(const id of ['calendarRead','calendarSave','calendarManualSave','calendarFile','calendarPdfPage','calendarClose'])$(id).disabled=value;}
   function open(date) {
@@ -18,14 +18,14 @@ globalThis.createCalendarSettings = function(hooks) {
     $('calendarImport').classList.add('hidden');$('calendarManual').classList.add('hidden');
     $('calendarPdfBox').classList.add('hidden');$('calendarConfirm').checked=false;
     $('calendarSave').textContent='表示設定を保存';
-    message('');$('calendarSheet').classList.remove('hidden');
+    $('calendarCorrection').open=false;message('');$('calendarSheet').classList.remove('hidden');
     if(C.validDate(date))$('calendarManual').classList.remove('hidden');
   }
   const settings=()=>({team:$('calendarTeam').value,showRokuyo:$('calendarRokuyo').checked});
   async function save(patch) {
     if(busy)return;
     setBusy(true);message('保存しています…');
-    try {await hooks.save(patch,settings());setBusy(false);close();hooks.toast('カレンダーを保存しました');}
+    try {await hooks.save(patch,settings(),replaceMonth);setBusy(false);close();hooks.toast('カレンダーを保存しました');}
     catch(e){message(e?.message||'保存できませんでした。通信を確認して、もう一度お試しください');setBusy(false);}
   }
   function toJpeg(source,width,height) {
@@ -53,6 +53,7 @@ globalThis.createCalendarSettings = function(hooks) {
   $('calendarChooseManual').onclick=()=>{$('calendarManual').classList.remove('hidden');$('calendarImport').classList.add('hidden');};
   $('calendarDate').onchange=()=>{$('calendarKind').value=hooks.getConfig().days[$('calendarDate').value]||'';};
   $('calendarManualSave').onclick=()=>{
+    replaceMonth='';
     const date=$('calendarDate').value;
     if(!C.validDate(date)){message('日付を選んでください');return;}
     save({[date]:$('calendarKind').value});
@@ -90,6 +91,7 @@ globalThis.createCalendarSettings = function(hooks) {
   $('calendarRead').onclick=async()=>{
     if(busy)return;
     if(!image){message('先にカレンダーの写真・PDFを選んでください');return;}
+    replaceMonth='';
     const year=Number($('calendarYear').value);
     if(!Number.isInteger(year)||year<2000||year>2098){message('カレンダーに書かれた年を確認してください');return;}
     const g=generation;controller=new AbortController();const timer=setTimeout(()=>controller?.abort(),90000);
@@ -117,17 +119,36 @@ globalThis.createCalendarSettings = function(hooks) {
       const date=document.createElement('input');date.type='date';date.value=row.date;date.setAttribute('aria-label','取り込む日付');
       const kind=document.createElement('select');kind.setAttribute('aria-label',row.date+'の休日の種類');
       kind.add(new Option('要確認','unknown'));for(const k of C.kinds)kind.add(new Option(C.labels[k],k));kind.value=row.kind;
-      line.append(include,date,kind);box.append(line);
-      for(const el of [include,date,kind])el.onchange=()=>{$('calendarConfirm').checked=false;};
+      const weekday=document.createElement('small');weekday.textContent=['日','月','火','水','木','金','土'][new Date(row.date+'T12:00:00').getDay()]+'曜日';
+      line.append(include,date,kind);line.append(weekday);box.append(line);
+      for(const el of [include,date,kind])el.onchange=()=>{$('calendarConfirm').checked=false;weekday.textContent=C.validDate(date.value)?['日','月','火','水','木','金','土'][new Date(date.value+'T12:00:00').getDay()]+'曜日':'';};
     }
   }
+  $('calendarCorrectionRead').onclick=()=>{
+    if(busy)return;
+    const text=$('calendarCorrectionText').value.trim();
+    const match=text.match(/^(20\d{2}-(?:0[1-9]|1[0-2])) A:([\d,]*) B:([\d,]*) 全休:([\d,]*)$/);
+    if(!match){message('修正データを省略せず、そのまま貼り付けてください');return;}
+    const rows=[],seen=new Set();
+    for(const [i,kind] of ['A','B','all'].entries())for(const n of match[i+2].split(',').filter(Boolean)){
+      const date=match[1]+'-'+n.padStart(2,'0');
+      if(!C.validDate(date)||seen.has(date)){message('日付が不正、または重複しています');return;}
+      seen.add(date);rows.push({date,kind});
+    }
+    if(!rows.length){message('休日の日付がありません');return;}
+    invalidate();replaceMonth=match[1];
+    renderRows(rows.sort((a,b)=>a.date.localeCompare(b.date)));
+    $('calendarImport').classList.remove('hidden');$('calendarReview').classList.remove('hidden');$('calendarManual').classList.add('hidden');
+    $('calendarConfirm').checked=false;$('calendarSave').textContent=replaceMonth+'の休日を入れ替えて保存';
+    message(replaceMonth+'の既存の休日設定を消して、この'+rows.length+'日へ入れ替えます。他の月・予定・思い出は変わりません。');
+  };
   $('calendarSave').onclick=()=>{
     const patch={};
     if(!$('calendarReview').classList.contains('hidden')) {
       if(!$('calendarConfirm').checked){message('写真と読み取り結果を確認して、確認済みにチェックしてください');return;}
       for(const line of $('calendarRows').children) {
         const [include,date,kind]=line.children;if(!include.checked)continue;
-        if(!C.validDate(date.value)||!C.kinds.includes(kind.value)){message('日付や「要確認」の種類を直すか、その行のチェックを外してください');return;}
+        if(!C.validDate(date.value)||!C.kinds.includes(kind.value)||(replaceMonth&&!date.value.startsWith(replaceMonth+'-'))){message('日付や「要確認」の種類を直すか、その行のチェックを外してください');return;}
         if(Object.hasOwn(patch,date.value)){message('同じ日付が重複しています。どちらかのチェックを外してください');return;}
         patch[date.value]=kind.value;
       }
