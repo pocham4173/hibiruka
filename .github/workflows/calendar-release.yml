@@ -1,0 +1,61 @@
+name: カレンダー公開前の反映と実画像確認
+on:
+  push:
+    branches: [codex/personal-calendar]
+    paths:
+      - .github/workflows/calendar-release.yml
+      - scripts/calendar-production-check.cjs
+      - tests/fixtures/calendar-vision.json
+      - line-worker/**
+      - security/personal.rules
+permissions:
+  contents: read
+concurrency:
+  group: hibiruka-cloudflare-deploy
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: c012ff5fddf59148a0f718fc6736d080
+      LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+      LINE_CHANNEL_SECRET: ${{ secrets.LINE_CHANNEL_SECRET }}
+      HOTPEPPER_API_KEY: ${{ secrets.HOTPEPPER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci --prefix line-worker --no-audit --no-fund
+      - run: npm install --prefix scripts firebase-admin@12 --omit=dev --no-audit --no-fund
+      - run: npm install --prefix security --no-audit --no-fund
+      - run: NODE_PATH=security/node_modules node --test tests/*.test.cjs tests/*.test.mjs
+      - run: node scripts/personal-rules.cjs prepare
+      - name: Test proposed rules against the current production rule base
+        working-directory: security
+        run: ./node_modules/.bin/firebase emulators:exec --only firestore --project demo-hibiruka-isolation 'node --test personal.test.cjs'
+      - run: node scripts/personal-rules.cjs deploy
+      - run: npm run build --prefix line-worker
+      - name: Deploy in verify mode
+        run: node line-worker/deploy.cjs
+        env:
+          ENABLE_SENDING: 'false'
+      - run: node scripts/verify-scheduler.cjs
+        env:
+          EXPECT_ENABLED: 'false'
+      - name: Resume existing authorized reservations
+        run: node line-worker/deploy.cjs
+        env:
+          ENABLE_SENDING: 'true'
+      - run: node scripts/verify-scheduler.cjs
+        env:
+          EXPECT_ENABLED: 'true'
+      - name: Verify real calendar image and owner-only saving; remove temporary data
+        run: node scripts/calendar-production-check.cjs
