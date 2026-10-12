@@ -5,7 +5,14 @@
     match /personalConfig/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow create, update: if request.auth != null && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['ownerName', 'cats', 'people', 'selfFriendId', 'createdAt', 'version']);
+        && request.resource.data.keys().hasOnly(['ownerName', 'cats', 'people', 'selfFriendId', 'createdAt', 'version', 'calendar'])
+        && (!('calendar' in request.resource.data) || validCalendar(request.resource.data.calendar));
+    }
+    function validCalendar(c) {
+      return c is map && c.keys().hasOnly(['version','configured','team','showRokuyo','days'])
+        && c.keys().hasAll(['version','configured','team','showRokuyo','days'])
+        && c.version == 1 && c.configured is bool && c.team in ['','A','B']
+        && c.showRokuyo is bool && c.days is map && c.days.size() <= 1200;
     }
     // 通知の予約（2026-10-09）：送信状態・通数・処理中の印はサーバーだけが書く。
     // 本人ができるのは「予約を1件、末尾に足す」と「取り消しの申し出を1件足す」だけ（既存の行は変えられない）。
