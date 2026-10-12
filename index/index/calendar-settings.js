@@ -10,6 +10,8 @@ globalThis.createCalendarSettings = function(hooks) {
     if(!hooks.canEdit()){hooks.toast('休日設定を読み込んでいます。少し待ってから開いてください');return;}
     invalidate();setBusy(false);$('calendarSource').classList.remove('hidden');
     const config=hooks.getConfig();
+    $('calendarTeam').replaceChildren(new Option('班なし',''),...C.kinds.filter(k=>!['all','off','work'].includes(k)).map(k=>new Option(C.companyStyle(config,k).name,k)));
+    $('calendarKind').replaceChildren(new Option('会社の印を消す',''),...C.kinds.map(k=>new Option(C.companyStyle(config,k).name,k)));
     $('calendarTeam').value=config.team;$('calendarRokuyo').checked=config.showRokuyo;
     $('calendarDate').value=C.validDate(date)?date:new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo'}).format(new Date());
     $('calendarKind').value=config.days[$('calendarDate').value]||'';
@@ -21,7 +23,7 @@ globalThis.createCalendarSettings = function(hooks) {
     $('calendarCorrection').open=false;message('');$('calendarSheet').classList.remove('hidden');
     if(C.validDate(date))$('calendarManual').classList.remove('hidden');
   }
-  const settings=()=>({team:$('calendarTeam').value,showRokuyo:$('calendarRokuyo').checked});
+  const settings=()=>({showRokuyo:$('calendarRokuyo').checked});
   async function save(patch) {
     if(busy)return;
     setBusy(true);message('保存しています…');
@@ -118,7 +120,7 @@ globalThis.createCalendarSettings = function(hooks) {
       const include=document.createElement('input');include.type='checkbox';include.checked=true;include.setAttribute('aria-label',row.date+'を取り込む');
       const date=document.createElement('input');date.type='date';date.value=row.date;date.setAttribute('aria-label','取り込む日付');
       const kind=document.createElement('select');kind.setAttribute('aria-label',row.date+'の休日の種類');
-      kind.add(new Option('要確認','unknown'));for(const k of C.kinds)kind.add(new Option(C.labels[k],k));kind.value=row.kind;
+      kind.add(new Option('要確認','unknown'));for(const k of C.kinds)kind.add(new Option(C.companyStyle(hooks.getConfig(),k).name,k));kind.value=row.kind;
       const weekday=document.createElement('small');weekday.textContent=['日','月','火','水','木','金','土'][new Date(row.date+'T12:00:00').getDay()]+'曜日';
       line.append(include,date,kind);line.append(weekday);box.append(line);
       for(const el of [include,date,kind])el.onchange=()=>{$('calendarConfirm').checked=false;weekday.textContent=C.validDate(date.value)?['日','月','火','水','木','金','土'][new Date(date.value+'T12:00:00').getDay()]+'曜日':'';};
