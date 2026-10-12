@@ -393,6 +393,17 @@
   .calendar-key span { padding:4px 8px; border-radius:5px; color:#243044; }
   .calendar-key .a { background:#e2efd3; } .calendar-key .b { background:#dceef9; } .calendar-key .all { background:#f5dbe5; }
   #calendarSelected { font-size:16px; font-weight:700; color:var(--navy); background:#f4f5f8; padding:12px; border-radius:10px; line-height:1.7; }
+  #calendarQuick { border:0; padding:0; margin:0 0 16px; min-width:0; }
+  #calendarQuick legend { font-weight:700; margin-bottom:8px; }
+  .calendar-quick-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  .calendar-quick-grid button { min-height:48px; padding:10px 4px; border:1px solid var(--line); border-radius:10px; background:#f4f5f8; color:var(--navy); font:inherit; font-weight:700; cursor:pointer; }
+  .calendar-quick-grid [data-holiday="off"], .calendar-quick-grid [data-holiday="A"] { background:#e2efd3; color:#285c31; }
+  .calendar-quick-grid [data-holiday="B"] { background:#dceef9; color:#255783; }
+  .calendar-quick-grid [data-holiday="all"] { background:#f5dbe5; color:#95344f; }
+  .calendar-quick-grid [aria-pressed="true"] { outline:2px solid var(--navy); outline-offset:-2px; }
+  .calendar-quick-grid button:active { transform:scale(.97); }
+  #calendarQuick:disabled button { opacity:.55; cursor:wait; }
+  #calendarQuickStatus { min-height:1.5em; margin:8px 0 0; }
   #calendarPreview { max-width:100%; max-height:420px; object-fit:contain; display:block; margin:12px auto; }
   #calendarPreview:not([src]) { display:none; }
   .calendar-review-row { display:grid; grid-template-columns:28px minmax(0,1fr) 94px; align-items:center; gap:6px; margin:6px 0; }
@@ -755,10 +766,21 @@
       <p class="calendar-legend" id="calendarLegend"></p>
       <p class="note" id="calendarCoverage"></p>
       <button type="button" class="chip" id="calendarOpen">自分の休日を設定</button>
-      <p class="note center">日付を押すと、祝日名・六曜・予定を確認できます</p>
+      <p class="note center">日付を押すと、休みの変更・予定の追加ができます</p>
       <div id="calActions" class="hidden">
         <p class="note" id="calendarSelected"></p>
-        <button type="button" class="btn small sub" id="calendarEditDay">この日の休日を変更</button>
+        <fieldset id="calendarQuick" disabled>
+          <legend>この日の休みを変更</legend>
+          <div class="calendar-quick-grid">
+            <button type="button" data-holiday="off">休みにする</button>
+            <button type="button" data-holiday="work">出勤にする</button>
+            <button type="button" data-holiday="A">A班休み</button>
+            <button type="button" data-holiday="B">B班休み</button>
+            <button type="button" data-holiday="all">全休</button>
+            <button type="button" data-holiday="">印を消す</button>
+          </div>
+          <p class="note" id="calendarQuickStatus" role="status" aria-live="polite">押すと、この日だけ保存します</p>
+        </fieldset>
         <button type="button" class="plus-btn" id="calAdd">この日に追加</button>
         <button type="button" class="chip" id="calAll" style="margin-top:12px">これからの予定をすべて見る</button>
       </div>
@@ -1564,6 +1586,7 @@ function showPin() {
 }
 
 function enterApp() {
+  calendarQuickPending = null;
   calendarUI.reset(); calendarConfig = HibirukaCalendar.cleanConfig(null); calendarLoaded = false;
   renderCalendarSetup();
   unsub.forEach(stop=>stop()); unsub=[];
@@ -1669,13 +1692,7 @@ async function repairUnconfirmedCalendar() {
     if (myUid === uid) toast('休日の修正を保存できませんでした。通信を確認して、修正用のリンクからもう一度開いてください。',6000);
   }
 }
-const calendarUI = createCalendarSettings({
-  canEdit: () => !!myUid && calendarLoaded,
-  getConfig: () => calendarConfig,
-  token: () => auth.currentUser.getIdToken(),
-  endpoint: new URL('/ai/calendar', CONFIG.aiUrl).href,
-  toast,
-  save: async (patch, settings, replaceMonth) => {
+async function saveCalendarConfig(patch, settings = {}, replaceMonth = '') {
     if (!myUid || !calendarLoaded) throw Error('カレンダーを読み込んでから、もう一度お試しください');
     const uid = myUid, ref = calendarRef();
     const saved = await db.runTransaction(async tx => {
@@ -1698,17 +1715,49 @@ const calendarUI = createCalendarSettings({
       return next;
     });
     if (myUid === uid) { calendarConfig = saved; renderCalendarSetup(); renderList(); }
+}
+const calendarUI = createCalendarSettings({
+  canEdit: () => !!myUid && calendarLoaded,
+  getConfig: () => calendarConfig,
+  token: () => auth.currentUser.getIdToken(),
+  endpoint: new URL('/ai/calendar', CONFIG.aiUrl).href,
+  toast,
+  save: saveCalendarConfig
+});
+let calendarQuickPending = null;
+function renderQuickHoliday() {
+  $('calendarQuick').classList.toggle('hidden', !myUid);
+  $('calendarQuick').disabled = !myUid || !calendarLoaded || !HibirukaCalendar.validDate(calSel) || !!calendarQuickPending;
+  const kind = calendarConfig.days[calSel] || '';
+  $('calendarQuick').querySelectorAll('[data-holiday]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.holiday === kind)));
+}
+$('calendarQuick').querySelectorAll('[data-holiday]').forEach(button => button.onclick = async () => {
+  if ($('calendarQuick').disabled || calendarQuickPending) return;
+  const pending = {uid:myUid,date:calSel}, kind = button.dataset.holiday;
+  calendarQuickPending = pending;
+  renderQuickHoliday();
+  $('calendarQuickStatus').textContent = '保存しています…';
+  try {
+    // Use the latest stored settings, never the unopened import form or draft.
+    await saveCalendarConfig({[pending.date]:kind});
+    if (calendarQuickPending !== pending || myUid !== pending.uid) return;
+    const text = fmtDate(pending.date) + (kind ? 'を「'+button.textContent.replace('にする','')+'」にしました' : 'の印を消しました');
+    $('calendarQuickStatus').textContent = text; toast(text);
+  } catch(e) {
+    if (calendarQuickPending === pending && myUid === pending.uid) $('calendarQuickStatus').textContent = '保存できませんでした。通信を確認して、もう一度押してください';
+  } finally {
+    if (calendarQuickPending === pending) { calendarQuickPending = null; renderQuickHoliday(); }
   }
 });
 function renderCalendarSetup() {
   const editable = !!myUid && calendarLoaded;
-  ['calendarOpen','calendarSettingsOpen','calendarEditDay'].forEach(id => $(id).classList.toggle('hidden', !myUid));
-  ['calendarOpen','calendarSettingsOpen','calendarEditDay','calendarStart'].forEach(id => $(id).disabled = !editable);
+  ['calendarOpen','calendarSettingsOpen'].forEach(id => $(id).classList.toggle('hidden', !myUid));
+  ['calendarOpen','calendarSettingsOpen','calendarStart'].forEach(id => $(id).disabled = !editable);
+  renderQuickHoliday();
   $('calendarWelcome').classList.toggle('hidden', !editable || calendarConfig.configured || lsGet('hibiruka:calendar-later:' + myUid) === '1');
 }
 ['calendarOpen','calendarSettingsOpen','calendarStart'].forEach(id => $(id).onclick = () => calendarUI.open());
 $('calendarOpen').onclick = () => { calendarUI.open(); if (!Object.keys(calendarConfig.days).length) $('calendarChooseImport').click(); };
-$('calendarEditDay').onclick = () => calendarUI.open(calSel);
 $('calendarLater').onclick = () => { lsSet('hibiruka:calendar-later:' + myUid, '1'); renderCalendarSetup(); };
 
 // Optional guidance belongs to this browser and UID, not shared records.
@@ -3507,7 +3556,13 @@ function renderCal(list) {
   $('calendarCoverage').textContent = [y < HibirukaCalendarData.holidayFrom || y > HibirukaCalendarData.holidayThrough ? 'この年の祝日データは未収録です。' : '', y<2020 || y>2032 ? 'この年の六曜は未収録です。' : ''].join('');
   const selected = calSel && HibirukaCalendar.dayInfo(calSel, calendarConfig, HibirukaCalendarData);
   $('calendarSelected').textContent = selected ? [fmtDate(calSel),selected.label,selected.holiday,selected.rokuyo].filter(Boolean).join('・') : '';
-  $("calGrid").querySelectorAll("[data-d]").forEach(el => el.onclick = () => { calSel = el.dataset.d; renderList(); });
+  renderQuickHoliday();
+  $("calGrid").querySelectorAll("[data-d]").forEach(el => el.onclick = () => {
+    calSel = el.dataset.d;
+    $('calendarQuickStatus').textContent = calendarQuickPending ? '保存しています…' : '押すと、この日だけ保存します';
+    renderList();
+    $('calActions').scrollIntoView?.({block:'nearest',behavior:'smooth'});
+  });
 }
 
 /* ---------- 詳細 ---------- */
