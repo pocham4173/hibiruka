@@ -1284,3 +1284,25 @@ test('R7 行きたいリストに保存したホットペッパーの写真は�
  assert.doesNotMatch(d.getElementById('wishList').textContent,/画像提供/);
  }finally{a.close();}
 });
+
+test('calendar: legacy account can open, save and reload private holidays without changing shared records',async()=>{
+ const a=app({legacy:true});try{
+  const shared={ownerName:'Original',people:['Friend']};
+  a.data.set('config/app',shared);a.data.set('events/safe',{title:'Existing plan'});
+  await a.w.h.startOwner();
+  const button=a.d.getElementById('calendarSettingsOpen');
+  assert.equal(button.classList.contains('hidden'),false);assert.equal(button.disabled,false);
+  button.click();assert.equal(a.d.getElementById('calendarSheet').classList.contains('hidden'),false);
+  a.d.getElementById('calendarTeam').value='A';
+  a.d.getElementById('calendarDate').value='2026-10-24';a.d.getElementById('calendarKind').value='A';
+  a.d.getElementById('calendarManualSave').click();await new Promise(r=>setTimeout(r,25));
+  assert.equal(a.data.get('personalConfig/A').calendar.days['2026-10-24'],'A');
+  assert.deepEqual(a.data.get('config/app'),shared);assert.equal(a.data.get('events/safe').title,'Existing plan');
+  await a.w.h.startOwner();assert.equal(a.w.h.personal,false);
+  button.click();assert.equal(a.d.getElementById('calendarTeam').value,'A');
+  a.d.getElementById('calendarDate').value='2026-10-24';a.d.getElementById('calendarKind').value='';
+  a.d.getElementById('calendarManualSave').click();await new Promise(r=>setTimeout(r,25));
+  assert.equal(a.data.get('personalConfig/A').calendar.days['2026-10-24'],undefined);
+  assert.deepEqual(a.data.get('config/app'),shared);
+ }finally{a.close();}
+});

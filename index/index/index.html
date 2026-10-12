@@ -1561,10 +1561,20 @@ function enterApp() {
   watchRecords();
   unsub.push(() => { recordsEpoch++; if (recordsStop) recordsStop(); recordsStop = null; });
   unsub.push(db.collection("lineLinks").doc(myUid).onSnapshot(s => { lineLinked = s.exists && !!s.data().lineUserId; renderLineRecord(); }, () => { lineLinked = false; renderLineRecord(); }));
+  if (!personalMode) {
+    const calendarUid = myUid;
+    unsub.push(calendarRef().onSnapshot(s => {
+      if (myUid !== calendarUid) return;
+      calendarConfig = HibirukaCalendar.cleanConfig(s.exists ? s.data().calendar : null);
+      calendarLoaded = true; renderCalendarSetup(); renderList();
+    }, denied));
+  }
   unsub.push(appRef().onSnapshot(s => {
     const d = s.exists ? s.data() : {};
-    calendarConfig = HibirukaCalendar.cleanConfig(d.calendar); calendarLoaded = true;
-    renderCalendarSetup();
+    if (personalMode) {
+      calendarConfig = HibirukaCalendar.cleanConfig(d.calendar); calendarLoaded = true;
+      renderCalendarSetup();
+    }
     cats = (d.cats && d.cats.length) ? d.cats : DEFAULT_CATS.slice();
     people = d.people || [];
     ownerName = d.ownerName || defaultName();
@@ -1598,30 +1608,31 @@ function watchRecords() {
   });
 }
 const appRef = () => personalMode ? db.collection("personalConfig").doc(myUid) : db.collection("config").doc("app");
+const calendarRef = () => db.collection("personalConfig").doc(myUid);
 let calendarConfig = HibirukaCalendar.cleanConfig(null), calendarLoaded = false;
 const calendarUI = createCalendarSettings({
-  canEdit: () => personalMode && calendarLoaded,
+  canEdit: () => !!myUid && calendarLoaded,
   getConfig: () => calendarConfig,
   token: () => auth.currentUser.getIdToken(),
   endpoint: new URL('/ai/calendar', CONFIG.aiUrl).href,
   toast,
   save: async (patch, settings) => {
-    if (!personalMode || !calendarLoaded) throw Error('カレンダーを読み込んでから、もう一度お試しください');
-    const uid = myUid, ref = appRef();
+    if (!myUid || !calendarLoaded) throw Error('カレンダーを読み込んでから、もう一度お試しください');
+    const uid = myUid, ref = calendarRef();
     const saved = await db.runTransaction(async tx => {
       const snap = await tx.get(ref);
       if (auth.currentUser?.uid !== uid || myUid !== uid) throw Error('アカウントが変わりました。開き直してください');
-      if (!snap.exists) throw Error('アカウントを確認できません。開き直してください');
-      const next = HibirukaCalendar.mergeConfig(snap.data().calendar, patch, settings);
-      tx.update(ref, {calendar: next});
+      const next = HibirukaCalendar.mergeConfig(snap.exists ? snap.data().calendar : null, patch, settings);
+      if (snap.exists) tx.update(ref, {calendar: next});
+      else tx.set(ref, {calendar: next});
       return next;
     });
     if (myUid === uid) { calendarConfig = saved; renderCalendarSetup(); renderList(); }
   }
 });
 function renderCalendarSetup() {
-  const editable = personalMode && calendarLoaded;
-  ['calendarOpen','calendarSettingsOpen','calendarEditDay'].forEach(id => $(id).classList.toggle('hidden', !personalMode));
+  const editable = !!myUid && calendarLoaded;
+  ['calendarOpen','calendarSettingsOpen','calendarEditDay'].forEach(id => $(id).classList.toggle('hidden', !myUid));
   ['calendarOpen','calendarSettingsOpen','calendarEditDay','calendarStart'].forEach(id => $(id).disabled = !editable);
   $('calendarWelcome').classList.toggle('hidden', !editable || calendarConfig.configured || lsGet('hibiruka:calendar-later:' + myUid) === '1');
 }
