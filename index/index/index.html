@@ -368,18 +368,25 @@
   .cal .day.sel .dots i { background: #fff; }
 
   /* 思い出アルバム */
-  .cal .day { aspect-ratio:auto; min-height:110px; border-radius:9px; justify-content:flex-start; padding:5px 1px; gap:2px; }
+  .cal .day { aspect-ratio:auto; min-height:78px; border-radius:9px; justify-content:flex-start; padding:5px 1px; gap:2px; }
   .cal .day.sun .day-number, .cal .day.holiday .day-number { color:#ad343d; }
   .cal .day.sat .day-number { color:#315e96; }
   .cal .day.mine { background:#e4f1e5; border-color:#7ba97c; }
   .cal .day.sel { background:var(--navy); color:white; }
   .cal .day.sel .day-number, .cal .day.sel .holiday-name { color:white; }
-  .cal .holiday-name { color:#a12b38; font-size:11px; line-height:1.25; min-height:28px; overflow-wrap:anywhere; width:100%; }
+  .cal .holiday-name { color:#a12b38; font-size:11px; line-height:1.25; display:none; }
   .cal .rokuyo { font-size:11px; line-height:1.3; min-height:14px; }
-  .cal .off-label { font-size:10px; line-height:1.3; min-height:14px; font-weight:700; }
+  .cal .off-label { font-size:10px; line-height:1.3; font-weight:700; }
   .cal .off-label.A { color:#285c31; } .cal .off-label.B { color:#255783; }
   .cal .off-label.all { color:#95344f; } .cal .day.sel .off-label { color:white; }
   .calendar-legend { font-size:12px; color:var(--muted); margin:10px 0; }
+  .cal .day-number { font-size:17px; line-height:22px; }
+  .cal .day .dots { margin-top:auto; min-height:5px; }
+  .cal .day .off-label:empty { display:none; }
+  .cal .holiday-badge { font-size:10px; color:#a12b38; line-height:12px; }
+  .cal .day.sel .holiday-badge { color:white; }
+  .cal .day.mine .off-label { background:#285c31; color:white; border-radius:4px; padding:1px 3px; }
+  #calendarSelected { font-size:16px; font-weight:700; color:var(--navy); background:#f4f5f8; padding:12px; border-radius:10px; line-height:1.7; }
   #calendarPreview { max-width:100%; max-height:420px; object-fit:contain; display:block; margin:12px auto; }
   #calendarPreview:not([src]) { display:none; }
   .calendar-review-row { display:grid; grid-template-columns:28px minmax(0,1fr) 94px; align-items:center; gap:6px; margin:6px 0; }
@@ -741,7 +748,7 @@
       <p class="calendar-legend" id="calendarLegend"></p>
       <p class="note" id="calendarCoverage"></p>
       <button type="button" class="chip" id="calendarOpen">自分の休日を設定</button>
-      <p class="note center">日付を押すと、その日の予定を見たり追加できます</p>
+      <p class="note center">日付を押すと、祝日名・六曜・予定を確認できます</p>
       <div id="calActions" class="hidden">
         <p class="note" id="calendarSelected"></p>
         <button type="button" class="btn small sub" id="calendarEditDay">この日の休日を変更</button>
@@ -1044,7 +1051,7 @@
     <div class="ig-steps">
       <div class="ig-step"><span>01</span><div><b>記録する</b><p>「予定・記録」の「記録する」を押して、「遊び」「食事」などを1つ選び、「予定」か「思い出」を選びます。日付と、場所または内容を入れて保存。写真やメモは、残したいときだけでOK。</p></div></div>
       <div class="ig-step"><span>02</span><div><b>予定を知らせる（LINE・アプリ通知）</b><p>これからの予定を保存すると「予定をだれに知らせますか？」と出ます。<b>誰に</b>・<b>送る日</b>・<b>送る時間</b>を選ぶだけ。「前の日の朝」「予定の1時間前」などもワンタップ。</p></div></div>
-      <div class="ig-step"><span>03</span><div><b>振り返る</b><p>「予定・記録」のカレンダーで日付を押すと、その日の予定を見たり追加できます。「思い出」で過去を振り返り、♥を付けた記録は「また行きたい」に集まります。</p></div></div>
+      <div class="ig-step"><span>03</span><div><b>振り返る</b><p>「予定・記録」のカレンダーで日付を押すと、祝日名・六曜・予定を確認できます。「思い出」で過去を振り返り、♥を付けた記録は「また行きたい」に集まります。</p></div></div>
       <div class="ig-step"><span>04</span><div><b>LINEの送信先を追加する</b><p>「設定」の「LINEの送信先を追加」で相手の名前を入れて、招待リンクをLINEで送ります。相手が<b>承認</b>すると、予定を送れる相手になります。</p></div></div>
     </div>
   </section>
@@ -3424,15 +3431,17 @@ function renderCal(list) {
     const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i), s = ymd(d);
     const es = list.filter(e => e.date === s);
     const info = HibirukaCalendar.dayInfo(s, calendarConfig, HibirukaCalendarData);
-    h += `<button type="button" aria-label="${esc([fmtDate(s),info.holiday,info.rokuyo,info.label,info.off?'自分の休み':'',es.length+'件'].filter(Boolean).join(' '))}" aria-pressed="${s === calSel}" class="day ${d.getDay()===0?'sun':d.getDay()===6?'sat':''} ${info.holiday?'holiday':''} ${info.off?'mine':''} ${d.getMonth() !== m ? "other" : ""} ${s === todayStr() ? "today" : ""} ${s === calSel ? "sel" : ""}" data-d="${s}"><b class="day-number">${d.getDate()}</b><span class="holiday-name">${esc(info.holiday)}</span><span class="rokuyo">${esc(info.rokuyo)}</span><span class="off-label ${info.kind}">${esc(info.label)}</span>
+    h += `<button type="button" aria-label="${esc([fmtDate(s),info.holiday,info.rokuyo,info.label,info.off?'自分の休み':'',es.length+'件'].filter(Boolean).join(' '))}" aria-pressed="${s === calSel}" class="day ${d.getDay()===0?'sun':d.getDay()===6?'sat':''} ${info.holiday?'holiday':''} ${info.off?'mine':''} ${d.getMonth() !== m ? "other" : ""} ${s === todayStr() ? "today" : ""} ${s === calSel ? "sel" : ""}" data-d="${s}"><b class="day-number">${d.getDate()}</b><span class="holiday-name">${esc(info.holiday)}</span>${info.holiday?'<span class="holiday-badge">祝日</span>':''}<span class="rokuyo">${esc(info.rokuyo)}</span><span class="off-label ${info.kind}">${esc(info.off ? '休み' : info.label)}</span>
       <div class="dots">${es.slice(0, 3).map(e => `<i class="${isDone(e) ? "p" : ""}"></i>`).join("")}</div></button>`;
     if (i === 34 && new Date(start.getFullYear(), start.getMonth(), start.getDate() + 35).getMonth() !== m) break;
   }
   $("calGrid").innerHTML = h;
-  $('calendarLegend').textContent = '赤：日曜・祝日　青：土曜　' + (calendarConfig.team ? calendarConfig.team+'班の休みを緑で表示' : '自分の休みを緑で表示');
+  const monthKey = `${y}-${String(m+1).padStart(2,'0')}`;
+  const offCount = Object.keys(calendarConfig.days).filter(date => date.startsWith(monthKey) && HibirukaCalendar.dayInfo(date,calendarConfig,HibirukaCalendarData).off).length;
+  $('calendarLegend').textContent = (calendarConfig.team ? calendarConfig.team+'班｜' : '') + (offCount ? `登録した休み ${offCount}日（緑）` : 'この月の自分の休日は未登録') + '　● 予定・記録あり';
   $('calendarCoverage').textContent = [y < HibirukaCalendarData.holidayFrom || y > HibirukaCalendarData.holidayThrough ? 'この年の祝日データは未収録です。' : '', y<2020 || y>2032 ? 'この年の六曜は未収録です。' : ''].join('');
   const selected = calSel && HibirukaCalendar.dayInfo(calSel, calendarConfig, HibirukaCalendarData);
-  $('calendarSelected').textContent = selected ? [fmtDate(calSel),selected.holiday,selected.rokuyo,selected.label].filter(Boolean).join('・') : '';
+  $('calendarSelected').textContent = selected ? [fmtDate(calSel),selected.off?'自分の休み'+(selected.label?'（'+selected.label+'）':''):selected.label,selected.holiday,selected.rokuyo].filter(Boolean).join('・') : '';
   $("calGrid").querySelectorAll("[data-d]").forEach(el => el.onclick = () => { calSel = el.dataset.d; renderList(); });
 }
 
