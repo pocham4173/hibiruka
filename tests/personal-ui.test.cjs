@@ -1322,3 +1322,30 @@ test('calendar: confirmed month correction removes wrong marks only in that mont
   assert.equal(days['2026-11-07'],'A');assert.equal(Object.keys(days).length,11);assert.equal(a.data.get('events/safe').title,'Keep me');
  }finally{a.close();}
 });
+
+test('calendar: full paper calendar imports both teams and clears shifted dates within its work year',async()=>{
+ for(const team of ['','A','B']) {
+  const a=app({legacy:true});try {
+   a.data.set('personalConfig/A',{calendar:{version:1,configured:true,team,days:{'2026-10-02':'B','2026-10-05':'A','2026-03-20':'off','2027-03-21':'off'}}});
+   a.data.set('events/safe',{title:'Keep plan'});await a.w.h.startOwner();
+   a.d.getElementById('calendarSettingsOpen').click();
+   assert.equal(a.d.getElementById('calendarTeam').hidden,true);
+   a.d.getElementById('calendarVerified').click();
+   const rows=a.w.HibirukaCalendar.verifiedCompanyCalendar().rows;
+   assert.equal(new Set(rows.map(r=>r.date)).size,rows.length);
+   assert.ok(rows.every(r=>a.w.HibirukaCalendar.validDate(r.date)));
+   a.d.getElementById('calendarSave').click();assert.equal(a.data.get('personalConfig/A').calendar.days['2026-10-02'],'B');
+   a.d.getElementById('calendarConfirm').checked=true;a.d.getElementById('calendarSave').click();await tick();
+   const days=a.data.get('personalConfig/A').calendar.days;
+   assert.equal(days['2026-10-02'],undefined);assert.equal(days['2026-10-05'],undefined);
+   const october=Object.entries(days).filter(([d])=>d.startsWith('2026-10')).sort();
+   assert.deepEqual(october,[['2026-10-03','B'],['2026-10-04','all'],['2026-10-10','A'],['2026-10-11','all'],['2026-10-12','B'],['2026-10-17','B'],['2026-10-18','all'],['2026-10-24','A'],['2026-10-25','all'],['2026-10-31','B']]);
+   assert.equal(days['2026-08-15'],'all');assert.equal(days['2026-09-22'],'A');assert.equal(days['2027-01-11'],'B');assert.equal(days['2027-03-20'],'B');
+   assert.equal(days['2026-03-20'],'off');assert.equal(days['2027-03-21'],'off');
+   assert.equal(Object.keys(days).length,rows.length+2);assert.equal(a.data.get('events/safe').title,'Keep plan');
+   a.w.eval('calMonth=new Date(2026,9,1);renderList()');
+   for(const [day,kind] of october)assert.ok(a.d.querySelector(`[data-d="${day}"].shift-${kind}`));
+   assert.doesNotMatch(a.d.getElementById('calendarLegend').textContent,/自分の休み|A班｜|B班｜/);
+  }finally{a.close();}
+ }
+});

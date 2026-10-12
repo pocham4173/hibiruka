@@ -5,10 +5,10 @@ globalThis.createCalendarSettings = function(hooks) {
   const message=text=>{$('calendarStatus').textContent=text;};
   function invalidate(){replaceMonth='';generation++;controller?.abort();controller=null;image='';pdfTask?.destroy().catch(()=>{});pdfTask=null;pdf=null;$('calendarPreview').removeAttribute('src');$('calendarFile').value='';}
   function close(){if(busy&&$('calendarSave').disabled)return;invalidate();$('calendarSheet').classList.add('hidden');}
-  function setBusy(value){busy=value;for(const id of ['calendarRead','calendarSave','calendarManualSave','calendarFile','calendarPdfPage','calendarClose'])$(id).disabled=value;}
+  function setBusy(value){busy=value;for(const id of ['calendarRead','calendarSave','calendarManualSave','calendarFile','calendarPdfPage','calendarClose','calendarVerified'])$(id).disabled=value;}
   function open(date) {
     if(!hooks.canEdit()){hooks.toast('休日設定を読み込んでいます。少し待ってから開いてください');return;}
-    invalidate();setBusy(false);
+    invalidate();setBusy(false);$('calendarSource').classList.remove('hidden');
     const config=hooks.getConfig();
     $('calendarTeam').value=config.team;$('calendarRokuyo').checked=config.showRokuyo;
     $('calendarDate').value=C.validDate(date)?date:new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo'}).format(new Date());
@@ -49,7 +49,7 @@ globalThis.createCalendarSettings = function(hooks) {
   }
   $('calendarClose').onclick=close;
   $('calendarSheet').onclick=e=>{if(e.target===$('calendarSheet'))close();};
-  $('calendarChooseImport').onclick=()=>{$('calendarImport').classList.remove('hidden');$('calendarManual').classList.add('hidden');};
+  $('calendarChooseImport').onclick=()=>{$('calendarSource').classList.remove('hidden');$('calendarImport').classList.remove('hidden');$('calendarManual').classList.add('hidden');};
   $('calendarChooseManual').onclick=()=>{$('calendarManual').classList.remove('hidden');$('calendarImport').classList.add('hidden');};
   $('calendarDate').onchange=()=>{$('calendarKind').value=hooks.getConfig().days[$('calendarDate').value]||'';};
   $('calendarManualSave').onclick=()=>{
@@ -124,6 +124,17 @@ globalThis.createCalendarSettings = function(hooks) {
       for(const el of [include,date,kind])el.onchange=()=>{$('calendarConfirm').checked=false;weekday.textContent=C.validDate(date.value)?['日','月','火','水','木','金','土'][new Date(date.value+'T12:00:00').getDay()]+'曜日':'';};
     }
   }
+  $('calendarVerified').onclick=()=>{
+    if(busy)return;
+    invalidate();
+    const verified=C.verifiedCompanyCalendar();
+    replaceMonth={from:verified.from,to:verified.to};
+    renderRows(verified.rows);$('calendarSource').classList.add('hidden');
+    $('calendarImport').classList.remove('hidden');$('calendarReview').classList.remove('hidden');$('calendarManual').classList.add('hidden');
+    $('calendarConfirm').checked=false;$('calendarSave').textContent='このカレンダーを保存';
+    message('2026年3月21日〜2027年3月20日の休日の印を、写真の'+verified.rows.length+'日へ入れ替えます。A班・B班・全休をすべて取り込みます。予定・記録はそのままです。');
+    $('calendarReview').scrollIntoView?.({block:'start',behavior:'smooth'});
+  };
   $('calendarCorrectionRead').onclick=()=>{
     if(busy)return;
     const text=$('calendarCorrectionText').value.trim();
@@ -148,7 +159,7 @@ globalThis.createCalendarSettings = function(hooks) {
       if(!$('calendarConfirm').checked){message('写真と読み取り結果を確認して、確認済みにチェックしてください');return;}
       for(const line of $('calendarRows').children) {
         const [include,date,kind]=line.children;if(!include.checked)continue;
-        if(!C.validDate(date.value)||!C.kinds.includes(kind.value)||(replaceMonth&&!date.value.startsWith(replaceMonth+'-'))){message('日付や「要確認」の種類を直すか、その行のチェックを外してください');return;}
+        if(!C.validDate(date.value)||!C.kinds.includes(kind.value)||(replaceMonth&&(typeof replaceMonth==='string'?!date.value.startsWith(replaceMonth+'-'):date.value<replaceMonth.from||date.value>replaceMonth.to))){message('日付や「要確認」の種類を直すか、その行のチェックを外してください');return;}
         if(Object.hasOwn(patch,date.value)){message('同じ日付が重複しています。どちらかのチェックを外してください');return;}
         patch[date.value]=kind.value;
       }

@@ -31,7 +31,29 @@
     return {holiday:data?.holidays?.[date]||'',rokuyo:c.showRokuyo?rokuyo:'',kind,label:labels[kind]||'',
       off:kind==='all'||kind==='off'||(!!c.team&&kind===c.team)};
   }
-  const api={validDate,cleanConfig,mergeConfig,dayInfo,kinds,labels};
+  // Transcribed from the supplied Sekine Store paper calendar. Only boxed dates;
+  // the printed but unmarked dates outside this work year are not inferred.
+  function verifiedCompanyCalendar() {
+    const rows=[];
+    for(const line of `2026-03|28|21|22,29
+2026-04|11,25|4,18,29|5,12,19,26
+2026-05|9,23|16,30|2,3,4,5,6,10,17,24,31
+2026-06|6,20|13,27|7,14,21,28
+2026-07|4,18,20|11,25|5,12,19,26
+2026-08|1,29|8,22|2,9,12,13,14,15,16,23,30
+2026-09|12,22,23,26|5,19,21|6,13,20,27
+2026-10|10,24|3,12,17,31|4,11,18,25
+2026-11|3,7,21,23|14,28|1,8,15,22,29
+2026-12|5,19|12,26|6,13,20,27,30,31
+2027-01|16,30|9,11,23|1,2,3,4,5,10,17,24,31
+2027-02|11,13,27|6,20,23|7,14,21,28
+2027-03|13|6,20|7,14`.split('\n')) {
+      const [month,...groups]=line.split('|');
+      groups.forEach((days,i)=>days.split(',').filter(Boolean).forEach(day=>rows.push({date:month+'-'+day.padStart(2,'0'),kind:['A','B','all'][i]})));
+    }
+    return {from:'2026-03-21',to:'2027-03-20',rows:rows.sort((a,b)=>a.date.localeCompare(b.date))};
+  }
+  const api={verifiedCompanyCalendar,validDate,cleanConfig,mergeConfig,dayInfo,kinds,labels};
   root.HibirukaCalendar=api;
   if(typeof module!=='undefined') module.exports=api;
 })(globalThis);

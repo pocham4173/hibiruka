@@ -909,8 +909,8 @@
 
   <section id="tab-set" class="wrap hidden">
     <div class="card">
-      <h2>自分のカレンダー</h2>
-      <p class="note">祝日名・六曜と、自分の休日を一緒に。翌年分も追加できます。</p>
+      <h2>オリジナルカレンダー</h2>
+      <p class="note">会社のカレンダーをそのまま表示。A班・B班の休みと全休を、祝日名・六曜と一緒に確認できます。</p>
       <button type="button" class="btn sub" id="calendarSettingsOpen">カレンダーを設定する</button>
     </div>
     <div class="card">
@@ -1206,14 +1206,16 @@
 <div id="toast"></div>
 
 <div id="calendarSheet" class="sheet-bg hidden"><div class="sheet">
-  <h2>自分のカレンダー</h2>
-  <label for="calendarTeam">自分の班</label>
-  <select id="calendarTeam"><option value="">班なし</option><option value="A">A班</option><option value="B">B班</option></select>
+  <h2>オリジナルカレンダー</h2>
+  <p class="note">班を選ぶ必要はありません。A班休み・B班休み・全休をすべて表示します。</p>
+  <select id="calendarTeam" hidden aria-hidden="true"><option value="">班なし</option><option value="A">A班</option><option value="B">B班</option></select>
   <label><input type="checkbox" id="calendarRokuyo" checked> 大安などの六曜を表示する</label>
   <div class="btnrow">
     <button type="button" class="btn sub" id="calendarChooseImport">写真・PDFから登録</button>
     <button type="button" class="btn sub" id="calendarChooseManual">手入力で登録</button>
   </div>
+  <button type="button" class="btn sub" id="calendarVerified" style="flex-direction:column;gap:4px">関根商店のカレンダーを取り込む<small>2026年3月21日〜2027年3月20日</small></button>
+  <p class="note">写真から日付を確認したデータです。取り込み前に内容を確認できます。</p>
   <details id="calendarCorrection">
     <summary>確認済みの日付データで修正する</summary>
     <p class="note">修正データを貼り付けると、1か月分の休日だけを入れ替えられます。保存前に日付を確認できます。</p>
@@ -1222,6 +1224,7 @@
     <button type="button" class="btn sub" id="calendarCorrectionRead">修正内容を確認する</button>
   </details>
   <div id="calendarImport" class="hidden">
+    <div id="calendarSource">
     <label for="calendarFile">会社のカレンダーを添付</label>
     <input type="file" id="calendarFile" accept="image/*,application/pdf">
     <p class="note">年と色・A/Bの意味がわかるように撮影してください。読み取り時に画像をAI（Cloudflare）へ送ります。ヒビルカには原本を保存しません。</p>
@@ -1230,9 +1233,10 @@
     <img id="calendarPreview" alt="読み取るカレンダー">
     <button type="button" class="btn" id="calendarRead">休日を読み取る</button>
     <p class="note">1日4回まで。PDFは1ページずつ確認・保存できます。</p>
+    </div>
     <div id="calendarReview" class="hidden">
       <h3>読み取り結果を確認</h3>
-      <p class="note">写真と比べて、間違いを直してください。取り込まない日はチェックを外せます。写真の再読み取りでは同じ日の印を更新します。修正データでは指定月の休日を入れ替えます。予定・思い出は変更しません。</p>
+      <p class="note">写真と比べて、間違いを直してください。取り込まない日はチェックを外せます。写真の再読み取りでは同じ日の印を更新します。関根商店の確認済みデータは表示した期間、修正データは指定月の休日を入れ替えます。予定・思い出は変更しません。</p>
       <div id="calendarRows"></div>
       <label><input type="checkbox" id="calendarConfirm"> 写真と比べて、日付・休日の種類・抜けを確認しました</label>
     </div>
@@ -1645,7 +1649,11 @@ const calendarUI = createCalendarSettings({
       if (auth.currentUser?.uid !== uid || myUid !== uid) throw Error('アカウントが変わりました。開き直してください');
       const current = HibirukaCalendar.cleanConfig(snap.exists ? snap.data().calendar : null);
       const changes = {...patch};
-      if (replaceMonth) {
+      if (replaceMonth && typeof replaceMonth === 'object') {
+        const {from,to} = replaceMonth;
+        if (!HibirukaCalendar.validDate(from) || !HibirukaCalendar.validDate(to) || from > to || Object.keys(patch).some(d => d < from || d > to)) throw Error('取り込む期間を確認してください');
+        for (const day of Object.keys(current.days)) if (day >= from && day <= to && !Object.hasOwn(changes,day)) changes[day]='';
+      } else if (replaceMonth) {
         if (!/^20\d{2}-(0[1-9]|1[0-2])$/.test(replaceMonth) || Object.keys(patch).some(d => !d.startsWith(replaceMonth+'-'))) throw Error('修正する月を確認してください');
         for (const day of Object.keys(current.days)) if (day.startsWith(replaceMonth+'-') && !Object.hasOwn(changes,day)) changes[day]='';
       }
@@ -3452,18 +3460,18 @@ function renderCal(list) {
     const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i), s = ymd(d);
     const es = list.filter(e => e.date === s);
     const info = HibirukaCalendar.dayInfo(s, calendarConfig, HibirukaCalendarData);
-    h += `<button type="button" aria-label="${esc([fmtDate(s),info.holiday,info.rokuyo,info.label,info.off?'自分の休み':'',es.length+'件'].filter(Boolean).join(' '))}" aria-pressed="${s === calSel}" class="day shift-${info.kind} ${d.getDay()===0?'sun':d.getDay()===6?'sat':''} ${info.holiday?'holiday':''} ${info.off?'mine':''} ${d.getMonth() !== m ? "other" : ""} ${s === todayStr() ? "today" : ""} ${s === calSel ? "sel" : ""}" data-d="${s}"><b class="day-number">${d.getDate()}</b><span class="holiday-name">${esc(info.holiday)}</span>${info.holiday?'<span class="holiday-badge">祝日</span>':''}<span class="rokuyo">${esc(info.rokuyo)}</span><span class="off-label ${info.kind}">${esc(info.label)}</span>
+    h += `<button type="button" aria-label="${esc([fmtDate(s),info.holiday,info.rokuyo,info.label,es.length+'件'].filter(Boolean).join(' '))}" aria-pressed="${s === calSel}" class="day shift-${info.kind} ${d.getDay()===0?'sun':d.getDay()===6?'sat':''} ${info.holiday?'holiday':''} ${info.off?'mine':''} ${d.getMonth() !== m ? "other" : ""} ${s === todayStr() ? "today" : ""} ${s === calSel ? "sel" : ""}" data-d="${s}"><b class="day-number">${d.getDate()}</b><span class="holiday-name">${esc(info.holiday)}</span>${info.holiday?'<span class="holiday-badge">祝日</span>':''}<span class="rokuyo">${esc(info.rokuyo)}</span><span class="off-label ${info.kind}">${esc(info.label)}</span>
       <div class="dots">${es.slice(0, 3).map(e => `<i class="${isDone(e) ? "p" : ""}"></i>`).join("")}</div></button>`;
     if (i === 34 && new Date(start.getFullYear(), start.getMonth(), start.getDate() + 35).getMonth() !== m) break;
   }
   $("calGrid").innerHTML = h;
   const monthKey = `${y}-${String(m+1).padStart(2,'0')}`;
-  const offCount = Object.keys(calendarConfig.days).filter(date => date.startsWith(monthKey) && HibirukaCalendar.dayInfo(date,calendarConfig,HibirukaCalendarData).off).length;
-  $('calendarLegend').textContent = (calendarConfig.team ? calendarConfig.team+'班｜' : '') + (offCount ? `自分の休み ${offCount}日` : 'この月の自分の休日は未登録') + '　● 予定・記録あり';
+  const offCount = Object.keys(calendarConfig.days).filter(date => date.startsWith(monthKey) && ['A','B','all','off'].includes(calendarConfig.days[date])).length;
+  $('calendarLegend').textContent = (offCount ? `A・B・全休などの印 ${offCount}日` : 'この月の会社の休日は未登録') + '　● 予定・記録あり';
   $('calendarOpen').textContent = Object.keys(calendarConfig.days).length ? '休日の登録・変更' : '会社のカレンダー写真を登録';
   $('calendarCoverage').textContent = [y < HibirukaCalendarData.holidayFrom || y > HibirukaCalendarData.holidayThrough ? 'この年の祝日データは未収録です。' : '', y<2020 || y>2032 ? 'この年の六曜は未収録です。' : ''].join('');
   const selected = calSel && HibirukaCalendar.dayInfo(calSel, calendarConfig, HibirukaCalendarData);
-  $('calendarSelected').textContent = selected ? [fmtDate(calSel),selected.off?'自分の休み'+(selected.label?'（'+selected.label+'）':''):selected.label,selected.holiday,selected.rokuyo].filter(Boolean).join('・') : '';
+  $('calendarSelected').textContent = selected ? [fmtDate(calSel),selected.label,selected.holiday,selected.rokuyo].filter(Boolean).join('・') : '';
   $("calGrid").querySelectorAll("[data-d]").forEach(el => el.onclick = () => { calSel = el.dataset.d; renderList(); });
 }
 
