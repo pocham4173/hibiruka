@@ -9,6 +9,16 @@ test('two users can create and read their own profiles; cannot access another',a
  await assertSucceeds(setDoc(doc(B,'personalConfig/person-B'),{ownerName:'B'}));
  await assertFails(getDoc(doc(B,'personalConfig/person-A')));await assertFails(updateDoc(doc(B,'personalConfig/person-A'),{ownerName:'changed'}));
 });
+test('calendar settings belong to the owner and cannot exceed the schema or size limit',async()=>{
+ const calendar={version:1,configured:true,team:'A',showRokuyo:true,days:{'2026-10-10':'A'}};
+ await assertSucceeds(updateDoc(doc(A,'personalConfig/person-A'),{calendar}));
+ await assertFails(updateDoc(doc(B,'personalConfig/person-A'),{calendar}));
+ await assertFails(updateDoc(doc(A,'personalConfig/person-A'),{calendar:{...calendar,team:'admin'}}));
+ await assertFails(updateDoc(doc(A,'personalConfig/person-A'),{calendar:{...calendar,rawImage:'data:'}}));
+ await assertFails(updateDoc(doc(A,'personalConfig/person-A'),{calendar:{...calendar,days:Object.fromEntries(Array.from({length:1201},(_,i)=>[String(i),'all']))}}));
+ await assertFails(getDoc(doc(A,'calendarUsage/20261012_person-A')));
+ await assertFails(setDoc(doc(A,'calendarUsage/20261012_person-A'),{count:0}));
+});
 test('events are owner scoped including list, writes, delete and ownership changes',async()=>{
  await assertSucceeds(setDoc(doc(A,'personalEvents/a'),{ownerUid:'person-A',createdAt:serverTimestamp(),date:'2099-01-01'}));
  await assertSucceeds(getDocs(query(collection(A,'personalEvents'),where('ownerUid','==','person-A'))));

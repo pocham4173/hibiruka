@@ -7,6 +7,7 @@ import {handleWeather} from './weather.mjs';
 import {handlePush, pushToOwner} from './push.mjs';
 import {handleAccount} from './account.mjs';
 import {handleAccept} from './accept.mjs';
+import {handleCalendar} from './calendar.mjs';
 let cached;
 const base64url=bytes=>Buffer.from(bytes).toString('base64url');
 export async function googleToken(secret,fetcher=fetch){
@@ -62,6 +63,10 @@ export default {
     if(url.pathname==='/weather'&&['POST','OPTIONS'].includes(request.method)){
       try{return await handleWeather(request,env);}
       catch{console.error('Hibiruka weather failed.');return new Response(JSON.stringify({error:'busy'}),{status:502,headers:{'content-type':'application/json','access-control-allow-origin':'https://pocham4173.github.io',vary:'origin'}});}
+    }
+    if(url.pathname==='/ai/calendar'&&['POST','OPTIONS'].includes(request.method)){
+      try{return await handleCalendar(request,env,{db:async()=>firestore(await googleToken(env.FIREBASE_SERVICE_ACCOUNT),fetch,12)});}
+      catch{return new Response(JSON.stringify({error:'unavailable'}),{status:503,headers:{'content-type':'application/json','access-control-allow-origin':'https://pocham4173.github.io',vary:'origin','cache-control':'no-store'}});}
     }
     if(url.pathname==='/ai/memory-text'&&['POST','OPTIONS'].includes(request.method)){
       try{return await handleAi(request,env,{db:async()=>firestore(await googleToken(env.FIREBASE_SERVICE_ACCOUNT),fetch,4)});}

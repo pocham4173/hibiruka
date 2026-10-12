@@ -3,6 +3,38 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const {JSDOM}=require(process.env.HIBIRUKA_JSDOM_PATH || 'jsdom');
 const html=fs.readFileSync('index/index/index.html','utf8');
+test('calendar: owner-only settings preserve events and support deleting a mark',async()=>{
+ const a=app({returning:true});try{
+  a.data.set('personalConfig/A',{ownerName:'Alice',people:['Bob'],calendar:{version:1,configured:true,team:'A',showRokuyo:true,days:{'2026-10-10':'A','2027-01-09':'B'}}});
+  a.data.set('personalEvents/safe',{ownerUid:'A',date:'2026-10-10',title:'お出かけ'});
+  await a.w.h.startOwner();a.d.getElementById('calendarSettingsOpen').click();
+  assert.equal(a.d.getElementById('calendarTeam').value,'A');
+  a.d.getElementById('calendarDate').value='2026-10-10';a.d.getElementById('calendarKind').value='';
+  a.d.getElementById('calendarManualSave').click();await new Promise(r=>setTimeout(r,25));
+  const p=a.data.get('personalConfig/A');assert.equal(p.calendar.days['2026-10-10'],undefined);assert.equal(p.calendar.days['2027-01-09'],'B');
+  assert.equal(p.ownerName,'Alice');assert.deepEqual(p.people,['Bob']);assert.equal(a.data.get('personalEvents/safe').title,'お出かけ');
+  a.d.getElementById('calendarSettingsOpen').click();a.d.getElementById('calendarTeam').value='B';a.d.getElementById('calendarSave').click();await new Promise(r=>setTimeout(r,25));
+  assert.equal(a.data.get('personalConfig/A').calendar.team,'B');
+ }finally{a.close();}
+});
+test('calendar: photo draft needs confirmation and unresolved rows block saving',async()=>{
+ const a=app({returning:true});try{
+  await a.w.h.startOwner();a.d.getElementById('calendarSettingsOpen').click();a.d.getElementById('calendarChooseImport').click();
+  a.w.URL.createObjectURL=()=> 'blob:test';a.w.URL.revokeObjectURL=()=>{};
+  a.w.Image=class {naturalWidth=400;naturalHeight=600;async decode(){}};
+  a.w.HTMLCanvasElement.prototype.getContext=()=>({fillRect(){},drawImage(){}});
+  a.w.HTMLCanvasElement.prototype.toDataURL=()=> 'data:image/jpeg;base64,/9j/AA==';
+  const input=a.d.getElementById('calendarFile');Object.defineProperty(input,'files',{value:[new a.w.File(['img'],'calendar.jpg',{type:'image/jpeg'})],configurable:true});
+  await input.onchange();a.d.getElementById('calendarYear').value='2026';
+  a.w.fetch=async()=>({ok:true,json:async()=>({days:[{date:'2026-10-10',kind:'A'},{date:'2027-01-09',kind:'unknown'}]})});
+  await a.d.getElementById('calendarRead').onclick();assert.equal(a.data.get('personalConfig/A').calendar,undefined);
+  a.d.getElementById('calendarSave').click();assert.match(a.d.getElementById('calendarStatus').textContent,/確認済み/);
+  a.d.getElementById('calendarConfirm').checked=true;a.d.getElementById('calendarSave').click();assert.match(a.d.getElementById('calendarStatus').textContent,/要確認/);
+  a.d.getElementById('calendarRows').children[1].querySelector('select').value='B';a.d.getElementById('calendarConfirm').checked=true;a.d.getElementById('calendarTeam').value='A';
+  a.d.getElementById('calendarSave').click();await new Promise(r=>setTimeout(r,25));
+  assert.equal(a.data.get('personalConfig/A').calendar.days['2027-01-09'],'B');assert.equal(a.data.get('personalConfig/A').calendar.days['2026-10-10'],'A');
+ }finally{a.close();}
+});
 function app({url='?start=1',legacy=false,linked=false,returning=false,invite=false, delayed=false}={}){
  const dom=new JSDOM(html,{url:'https://example.test/index/'+url,runScripts:'outside-only'}),w=dom.window,d=w.document;
  const data=new Map(),calls=[],queries=[],errors=[];let serial=0;
@@ -24,6 +56,7 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
  const authFn=()=>auth;authFn.Auth={Persistence:{LOCAL:'local'}};authFn.EmailAuthProvider={credential:(email,password)=>({email,password})};
  const firestore=()=>db;firestore.FieldValue={delete:()=>'__delete__',serverTimestamp:()=>1,arrayUnion:x=>[x],arrayRemove:()=>[],increment:x=>x};
  w.firebase={initializeApp:()=>{},auth:authFn,firestore};w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.console.error=(...args)=>errors.push(args);w.liff={init:async()=>{},isLoggedIn:()=>true,getProfile:async()=>({userId:'U'+'a'.repeat(32),displayName:'A'}),getAccessToken:()=>'line-access-token',isInClient:()=>false};
+ for(const file of ['calendar-data.js','calendar-core.js','calendar-settings.js']) w.eval(fs.readFileSync('index/index/'+file,'utf8'));
  const script=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean).pop();
  w.testNavigate=url=>calls.push(['navigate',url]);
  w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setWishes:value=>wishes=value,setShown:value=>findShown=value,spotMapLink,setFriends:(value,self)=>{friends=value;selfFriendId=self;},config:CONFIG,setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
