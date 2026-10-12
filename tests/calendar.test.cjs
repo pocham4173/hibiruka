@@ -34,3 +34,18 @@ test('year rollover import is additive, invalid dates rejected, removal only tou
   assert.throws(()=>C.mergeConfig(next,{'2027-02-29':'all'},{}));
   assert.throws(()=>C.mergeConfig(next,{'2026-10-10':'<script>'},{}));
 });
+test('company correction removes only the three reported marks and stops at March 20',()=>{
+  const source=C.verifiedCompanyCalendar();
+  assert.equal(source.to,'2027-03-20');
+  assert(source.rows.every(row=>row.date>=source.from && row.date<=source.to));
+  const current=C.cleanConfig({days:{...Object.fromEntries(source.rows.map(r=>[r.date,r.kind])),
+    '2027-03-23':'A','2027-03-27':'B','2027-03-30':'A','2027-04-03':'off'}});
+  const next=C.mergeConfig(current,C.unconfirmedCompanyPatch(current),{});
+  assert.equal(next.days['2027-03-20'],'B');
+  for(const date of ['2027-03-23','2027-03-27','2027-03-30']) assert.equal(C.dayInfo(date,next,data).label,'');
+  assert.equal(C.dayInfo('2027-03-21',next,data).holiday,data.holidays['2027-03-21']);
+  assert.equal(C.dayInfo('2027-03-22',next,data).holiday,'休日');
+  assert.equal(next.days['2027-04-03'],'off');
+  assert.deepEqual(C.unconfirmedCompanyPatch(next),{});
+  assert.deepEqual(C.unconfirmedCompanyPatch({days:{'2027-03-23':'work','2027-03-27':'off','2027-03-30':'B'}}),{});
+});

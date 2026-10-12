@@ -1326,7 +1326,7 @@ test('calendar: confirmed month correction removes wrong marks only in that mont
 test('calendar: full paper calendar imports both teams and clears shifted dates within its work year',async()=>{
  for(const team of ['','A','B']) {
   const a=app({legacy:true});try {
-   a.data.set('personalConfig/A',{calendar:{version:1,configured:true,team,days:{'2026-10-02':'B','2026-10-05':'A','2026-03-20':'off','2027-03-21':'off'}}});
+   a.data.set('personalConfig/A',{calendar:{version:1,configured:true,team,days:{'2026-10-02':'B','2026-10-05':'A','2026-03-20':'off','2027-03-21':'off','2027-03-23':'A','2027-03-27':'B','2027-03-30':'A'}}});
    a.data.set('events/safe',{title:'Keep plan'});await a.w.h.startOwner();
    a.d.getElementById('calendarSettingsOpen').click();
    assert.equal(a.d.getElementById('calendarTeam').hidden,true);
@@ -1342,10 +1342,77 @@ test('calendar: full paper calendar imports both teams and clears shifted dates 
    assert.deepEqual(october,[['2026-10-03','B'],['2026-10-04','all'],['2026-10-10','A'],['2026-10-11','all'],['2026-10-12','B'],['2026-10-17','B'],['2026-10-18','all'],['2026-10-24','A'],['2026-10-25','all'],['2026-10-31','B']]);
    assert.equal(days['2026-08-15'],'all');assert.equal(days['2026-09-22'],'A');assert.equal(days['2027-01-11'],'B');assert.equal(days['2027-03-20'],'B');
    assert.equal(days['2026-03-20'],'off');assert.equal(days['2027-03-21'],'off');
+   for(const day of ['2027-03-23','2027-03-27','2027-03-30'])assert.equal(days[day],undefined);
    assert.equal(Object.keys(days).length,rows.length+2);assert.equal(a.data.get('events/safe').title,'Keep plan');
    a.w.eval('calMonth=new Date(2026,9,1);renderList()');
    for(const [day,kind] of october)assert.ok(a.d.querySelector(`[data-d="${day}"].shift-${kind}`));
    assert.doesNotMatch(a.d.getElementById('calendarLegend').textContent,/自分の休み|A班｜|B班｜/);
   }finally{a.close();}
  }
+});
+
+test('calendar: requested March repair persists in both account modes, preserves records and later edits',async()=>{
+ for(const legacy of [false,true]) {
+  const a=app({legacy,returning:!legacy,url:'?tab=list&view=cal&calendarFix=sekine-2027-march'});try {
+   const days={...Object.fromEntries(a.w.HibirukaCalendar.verifiedCompanyCalendar().rows.map(r=>[r.date,r.kind])),
+    '2027-03-23':'A','2027-03-27':'B','2027-03-30':'A','2027-04-01':'off'};
+   a.data.set('personalConfig/A',{ownerName:'Alice',people:['Bob'],calendar:{version:1,configured:true,team:'A',showRokuyo:true,days}});
+   a.data.set('personalConfig/B',{calendar:{days:{'2027-03-23':'A'}}});
+   a.data.set('events/safe',{title:'Shared plan'});
+   a.data.set('personalEvents/safe',{ownerUid:'A',date:'2027-03-23',title:'My plan',sends:[{status:'wait'}]});
+   await a.w.h.startOwner();await tick();
+   const stored=a.data.get('personalConfig/A');
+   assert.equal(stored.ownerName,'Alice');assert.deepEqual(stored.people,['Bob']);
+   assert.equal(stored.calendar.days['2027-03-20'],'B');assert.equal(stored.calendar.days['2027-04-01'],'off');
+   for(const date of ['2027-03-23','2027-03-27','2027-03-30']) {
+    assert.equal(stored.calendar.days[date],undefined);
+    assert.equal(a.d.querySelector(`[data-d="${date}"] .off-label`).textContent,'');
+   }
+   assert.match(a.d.querySelector('[data-d="2027-03-21"]').getAttribute('aria-label'),/春分の日/);
+   assert.match(a.d.querySelector('[data-d="2027-03-22"]').getAttribute('aria-label'),/休日/);
+   assert.equal(a.data.get('personalConfig/B').calendar.days['2027-03-23'],'A');
+   assert.equal(a.data.get('events/safe').title,'Shared plan');assert.equal(a.data.get('personalEvents/safe').sends[0].status,'wait');
+   assert(!a.w.location.search.includes('calendarFix'));
+   // A later manual change is allowed, and an ordinary reload does not undo it.
+   a.d.getElementById('calendarSettingsOpen').click();
+   a.d.getElementById('calendarDate').value='2027-03-23';a.d.getElementById('calendarKind').value='A';
+   a.d.getElementById('calendarManualSave').click();await tick();
+   await a.w.h.startOwner();await tick();
+   assert.equal(a.data.get('personalConfig/A').calendar.days['2027-03-23'],'A');
+   assert.equal(a.data.get('personalConfig/A').calendar.days['2027-03-27'],undefined);
+  }finally{a.close();}
+ }
+});
+
+test('calendar: ordinary visits do not modify other company calendars',async()=>{
+ const a=app({returning:true});try {
+  a.data.set('personalConfig/A',{calendar:{version:1,configured:true,days:{'2027-03-23':'A','2027-03-27':'B','2027-03-30':'A'}}});
+  await a.w.h.startOwner();await tick();
+  assert.equal(a.data.get('personalConfig/A').calendar.days['2027-03-23'],'A');
+  assert.equal(a.calls.filter(c=>c[0]==='update').length,0);
+ }finally{a.close();}
+});
+
+test('calendar: failed repair keeps saved marks and the retry link',async()=>{
+ const a=app({returning:true,url:'?calendarFix=sekine-2027-march'});try {
+  a.data.set('personalConfig/A',{calendar:{version:1,configured:true,days:{'2027-03-23':'A'}}});
+  a.db.runTransaction=async()=>{throw Error('offline');};
+  await a.w.h.startOwner();await tick();
+  assert.equal(a.data.get('personalConfig/A').calendar.days['2027-03-23'],'A');
+  assert(a.w.location.search.includes('calendarFix'));
+  assert.match(a.d.getElementById('toast').textContent,/保存できませんでした/);
+ }finally{a.close();}
+});
+
+test('calendar: an account change during the correction prevents the write',async()=>{
+ const a=app({returning:true,url:'?calendarFix=sekine-2027-march'});try {
+  a.data.set('personalConfig/A',{calendar:{version:1,configured:true,days:{'2027-03-23':'A'}}});
+  a.db.runTransaction=async fn=>fn({get:async ref=>{
+   const snapshot=await ref.get();a.w.firebase.auth().currentUser.uid='B';return snapshot;
+  },update:()=>{throw Error('must not write');}});
+  await a.w.h.startOwner();await tick();
+  assert.equal(a.data.get('personalConfig/A').calendar.days['2027-03-23'],'A');
+  assert(a.w.location.search.includes('calendarFix'));
+  assert.equal(a.calls.filter(c=>c[0]==='update').length,0);
+ }finally{a.close();}
 });

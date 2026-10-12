@@ -128,11 +128,11 @@ globalThis.createCalendarSettings = function(hooks) {
     if(busy)return;
     invalidate();
     const verified=C.verifiedCompanyCalendar();
-    replaceMonth={from:verified.from,to:verified.to};
+    replaceMonth={from:verified.from,to:verified.to,correctUnconfirmed:true};
     renderRows(verified.rows);$('calendarSource').classList.add('hidden');
     $('calendarImport').classList.remove('hidden');$('calendarReview').classList.remove('hidden');$('calendarManual').classList.add('hidden');
     $('calendarConfirm').checked=false;$('calendarSave').textContent='このカレンダーを保存';
-    message('2026年3月21日〜2027年3月20日の休日の印を、写真の'+verified.rows.length+'日へ入れ替えます。A班・B班・全休をすべて取り込みます。予定・記録はそのままです。');
+    message('2026年3月21日〜2027年3月20日の休日の印を、写真の'+verified.rows.length+'日へ入れ替えます。3月21日以降は未定です。以前の誤読で残った3月23日・27日・30日のA休・B休も消します。予定・記録はそのままです。');
     $('calendarReview').scrollIntoView?.({block:'start',behavior:'smooth'});
   };
   $('calendarCorrectionRead').onclick=()=>{

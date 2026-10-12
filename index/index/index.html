@@ -1252,8 +1252,8 @@
   <p class="note">祝日と会社の休みは別です。祝日データ：<a href="https://www8.cao.go.jp/chosei/shukujitsu/gaiyou.html" target="_blank" rel="noopener">内閣府</a>。六曜は日本の旧暦に基づく参考表示です。</p>
 </div></div>
 <script src="./calendar-data.js"></script>
-<script src="./calendar-core.js"></script>
-<script src="./calendar-settings.js"></script>
+<script src="./calendar-core.js?v=20261012-march-end"></script>
+<script src="./calendar-settings.js?v=20261012-march-end"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1592,6 +1592,7 @@ function enterApp() {
       if (myUid !== calendarUid) return;
       calendarConfig = HibirukaCalendar.cleanConfig(s.exists ? s.data().calendar : null);
       calendarLoaded = true; renderCalendarSetup(); renderList();
+      repairUnconfirmedCalendar();
     }, denied));
   }
   unsub.push(appRef().onSnapshot(s => {
@@ -1599,6 +1600,7 @@ function enterApp() {
     if (personalMode) {
       calendarConfig = HibirukaCalendar.cleanConfig(d.calendar); calendarLoaded = true;
       renderCalendarSetup();
+      repairUnconfirmedCalendar();
     }
     cats = (d.cats && d.cats.length) ? d.cats : DEFAULT_CATS.slice();
     people = d.people || [];
@@ -1635,6 +1637,38 @@ function watchRecords() {
 const appRef = () => personalMode ? db.collection("personalConfig").doc(myUid) : db.collection("config").doc("app");
 const calendarRef = () => db.collection("personalConfig").doc(myUid);
 let calendarConfig = HibirukaCalendar.cleanConfig(null), calendarLoaded = false;
+const calendarRepairAttempts = new Set();
+async function repairUnconfirmedCalendar() {
+  // This correction is opt-in through the link supplied in response to the
+  // owner's request. Ordinary visits and other calendars never auto-migrate.
+  if (qs.get('calendarFix') !== 'sekine-2027-march' || !myUid || !calendarLoaded || calendarRepairAttempts.has(myUid)) return;
+  const uid=myUid, ref=calendarRef();
+  calendarRepairAttempts.add(uid);
+  try {
+    const result=await db.runTransaction(async tx => {
+      const snap=await tx.get(ref);
+      if (auth.currentUser?.uid !== uid || myUid !== uid) throw Error('account-changed');
+      const current=HibirukaCalendar.cleanConfig(snap.exists ? snap.data().calendar : null);
+      const patch=HibirukaCalendar.unconfirmedCompanyPatch(current);
+      if (!Object.keys(patch).length) return null;
+      const next=HibirukaCalendar.mergeConfig(current,patch,{});
+      tx.update(ref,{calendar:next});
+      return next;
+    });
+    if (myUid !== uid) return;
+    if (result) {
+      calendarConfig=result;
+      calMonth=new Date(2027,2,1); calSel='';
+      renderCalendarSetup(); renderList();
+      toast('3月23日・27日・30日の誤った休日の印を消しました。3月21日以降は未定です。',6000);
+    }
+    qs.delete('calendarFix');
+    const url=new URL(location.href);url.searchParams.delete('calendarFix');
+    history.replaceState(history.state,'',url.href);
+  } catch {
+    if (myUid === uid) toast('休日の修正を保存できませんでした。通信を確認して、修正用のリンクからもう一度開いてください。',6000);
+  }
+}
 const calendarUI = createCalendarSettings({
   canEdit: () => !!myUid && calendarLoaded,
   getConfig: () => calendarConfig,
@@ -1653,6 +1687,7 @@ const calendarUI = createCalendarSettings({
         const {from,to} = replaceMonth;
         if (!HibirukaCalendar.validDate(from) || !HibirukaCalendar.validDate(to) || from > to || Object.keys(patch).some(d => d < from || d > to)) throw Error('取り込む期間を確認してください');
         for (const day of Object.keys(current.days)) if (day >= from && day <= to && !Object.hasOwn(changes,day)) changes[day]='';
+        if (replaceMonth.correctUnconfirmed && from === '2026-03-21' && to === '2027-03-20') Object.assign(changes,HibirukaCalendar.unconfirmedCompanyPatch(current));
       } else if (replaceMonth) {
         if (!/^20\d{2}-(0[1-9]|1[0-2])$/.test(replaceMonth) || Object.keys(patch).some(d => !d.startsWith(replaceMonth+'-'))) throw Error('修正する月を確認してください');
         for (const day of Object.keys(current.days)) if (day.startsWith(replaceMonth+'-') && !Object.hasOwn(changes,day)) changes[day]='';
