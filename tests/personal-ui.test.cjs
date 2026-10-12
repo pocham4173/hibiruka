@@ -3,6 +3,57 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const {JSDOM}=require(process.env.HIBIRUKA_JSDOM_PATH || 'jsdom');
 const html=fs.readFileSync('index/index/index.html','utf8');
+test('calendar: tapping a date then a colored button updates only that day in both account modes',async()=>{
+ for(const legacy of [false,true]) {
+  const a=app({legacy,returning:!legacy});try {
+   const days=Object.fromEntries(a.w.HibirukaCalendar.verifiedCompanyCalendar().rows.map(r=>[r.date,r.kind]));
+   a.data.set('personalConfig/A',{ownerName:'Alice',calendar:{version:1,configured:true,team:'B',showRokuyo:false,days}});
+   a.data.set('events/safe',{title:'Shared plan'});
+   a.data.set('personalEvents/safe',{ownerUid:'A',date:'2027-03-23',title:'My plan'});
+   await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,2);
+   a.d.querySelector('[data-d="2027-03-23"]').click();
+   assert.equal(a.d.getElementById('calendarQuick').disabled,false);
+   await a.d.querySelector('[data-holiday="off"]').onclick();
+   assert(a.d.getElementById('calendarSheet').classList.contains('hidden'));
+   const saved=a.data.get('personalConfig/A');
+   assert.equal(saved.calendar.days['2027-03-23'],'off');
+   assert.equal(saved.calendar.days['2027-03-20'],'B');
+   assert.equal(saved.calendar.showRokuyo,false);assert.equal(saved.calendar.team,'B');
+   assert.equal(saved.ownerName,'Alice');
+   assert.equal(a.d.querySelector('[data-d="2027-03-23"] .off-label').textContent,'休');
+   assert.equal(a.d.querySelector('[data-holiday="off"]').getAttribute('aria-pressed'),'true');
+   for(const kind of ['A','B','all','work','']) {
+    await a.d.querySelector(`[data-holiday="${kind}"]`).onclick();
+    assert.equal(a.data.get('personalConfig/A').calendar.days['2027-03-23'],kind||undefined);
+   }
+   assert.equal(a.data.get('events/safe').title,'Shared plan');assert.equal(a.data.get('personalEvents/safe').title,'My plan');
+   await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,2);
+   assert.equal(a.d.querySelector('[data-d="2027-03-23"] .off-label').textContent,'');
+  }finally{a.close();}
+ }
+});
+test('calendar: quick edit locks repeated taps, keeps its target when another date is selected, and can retry failure',async()=>{
+ const a=app({returning:true});try {
+  await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,2);
+  a.d.querySelector('[data-d="2027-03-23"]').click();
+  const original=a.db.runTransaction;let release,calls=0;
+  a.db.runTransaction=async fn=>{calls++;await new Promise(r=>release=r);return original(fn);};
+  const pending=a.d.querySelector('[data-holiday="off"]').onclick();
+  assert(a.d.getElementById('calendarQuick').disabled);
+  await a.d.querySelector('[data-holiday="B"]').onclick();assert.equal(calls,1);
+  a.d.querySelector('[data-d="2027-03-24"]').click();
+  release();await pending;
+  assert.equal(a.data.get('personalConfig/A').calendar.days['2027-03-23'],'off');
+  assert.equal(a.data.get('personalConfig/A').calendar.days['2027-03-24'],undefined);
+  a.db.runTransaction=async()=>{throw Error('offline');};
+  await a.d.querySelector('[data-holiday="off"]').onclick();
+  assert.equal(a.data.get('personalConfig/A').calendar.days['2027-03-24'],undefined);
+  assert.match(a.d.getElementById('calendarQuickStatus').textContent,/保存できませんでした/);
+  assert.equal(a.d.getElementById('calendarQuick').disabled,false);
+  a.db.runTransaction=original;await a.d.querySelector('[data-holiday="off"]').onclick();
+  assert.equal(a.data.get('personalConfig/A').calendar.days['2027-03-24'],'off');
+ }finally{a.close();}
+});
 test('calendar: owner-only settings preserve events and support deleting a mark',async()=>{
  const a=app({returning:true});try{
   a.data.set('personalConfig/A',{ownerName:'Alice',people:['Bob'],calendar:{version:1,configured:true,team:'A',showRokuyo:true,days:{'2026-10-10':'A','2027-01-09':'B'}}});
@@ -59,7 +110,7 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
  for(const file of ['calendar-data.js','calendar-core.js','calendar-settings.js']) w.eval(fs.readFileSync('index/index/'+file,'utf8'));
  const script=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean).pop();
  w.testNavigate=url=>calls.push(['navigate',url]);
- w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setWishes:value=>wishes=value,setShown:value=>findShown=value,spotMapLink,setFriends:(value,self)=>{friends=value;selfFriendId=self;},config:CONFIG,setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
+ w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={setCalendarMonth:(year,month)=>{calMonth=new Date(year,month,1);selectView("cal");goTab("list");},addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setWishes:value=>wishes=value,setShown:value=>findShown=value,spotMapLink,setFriends:(value,self)=>{friends=value;selfFriendId=self;},config:CONFIG,setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
  return{w,d,data,calls,queries,db,errors,close:()=>{w.close();assert.equal(errors.length,0,errors.map(String).join(' '));}};
 }
 test('new user gets a private profile and all list queries are owner-filtered',async()=>{
