@@ -27,7 +27,6 @@ globalThis.createBusinessCalendar=function(hooks){
   }
   function setMode(value){mode=value;hooks.mode(value);render();}
   $('businessModeOn').onclick=()=>setMode(true);$('businessModeOff').onclick=()=>setMode(false);
-  $('businessOpenDay').onclick=()=>{setMode(true);$('businessEditor').scrollIntoView?.({block:'nearest',behavior:'smooth'});};
   function tab(name){
     for(const key of ['personal','entry','company']) $('business'+key[0].toUpperCase()+key.slice(1)+'Form').classList.toggle('hidden',name!==key);
     document.querySelectorAll('[data-btab]').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.btab===name)));
@@ -78,7 +77,9 @@ globalThis.createBusinessCalendar=function(hooks){
     const c=config(),b=business(),date=hooks.selected();
     $('businessModeOn').setAttribute('aria-pressed',String(mode));$('businessModeOff').setAttribute('aria-pressed',String(!mode));
     $('tab-list').classList.toggle('business-mode',mode);
-    $('businessSummary').classList.toggle('hidden',!mode);$('businessEditor').classList.toggle('hidden',!mode);$('businessAgenda').classList.toggle('hidden',!mode);$('businessOpenDay').classList.toggle('hidden',mode);
+    $('businessSummary').classList.toggle('hidden',!mode);$('businessEditor').classList.toggle('hidden',!mode);$('businessAgenda').classList.toggle('hidden',!mode);$('calendarOpen').classList.toggle('hidden',!mode||!hooks.ready());
+    if(!mode)$('calendarWelcome').classList.add('hidden');
+    $('calendarDayHint').textContent=mode?'日付を押すと、休みの変更・仕事の予定を登録できます':'日付を押すと、予定の確認・追加ができます';
     $('calAll').textContent=mode?'今月の仕事をすべて見る':'これからの予定をすべて見る';
     if(!mode)return;
     const s=C.summary(c,hooks.month(),hooks.today()),next=s.next?(s.next===hooks.today()?'今日':dateLabel(s.next)):'未登録';

@@ -1421,21 +1421,21 @@ test('business: switching preserves selected date, half-day overlay survives rel
  for(const legacy of [false,true]){const a=app({legacy,returning:!legacy});try{
   a.data.set('personalConfig/A',{ownerName:'Alice',calendar:{version:1,configured:true,team:'A',showRokuyo:false,days:{'2027-03-20':'B'}}});
   a.data.set('personalEvents/safe',{ownerUid:'A',title:'Keep memory'});a.data.set('config/app',{ownerName:'Shared'});
-  await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,2);a.d.querySelector('[data-d="2027-03-20"]').click();a.d.getElementById('businessOpenDay').click();
+  await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,2);a.d.querySelector('[data-d="2027-03-20"]').click();a.d.getElementById('businessModeOn').click();
   assert(!a.d.getElementById('businessEditor').classList.contains('hidden'));assert.match(a.d.getElementById('calendarSelected').textContent,/3月20日/);
   a.d.getElementById('businessPersonalCategory').value='paid';a.d.getElementById('businessPart').value='am';a.d.getElementById('businessPersonalTitle').value='通院の有給';
   await a.d.getElementById('businessPersonalForm').onsubmit({preventDefault(){}});
   const saved=a.data.get('personalConfig/A');assert.equal(saved.calendar.days['2027-03-20'],'B');assert.equal(saved.calendar.business.personal['2027-03-20'].part,'am');assert.equal(saved.calendar.team,'A');assert.equal(saved.ownerName,'Alice');
   assert.match(a.d.querySelector('[data-d="2027-03-20"] .business-personal-badge').textContent,/通院の有給・午前/);
   a.d.getElementById('businessModeOff').click();assert(a.d.getElementById('businessEditor').classList.contains('hidden'));assert(a.d.querySelector('[data-d="2027-03-20"] .business-personal-badge'));
-  await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,2);a.d.querySelector('[data-d="2027-03-20"]').click();a.d.getElementById('businessOpenDay').click();assert.equal(a.d.getElementById('businessPart').value,'am');
+  await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,2);a.d.querySelector('[data-d="2027-03-20"]').click();a.d.getElementById('businessModeOn').click();assert.equal(a.d.getElementById('businessPart').value,'am');
   await a.d.getElementById('businessRestore').onclick();assert.equal(a.data.get('personalConfig/A').calendar.business.personal['2027-03-20'],undefined);assert.equal(a.data.get('personalConfig/A').calendar.days['2027-03-20'],'B');
   assert.equal(a.data.get('personalEvents/safe').title,'Keep memory');assert.equal(a.data.get('config/app').ownerName,'Shared');
  }finally{a.close();}}
 });
 test('business: repeating deadlines, completion, editing one occurrence, and safe custom labels',async()=>{
  const a=app({returning:true});try{
-  await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,0);a.d.querySelector('[data-d="2027-01-31"]').click();a.d.getElementById('businessOpenDay').click();
+  await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,0);a.d.querySelector('[data-d="2027-01-31"]').click();a.d.getElementById('businessModeOn').click();
   a.d.querySelector('[data-btab="entry"]').click();a.d.getElementById('businessEntryType').value='deadline';a.d.getElementById('businessEntryTitle').value='希望休の提出';a.d.getElementById('businessRepeat').value='monthly';a.d.getElementById('businessRepeatCount').value='3';
   await a.d.getElementById('businessEntryForm').onsubmit({preventDefault(){}});
   let entries=a.data.get('personalConfig/A').calendar.business.entries;assert.deepEqual(Object.values(entries).map(e=>e.date),['2027-01-31','2027-02-28','2027-03-31']);
@@ -1450,7 +1450,7 @@ test('business: repeating deadlines, completion, editing one occurrence, and saf
 });
 test('business: failed save retains draft, locks duplicate taps and targets original day',async()=>{
  const a=app({returning:true});try{
-  await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,2);a.d.querySelector('[data-d="2027-03-23"]').click();a.d.getElementById('businessOpenDay').click();
+  await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,2);a.d.querySelector('[data-d="2027-03-23"]').click();a.d.getElementById('businessModeOn').click();
   const original=a.db.runTransaction;let release,calls=0;a.db.runTransaction=async fn=>{calls++;await new Promise(r=>release=r);return original(fn);};
   const pending=a.d.getElementById('businessPersonalForm').onsubmit({preventDefault(){}});await a.d.getElementById('businessPersonalForm').onsubmit({preventDefault(){}});assert.equal(calls,1);
   a.d.querySelector('[data-d="2027-03-24"]').click();release();await pending;assert(a.data.get('personalConfig/A').calendar.business.personal['2027-03-23']);assert(!a.data.get('personalConfig/A').calendar.business.personal['2027-03-24']);
@@ -1460,7 +1460,7 @@ test('business: failed save retains draft, locks duplicate taps and targets orig
 });
 test('business: account change before transaction read prevents writing the former account',async()=>{
  const a=app({returning:true});try{
-  await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,2);a.d.querySelector('[data-d="2027-03-23"]').click();a.d.getElementById('businessOpenDay').click();
+  await a.w.h.startOwner();a.w.h.setCalendarMonth(2027,2);a.d.querySelector('[data-d="2027-03-23"]').click();a.d.getElementById('businessModeOn').click();
   const original=a.db.runTransaction;let release;a.db.runTransaction=async fn=>{await new Promise(r=>release=r);return original(fn);};
   const pending=a.d.getElementById('businessPersonalForm').onsubmit({preventDefault(){}});a.w.firebase.auth().currentUser.uid='B';release();await pending;
   assert.equal(a.data.get('personalConfig/A').calendar,undefined);assert.match(a.d.getElementById('businessStatus').textContent,/アカウント/);
