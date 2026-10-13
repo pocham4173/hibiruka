@@ -762,11 +762,11 @@
       <div id="calendarKey" class="calendar-key" aria-label="休日の色分け"><span class="a">A：A班休み</span><span class="b">B：B班休み</span><span class="all">全休</span></div>
       <p class="calendar-legend" id="calendarLegend"></p>
       <p class="note" id="calendarCoverage"></p>
-      <button type="button" class="chip" id="calendarOpen">自分の休日を設定</button>
-      <p class="note center">日付を押すと、休みの変更・予定の追加ができます</p>
+      <button type="button" class="chip hidden" id="calendarOpen">自分の休日を設定</button>
+      <p class="note center" id="calendarDayHint">日付を押すと、予定の確認・追加ができます</p>
       <div id="calActions" class="hidden">
         <p class="note" id="calendarSelected"></p>
-        <button type="button" class="btn sub" id="businessOpenDay">仕事・休みを変更</button><div id="businessEditor" class="hidden"></div>
+        <div id="businessEditor" class="hidden"></div>
 
         <button type="button" class="plus-btn" id="calAdd">この日に追加</button>
         <button type="button" class="chip" id="calAll" style="margin-top:12px">これからの予定をすべて見る</button>
@@ -1261,7 +1261,7 @@
   <button type="button" class="btn ghost" id="calendarClose">あとで・閉じる</button>
   <p class="note">祝日と会社の休みは別です。祝日データ：<a href="https://www8.cao.go.jp/chosei/shukujitsu/gaiyou.html" target="_blank" rel="noopener">内閣府</a>。六曜は日本の旧暦に基づく参考表示です。</p>
 </div></div>
-<script src="./business-calendar.js?v=20261013-business"></script>
+<script src="./business-calendar.js?v=20261013-leisure"></script>
 <script src="./calendar-data.js"></script>
 <script src="./calendar-core.js?v=20261013-business"></script>
 <script src="./calendar-settings.js?v=20261013-business"></script>
@@ -1744,7 +1744,7 @@ function renderCalendarSetup() {
   ['calendarOpen','calendarSettingsOpen'].forEach(id => $(id).classList.toggle('hidden', !myUid));
   ['calendarOpen','calendarSettingsOpen','calendarStart'].forEach(id => $(id).disabled = !editable);
   businessUI.render();
-  $('calendarWelcome').classList.toggle('hidden', !editable || calendarConfig.configured || lsGet('hibiruka:calendar-later:' + myUid) === '1');
+  $('calendarWelcome').classList.toggle('hidden', !businessUI.active || !editable || calendarConfig.configured || lsGet('hibiruka:calendar-later:' + myUid) === '1');
 }
 ['calendarOpen','calendarSettingsOpen','calendarStart'].forEach(id => $(id).onclick = () => businessUI.openSettings());
 $('calendarOpen').onclick = () => businessUI.openSettings();
