@@ -10,7 +10,7 @@
     const [y,m]=month.split('-').map(Number);return new Date(Date.UTC(y,m,0)).getUTCDate();
   }
   function validateDraft(months,year){
-    if(!Array.isArray(months)||!months.length||months.length>13)throw Error('months');
+    if(!Array.isArray(months)||!months.length||months.length>24)throw Error('months');
     const seen=new Set();
     return months.map(item=>{
       const month=item?.month,n=monthLength(month);
@@ -25,23 +25,31 @@
     }).sort((a,b)=>a.month.localeCompare(b.month));
   }
   function parseGrid(value,year){
-    if(!Array.isArray(value?.months)||!value.months.length||value.months.length>13)throw Error('months');
+    if(!Array.isArray(value?.months)||!value.months.length||value.months.length>24)throw Error('months');
     const months=value.months.map(block=>{
       if(!Number.isInteger(block?.year)||![year,year+1].includes(block.year)||!Number.isInteger(block.month)||block.month<1||block.month>12)throw Error('month');
       const month=monthKey(block.year,block.month),n=monthLength(month);
       const headers=block.weekdays,start=weekdays.indexOf(headers?.[0]);
       if(!Array.isArray(headers)||headers.length!==7||start<0||headers.some((h,i)=>h!==weekdays[(start+i)%7]))throw Error('weekdays');
       const offset=(new Date(Date.UTC(block.year,block.month-1,1)).getUTCDay()-start+7)%7;
-      if(block.complete!==true||!Array.isArray(block.rows)||block.rows.length<Math.ceil((offset+n)/7)||block.rows.length>6||block.rows.some(row=>!Array.isArray(row)||row.length!==7))throw Error('incomplete');
+      if(block.complete!==true||!Array.isArray(block.rows)||block.rows.length<Math.min(5,Math.ceil((offset+n)/7))||block.rows.length>6||block.rows.some(row=>!Array.isArray(row)||row.length!==7))throw Error('incomplete');
+      // Some printed calendars stack week six inside the last displayed row.
+      // Keep both dates in that cell; never shift them into adjacent columns.
+      const folded=block.rows.length===5&&offset+n>35;
       const days=[];
       block.rows.flat().forEach((cell,i)=>{
         const expected=i-offset+1;
         if(expected<1||expected>n){if(cell!==null&&cell!=='')throw Error('layout');return;}
-        if(typeof cell!=='string')throw Error('layout');
-        const match=cell.match(/^([1-9]|[12]\d|3[01])(?::(A|B|all|off|work|unknown))?$/);
-        if(!match||Number(match[1])!==expected)throw Error('layout');
-        days.push({date:dateKey(month,expected),kind:match[2]||''});
+        const stacked=folded&&i>=28&&expected+7<=n;
+        if(stacked?(!Array.isArray(cell)||cell.length!==2):typeof cell!=='string')throw Error('layout');
+        (stacked?cell:[cell]).forEach((entry,j)=>{
+          if(typeof entry!=='string')throw Error('layout');
+          const match=entry.match(/^([1-9]|[12]\d|3[01])(?::(A|B|all|off|work|unknown))?$/),day=expected+j*7;
+          if(!match||Number(match[1])!==day)throw Error('layout');
+          days.push({date:dateKey(month,day),kind:match[2]||''});
+        });
       });
+      days.sort((a,b)=>a.date.localeCompare(b.date));
       return {month,days};
     });
     return validateDraft(months,year);
