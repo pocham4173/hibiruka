@@ -2,10 +2,12 @@
 globalThis.createCalendarSettings = function(hooks) {
   const $=id=>document.getElementById(id), C=globalThis.HibirukaCalendar;
   let replaceMonth='', generation=0, busy=false, image='', pdf=null, pdfTask=null, controller=null;
+  let photoMode=false;
+  const photoReview=createPhotoCalendarReview({element:$('calendarPhotoReview'),getConfig:hooks.getConfig,onChange:count=>{$('calendarSave').textContent=count?`確認した${count}か月を保存`:'保存する月にチェックしてください';}});
   const message=text=>{$('calendarStatus').textContent=text;};
-  function invalidate(){replaceMonth='';generation++;controller?.abort();controller=null;image='';pdfTask?.destroy().catch(()=>{});pdfTask=null;pdf=null;$('calendarPreview').removeAttribute('src');$('calendarFile').value='';}
+  function invalidate(){photoReview.clear();photoMode=false;replaceMonth='';generation++;controller?.abort();controller=null;image='';pdfTask?.destroy().catch(()=>{});pdfTask=null;pdf=null;$('calendarPreview').removeAttribute('src');$('calendarFile').value='';}
   function close(){if(busy&&$('calendarSave').disabled)return;invalidate();$('calendarSheet').classList.add('hidden');}
-  function setBusy(value){busy=value;for(const id of ['calendarRead','calendarSave','calendarManualSave','calendarFile','calendarPdfPage','calendarClose','calendarVerified'])$(id).disabled=value;}
+  function setBusy(value){busy=value;for(const id of ['calendarRead','calendarSave','calendarManualSave','calendarFile','calendarPdfPage','calendarClose','calendarVerified','calendarYear','calendarChooseImport','calendarChooseManual','calendarCorrectionRead'])$(id).disabled=value;photoReview.lock(value);}
   function open(date) {
     if(!hooks.canEdit()){hooks.toast('休日設定を読み込んでいます。少し待ってから開いてください');return;}
     invalidate();setBusy(false);$('calendarSource').classList.remove('hidden');
@@ -16,7 +18,7 @@ globalThis.createCalendarSettings = function(hooks) {
     $('calendarDate').value=C.validDate(date)?date:new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo'}).format(new Date());
     $('calendarKind').value=config.days[$('calendarDate').value]||'';
     $('calendarYear').value=$('calendarDate').value.slice(0,4);
-    $('calendarReview').classList.add('hidden');$('calendarRows').replaceChildren();
+    $('calendarReview').classList.add('hidden');$('calendarListReview').classList.remove('hidden');$('calendarRows').replaceChildren();
     $('calendarImport').classList.add('hidden');$('calendarManual').classList.add('hidden');
     $('calendarPdfBox').classList.add('hidden');$('calendarConfirm').checked=false;
     $('calendarSave').textContent='表示設定を保存';
@@ -51,8 +53,8 @@ globalThis.createCalendarSettings = function(hooks) {
   }
   $('calendarClose').onclick=close;
   $('calendarSheet').onclick=e=>{if(e.target===$('calendarSheet'))close();};
-  $('calendarChooseImport').onclick=()=>{$('calendarSource').classList.remove('hidden');$('calendarImport').classList.remove('hidden');$('calendarManual').classList.add('hidden');};
-  $('calendarChooseManual').onclick=()=>{$('calendarManual').classList.remove('hidden');$('calendarImport').classList.add('hidden');};
+  $('calendarChooseImport').onclick=()=>{if(!photoReview.active){$('calendarReview').classList.add('hidden');$('calendarRows').replaceChildren();}photoMode=true;$('calendarSource').classList.remove('hidden');$('calendarImport').classList.remove('hidden');$('calendarManual').classList.add('hidden');};
+  $('calendarChooseManual').onclick=()=>{invalidate();$('calendarReview').classList.add('hidden');$('calendarSave').textContent='表示設定を保存';$('calendarManual').classList.remove('hidden');$('calendarImport').classList.add('hidden');};
   $('calendarDate').onchange=()=>{$('calendarKind').value=hooks.getConfig().days[$('calendarDate').value]||'';};
   $('calendarManualSave').onclick=()=>{
     replaceMonth='';
@@ -62,7 +64,7 @@ globalThis.createCalendarSettings = function(hooks) {
   };
   $('calendarFile').onchange=async()=>{
     const file=$('calendarFile').files[0];if(!file)return;
-    invalidate();const g=generation;setBusy(true);message('添付を開いています…');$('calendarReview').classList.add('hidden');$('calendarRows').replaceChildren();$('calendarConfirm').checked=false;$('calendarPdfBox').classList.add('hidden');
+    invalidate();photoMode=true;const g=generation;setBusy(true);message('添付を開いています…');$('calendarReview').classList.add('hidden');$('calendarRows').replaceChildren();$('calendarConfirm').checked=false;$('calendarPdfBox').classList.add('hidden');
     try {
       if(file.size>20*1024*1024)throw Error('20MB以下の写真・PDFを選んでください');
       if(file.type==='application/pdf'||/\.pdf$/i.test(file.name)) {
@@ -86,34 +88,35 @@ globalThis.createCalendarSettings = function(hooks) {
     finally{if(g===generation)setBusy(false);}
   };
   $('calendarPdfPage').onchange=async()=>{
-    image='';$('calendarReview').classList.add('hidden');$('calendarRows').replaceChildren();$('calendarConfirm').checked=false;setBusy(true);
+    photoReview.clear();photoMode=true;generation++;image='';$('calendarReview').classList.add('hidden');$('calendarRows').replaceChildren();$('calendarConfirm').checked=false;setBusy(true);
     try{await renderPdf();message('このページの休日を読み取れます。各ページを確認・保存してから次のページを取り込んでください。');}
     catch{message('このページを開けませんでした');}finally{setBusy(false);}
   };
   $('calendarRead').onclick=async()=>{
     if(busy)return;
     if(!image){message('先にカレンダーの写真・PDFを選んでください');return;}
-    replaceMonth='';
+    photoReview.clear();photoMode=true;replaceMonth='';
     const year=Number($('calendarYear').value);
     if(!Number.isInteger(year)||year<2000||year>2098){message('カレンダーに書かれた年を確認してください');return;}
     const g=generation;controller=new AbortController();const timer=setTimeout(()=>controller?.abort(),90000);
     setBusy(true);message('休日を読み取っています…');$('calendarReview').classList.add('hidden');$('calendarRows').replaceChildren();
     try {
       const token=await hooks.token();
-      const response=await fetch(hooks.endpoint,{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+token},body:JSON.stringify({year,image}),signal:controller.signal});
+      const response=await fetch(hooks.endpoint,{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+token},body:JSON.stringify({year,image,formatVersion:2}),signal:controller.signal});
       const result=await response.json();
-      if(!response.ok)throw Error(({limit:'今日の読み取り回数を使い切りました。手入力は引き続き使えます。',busy:'読み取りが混み合っています。時間をおいてお試しください。',auth:'ログインを確認して、もう一度お試しください。',unreadable:'読み取れませんでした。年と凡例を含めて、数か月ずつ鮮明に撮り直すか、手入力してください。'})[result.error]||'読み取りを利用できません。時間をおいて再度お試しください。手入力も使えます。');
+      if(!response.ok)throw Error(({update_required:'アプリを開き直してから、写真を読み取ってください。',limit:'今日の読み取り回数を使い切りました。手入力は引き続き使えます。',busy:'読み取りが混み合っています。時間をおいてお試しください。',auth:'ログインを確認して、もう一度お試しください。',unreadable:'日付と曜日の位置を確認できませんでした。保存していません。年・月・曜日・凡例を含め、1か月全体が見える写真で試してください。'})[result.error]||'読み取りを利用できません。時間をおいて再度お試しください。手入力も使えます。');
       if(g!==generation)return;
-      if(!Array.isArray(result.days)||!result.days.length||result.days.length>550)throw Error('休日を読み取れませんでした');
-      for(const row of result.days) {
-        if(!C.validDate(row.date)||![year,year+1].includes(+row.date.slice(0,4))||![...C.kinds,'unknown'].includes(row.kind))throw Error('読み取り結果を確認できませんでした');
-      }
-      renderRows(result.days);$('calendarReview').classList.remove('hidden');$('calendarConfirm').checked=false;$('calendarSave').textContent='確認した休日を保存';
-      message(`${result.days.length}日を読み取りました。まだ保存していません。写真と比べて、抜け・間違いを確認してください。`);
+      if(result.formatVersion!==2)throw Error('読み取り機能の更新が反映されていません。保存せず、時間をおいて開き直してください。');
+      let months;
+      try{months=HibirukaPhotoCalendar.validateDraft(result.months,year);}catch{throw Error('月の全日付を確認できませんでした。保存していません。1か月全体が見える写真で試してください。');}
+      photoReview.open(months,image);$('calendarSource').classList.add('hidden');
+      $('calendarListReview').classList.add('hidden');$('calendarReview').classList.remove('hidden');
+      message(`${months.length}か月を読み取りました。まだ保存していません。元の写真と月ごとに見比べてください。`);
     }catch(e){if(g===generation)message(e.name==='AbortError'?'時間がかかっているため中止しました。数か月ずつ撮り直すか、手入力してください。':e.message);}
     finally{clearTimeout(timer);if(g===generation)setBusy(false);}
   };
   function renderRows(rows) {
+    photoReview.clear();photoMode=false;$('calendarListReview').classList.remove('hidden');
     const box=$('calendarRows');box.replaceChildren();
     for(const row of rows) {
       const line=document.createElement('div');line.className='calendar-review-row';
@@ -156,6 +159,14 @@ globalThis.createCalendarSettings = function(hooks) {
     message(replaceMonth+'の既存の休日設定を消して、この'+rows.length+'日へ入れ替えます。他の月・予定・思い出は変わりません。');
   };
   $('calendarSave').onclick=()=>{
+    if(busy)return;
+    if(photoMode){
+      try {
+        if(!photoReview.active)throw Error('先に写真を読み取り、保存する月を確認してください');
+        const {patch,options}=photoReview.submission();replaceMonth=options;save(patch);
+      }catch(e){message(e.message);}
+      return;
+    }
     const patch={};
     if(!$('calendarReview').classList.contains('hidden')) {
       if(!$('calendarConfirm').checked){message('写真と読み取り結果を確認して、確認済みにチェックしてください');return;}
@@ -169,6 +180,7 @@ globalThis.createCalendarSettings = function(hooks) {
     }
     save(patch);
   };
+  $('calendarYear').onchange=()=>{photoReview.clear();$('calendarReview').classList.add('hidden');$('calendarSource').classList.remove('hidden');if(photoMode)message('年を変更したため、休日をもう一度読み取ってください。');};
   $('calendarConfirm').onchange=()=>{if($('calendarConfirm').checked)message('確認した休日を保存できます。');};
   return {open,close,reset(){invalidate();setBusy(false);$('calendarSheet').classList.add('hidden');}};
 };

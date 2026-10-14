@@ -7,6 +7,7 @@ on:
       - scripts/calendar-production-check.cjs
       - tests/fixtures/calendar-vision.json
       - line-worker/**
+      - index/index/calendar-photo.js
       - security/personal.rules
 permissions:
   contents: read

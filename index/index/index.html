@@ -399,6 +399,21 @@
   .calendar-quick-grid button:active { transform:scale(.97); }
   #calendarPreview { max-width:100%; max-height:420px; object-fit:contain; display:block; margin:12px auto; }
   #calendarPreview:not([src]) { display:none; }
+  .photo-review-source { max-height:260px; overflow:auto; border:1px solid #dedbd6; border-radius:10px; margin:10px 0; background:white; }
+  .photo-review-source img { display:block; width:100%; max-width:none; }
+  .photo-review-source.zoomed img { width:250%; }
+  .photo-review-nav { display:flex; align-items:center; justify-content:space-between; gap:6px; margin:18px 0 12px; }
+  .photo-review-nav button { min-height:44px; padding:6px 8px; border:1px solid #ddd; border-radius:10px; background:white; color:#263552; }
+  .photo-review-grid { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:4px; }
+  .photo-weekday { text-align:center; font-size:13px; padding:4px 0; }
+  .photo-review-grid button { min-width:0; min-height:60px; padding:6px 0; border:1px solid #ddd; border-radius:9px; background:white; color:#263552; }
+  .photo-review-grid button b, .photo-review-grid button small { display:block; }
+  .photo-review-grid button b { font-size:18px; }
+  .photo-review-grid button small { font-size:10px; overflow-wrap:anywhere; }
+  .photo-review-grid [aria-pressed=true] { outline:2px solid #263552; outline-offset:-2px; }
+  .photo-review-grid .photo-unknown { background:#fff1bd; border:2px dashed #94660c; }
+  .photo-review-counts { font-weight:600; }
+  #calendarSheet .photo-month-confirm { padding:12px; background:#edf4ec; border-radius:10px; font-size:14px; }
   .calendar-review-row { display:grid; grid-template-columns:28px minmax(0,1fr) 94px; align-items:center; gap:6px; margin:6px 0; }
   .calendar-review-row input, .calendar-review-row select { min-width:0; width:100%; font-size:14px; padding:8px 3px; }
   .calendar-review-row input[type=checkbox], #calendarSheet input[type=checkbox] { width:22px; height:22px; vertical-align:middle; }
@@ -1242,13 +1257,16 @@
     <div id="calendarPdfBox" class="hidden"><label for="calendarPdfPage">読み取るページ</label><select id="calendarPdfPage"></select></div>
     <img id="calendarPreview" alt="読み取るカレンダー">
     <button type="button" class="btn" id="calendarRead">休日を読み取る</button>
-    <p class="note">1日4回まで。PDFは1ページずつ確認・保存できます。</p>
+    <p class="note">1日4回まで。日付・曜日・凡例を含め、全体が見える月を添付してください。PDFは1ページずつ確認・保存できます。</p>
     </div>
     <div id="calendarReview" class="hidden">
+      <div id="calendarPhotoReview" class="hidden"></div>
+      <div id="calendarListReview">
       <h3>読み取り結果を確認</h3>
-      <p class="note">写真と比べて、間違いを直してください。取り込まない日はチェックを外せます。写真の再読み取りでは同じ日の印を更新します。関根商店の確認済みデータは表示した期間、修正データは指定月の休日を入れ替えます。予定・思い出は変更しません。</p>
+      <p class="note">写真と比べて、間違いを直してください。取り込まない日はチェックを外せます。写真の再読み取りでは確認した月の印を入れ替えます。関根商店の確認済みデータは表示した期間、修正データは指定月の休日を入れ替えます。予定・思い出は変更しません。</p>
       <div id="calendarRows"></div>
       <label><input type="checkbox" id="calendarConfirm"> 写真と比べて、日付・休日の種類・抜けを確認しました</label>
+      </div>
     </div>
   </div>
   <div id="calendarManual" class="hidden">
@@ -1264,7 +1282,9 @@
 <script src="./business-calendar.js?v=20261013-leisure"></script>
 <script src="./calendar-data.js"></script>
 <script src="./calendar-core.js?v=20261013-business"></script>
-<script src="./calendar-settings.js?v=20261013-business"></script>
+<script src="./calendar-photo.js?v=20261014-grid"></script>
+<script src="./calendar-photo-review.js?v=20261014-grid"></script>
+<script src="./calendar-settings.js?v=20261014-grid"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -1690,7 +1710,12 @@ async function saveCalendarConfig(patch, settings = {}, replaceMonth = '') {
       if (auth.currentUser?.uid !== uid || myUid !== uid) throw Error('アカウントが変わりました。開き直してください');
       const current = HibirukaCalendar.cleanConfig(snap.exists ? snap.data().calendar : null);
       const changes = {...patch};
-      if (replaceMonth && typeof replaceMonth === 'object') {
+      if (replaceMonth?.photoMonths) {
+        // Recheck against the transaction's latest account data; stale previews cannot erase newer edits.
+        const checked=HibirukaPhotoCalendar.replacementChanges(current.days,replaceMonth.photoMonths,replaceMonth.photoMonths.map(m=>m.month),replaceMonth.expectedDays);
+        if(Object.keys(patch).length!==Object.keys(checked).length||Object.keys(checked).some(d=>patch[d]!==checked[d]))throw Error('写真の確認画面を開き直してください');
+        Object.assign(changes,checked);
+      } else if (replaceMonth && typeof replaceMonth === 'object') {
         const {from,to} = replaceMonth;
         if (!HibirukaCalendar.validDate(from) || !HibirukaCalendar.validDate(to) || from > to || Object.keys(patch).some(d => d < from || d > to)) throw Error('取り込む期間を確認してください');
         for (const day of Object.keys(current.days)) if (day >= from && day <= to && !Object.hasOwn(changes,day)) changes[day]='';
