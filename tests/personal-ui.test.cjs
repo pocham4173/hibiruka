@@ -17,24 +17,80 @@ test('calendar: owner-only settings preserve events and support deleting a mark'
   assert.equal(a.data.get('personalConfig/A').calendar.team,'B');
  }finally{a.close();}
 });
-test('calendar: photo draft needs confirmation and unresolved rows block saving',async()=>{
+const PhotoCalendar=require('../index/index/calendar-photo.js');
+const photoGrid=require('./fixtures/calendar-grid.cjs');
+function photoResult(blocks){const months=PhotoCalendar.parseGrid({months:blocks},2026);return {formatVersion:2,months,days:months.flatMap(m=>m.days.filter(d=>d.kind)),reviewRequired:true};}
+async function loadPhoto(a,result){
+ a.d.getElementById('calendarSettingsOpen').click();a.d.getElementById('businessImport').click();a.d.getElementById('calendarChooseImport').click();
+ a.w.URL.createObjectURL=()=> 'blob:test';a.w.URL.revokeObjectURL=()=>{};
+ a.w.Image=class {naturalWidth=400;naturalHeight=600;async decode(){}};
+ a.w.HTMLCanvasElement.prototype.getContext=()=>({fillRect(){},drawImage(){}});
+ a.w.HTMLCanvasElement.prototype.toDataURL=()=> 'data:image/jpeg;base64,/9j/AA==';
+ const input=a.d.getElementById('calendarFile');Object.defineProperty(input,'files',{value:[new a.w.File(['img'],'calendar.jpg',{type:'image/jpeg'})],configurable:true});
+ await input.onchange();a.d.getElementById('calendarYear').value='2026';
+ a.w.fetch=async(url,options)=>{assert.equal(JSON.parse(options.body).formatVersion,2);return {ok:true,json:async()=>result};};
+ await a.d.getElementById('calendarRead').onclick();
+}
+function approvePhoto(a,month){const check=a.d.querySelector(`[data-month="${month}"]`);assert(check);check.click();}
+test('calendar: photo preview has a source image, blocks uncertain marks and invalidates confirmation after an edit',async()=>{
  const a=app({returning:true});try{
-  await a.w.h.startOwner();a.d.getElementById('calendarSettingsOpen').click();a.d.getElementById('businessImport').click();a.d.getElementById('calendarChooseImport').click();
-  a.w.URL.createObjectURL=()=> 'blob:test';a.w.URL.revokeObjectURL=()=>{};
-  a.w.Image=class {naturalWidth=400;naturalHeight=600;async decode(){}};
-  a.w.HTMLCanvasElement.prototype.getContext=()=>({fillRect(){},drawImage(){}});
-  a.w.HTMLCanvasElement.prototype.toDataURL=()=> 'data:image/jpeg;base64,/9j/AA==';
-  const input=a.d.getElementById('calendarFile');Object.defineProperty(input,'files',{value:[new a.w.File(['img'],'calendar.jpg',{type:'image/jpeg'})],configurable:true});
-  await input.onchange();a.d.getElementById('calendarYear').value='2026';
-  a.w.fetch=async()=>({ok:true,json:async()=>({days:[{date:'2026-10-10',kind:'A'},{date:'2027-01-09',kind:'unknown'}]})});
-  await a.d.getElementById('calendarRead').onclick();assert.equal(a.data.get('personalConfig/A').calendar,undefined);
-  a.d.getElementById('calendarSave').click();assert.match(a.d.getElementById('calendarStatus').textContent,/確認済み/);
-  a.d.getElementById('calendarConfirm').checked=true;a.d.getElementById('calendarSave').click();assert.match(a.d.getElementById('calendarStatus').textContent,/要確認/);
-  a.d.getElementById('calendarRows').children[1].querySelector('select').value='B';a.d.getElementById('calendarConfirm').checked=true;a.d.getElementById('calendarTeam').value='A';
-  a.d.getElementById('calendarSave').click();await new Promise(r=>setTimeout(r,25));
-  assert.equal(a.data.get('personalConfig/A').calendar.days['2027-01-09'],'B');assert.equal(a.data.get('personalConfig/A').calendar.days['2026-10-10'],'A');
+  await a.w.h.startOwner();await loadPhoto(a,photoResult([photoGrid(2026,10,{10:'A',12:'unknown'})]));
+  assert.equal(a.data.get('personalConfig/A').calendar,undefined);
+  assert.equal(a.d.querySelectorAll('.photo-review-grid button').length,31);
+  assert(a.d.querySelector('.photo-review-source img').src.startsWith('data:image/jpeg'));
+  assert(a.d.querySelector('[data-month]').disabled);
+  a.d.getElementById('calendarSave').click();assert.match(a.d.getElementById('calendarStatus').textContent,/確認/);
+  a.d.querySelector('.photo-review-grid [data-date="2026-10-12"]').click();
+  const select=a.d.querySelector('.photo-review-editor select');select.value='B';select.onchange();
+  approvePhoto(a,'2026-10');assert(a.d.querySelector('[data-month]').checked);
+  a.d.querySelector('.photo-review-grid [data-date="2026-10-11"]').click();
+  const select2=a.d.querySelector('.photo-review-editor select');select2.value='all';select2.onchange();
+  assert.equal(a.d.querySelector('[data-month]').checked,false);
+  approvePhoto(a,'2026-10');a.d.getElementById('calendarSave').click();await new Promise(r=>setTimeout(r,25));
+  const days=a.data.get('personalConfig/A').calendar.days;
+  assert.equal(days['2026-10-10'],'A');assert.equal(days['2026-10-12'],'B');assert.equal(days['2026-10-11'],'all');
  }finally{a.close();}
 });
+test('calendar: photo reimport removes the reported shifted dates, preserves unapproved months, leave, records and other accounts in both modes',async()=>{
+ for(const legacy of [false,true]){const a=app({returning:!legacy,legacy});try{
+  const original={ownerName:'Alice',calendar:{version:1,configured:true,team:'A',showRokuyo:true,days:{'2026-10-03':'B','2026-10-12':'A','2026-10-13':'B','2026-10-19':'A','2026-10-20':'B','2026-10-26':'A','2026-10-27':'B','2026-11-07':'A'},business:{version:1,personal:{'2026-10-19':{title:'有給',category:'paid',part:'am'}},entries:{meeting:{date:'2026-10-13',title:'打合せ',type:'appointment'}}}}};
+  a.data.set('personalConfig/A',original);a.data.set('personalConfig/B',{calendar:{days:{'2026-10-19':'A'}}});
+  a.data.set('personalEvents/safe',{title:'思い出'});a.data.set('events/shared',{title:'共有の予定'});
+  await a.w.h.startOwner();await loadPhoto(a,photoResult([photoGrid(2026,10,{10:'A',24:'A',3:'B',12:'B',17:'B',31:'B',4:'all',11:'all',18:'all',25:'all'}),photoGrid(2026,11,{})]));
+  assert.match(a.d.getElementById('calendarPhotoReview').textContent,/消える印：13日・19日・20日・26日・27日/);
+  approvePhoto(a,'2026-10');a.d.getElementById('calendarSave').click();await new Promise(r=>setTimeout(r,25));
+  const p=a.data.get('personalConfig/A');
+  assert.equal(p.calendar.days['2026-10-12'],'B');for(const day of [13,19,20,26,27])assert.equal(p.calendar.days[`2026-10-${day}`],undefined);
+  assert.equal(p.calendar.days['2026-11-07'],'A');assert.equal(p.ownerName,'Alice');
+  assert.equal(p.calendar.business.personal['2026-10-19'].part,'am');assert.equal(p.calendar.business.entries.meeting.title,'打合せ');
+  assert.equal(a.data.get('personalConfig/B').calendar.days['2026-10-19'],'A');assert.equal(a.data.get('personalEvents/safe').title,'思い出');assert.equal(a.data.get('events/shared').title,'共有の予定');
+ }finally{a.close();}}
+});
+test('calendar: old API output and a stale preview cannot change saved holidays',async()=>{
+ const a=app({returning:true});try{
+  a.data.set('personalConfig/A',{calendar:{days:{'2026-10-13':'B'}}});await a.w.h.startOwner();
+  await loadPhoto(a,{days:[{date:'2026-10-10',kind:'A'}]});a.d.getElementById('calendarSave').click();
+  assert.equal(a.data.get('personalConfig/A').calendar.days['2026-10-13'],'B');
+  a.d.getElementById('calendarClose').click();a.d.getElementById('calendarClose').click();
+  await loadPhoto(a,photoResult([photoGrid()]));approvePhoto(a,'2026-10');
+  a.data.get('personalConfig/A').calendar.days['2026-10-14']='off';
+  a.d.getElementById('calendarSave').click();await new Promise(r=>setTimeout(r,25));
+  assert.match(a.d.getElementById('calendarStatus').textContent,/確認中に休日が変更/);
+  assert.equal(a.data.get('personalConfig/A').calendar.days['2026-10-14'],'off');assert.equal(a.data.get('personalConfig/A').calendar.days['2026-10-13'],'B');
+ }finally{a.close();}
+});
+test('calendar: changing the photo year invalidates its draft and confirmed empty month clears only company marks',async()=>{
+ const a=app({returning:true});try{
+  a.data.set('personalConfig/A',{calendar:{days:{'2026-10-13':'B','2026-11-07':'A'}}});await a.w.h.startOwner();
+  await loadPhoto(a,photoResult([photoGrid(2026,10,{})]));approvePhoto(a,'2026-10');
+  const year=a.d.getElementById('calendarYear');year.value='2027';year.onchange();a.d.getElementById('calendarSave').click();
+  assert.equal(a.data.get('personalConfig/A').calendar.days['2026-10-13'],'B');
+  a.d.getElementById('calendarClose').click();await loadPhoto(a,photoResult([photoGrid(2026,10,{})]));
+  approvePhoto(a,'2026-10');a.d.getElementById('calendarSave').click();await new Promise(r=>setTimeout(r,25));
+  assert.equal(a.data.get('personalConfig/A').calendar.days['2026-10-13'],undefined);assert.equal(a.data.get('personalConfig/A').calendar.days['2026-11-07'],'A');
+ }finally{a.close();}
+});
+
 function app({url='?start=1',legacy=false,linked=false,returning=false,invite=false, delayed=false}={}){
  const dom=new JSDOM(html,{url:'https://example.test/index/'+url,runScripts:'outside-only'}),w=dom.window,d=w.document;
  const data=new Map(),calls=[],queries=[],errors=[];let serial=0;
@@ -56,7 +112,7 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
  const authFn=()=>auth;authFn.Auth={Persistence:{LOCAL:'local'}};authFn.EmailAuthProvider={credential:(email,password)=>({email,password})};
  const firestore=()=>db;firestore.FieldValue={delete:()=>'__delete__',serverTimestamp:()=>1,arrayUnion:x=>[x],arrayRemove:()=>[],increment:x=>x};
  w.firebase={initializeApp:()=>{},auth:authFn,firestore};w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.console.error=(...args)=>errors.push(args);w.liff={init:async()=>{},isLoggedIn:()=>true,getProfile:async()=>({userId:'U'+'a'.repeat(32),displayName:'A'}),getAccessToken:()=>'line-access-token',isInClient:()=>false};
- for(const file of ['calendar-data.js','calendar-core.js','calendar-settings.js','business-calendar.js']) w.eval(fs.readFileSync('index/index/'+file,'utf8'));
+ for(const file of ['calendar-data.js','calendar-core.js','calendar-photo.js','calendar-photo-review.js','calendar-settings.js','business-calendar.js']) w.eval(fs.readFileSync('index/index/'+file,'utf8'));
  const script=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean).pop();
  w.testNavigate=url=>calls.push(['navigate',url]);
  w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={setCalendarMonth:(year,month)=>{calMonth=new Date(year,month,1);selectView("cal");goTab("list");},addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setWishes:value=>wishes=value,setShown:value=>findShown=value,spotMapLink,setFriends:(value,self)=>{friends=value;selfFriendId=self;},config:CONFIG,setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');

@@ -28,10 +28,12 @@ async function makeUser(){
  assert.equal((await read.json()).fields.calendar.mapValue.fields.team.stringValue,'A');
  assert.equal((await write(b)).status,403,'another account cannot overwrite calendar');
  const fixture=JSON.parse(fs.readFileSync('tests/fixtures/calendar-vision.json','utf8'));
- const res=await fetch('https://hibiruka-line.okm-co.workers.dev/ai/calendar',{method:'POST',headers:{origin:'https://pocham4173.github.io',authorization:'Bearer '+a.token,'content-type':'application/json'},body:JSON.stringify({year:2026,image:fixture.image}),signal:AbortSignal.timeout(90000)});
+ const res=await fetch('https://hibiruka-line.okm-co.workers.dev/ai/calendar',{method:'POST',headers:{origin:'https://pocham4173.github.io',authorization:'Bearer '+a.token,'content-type':'application/json'},body:JSON.stringify({year:2026,image:fixture.image,formatVersion:2}),signal:AbortSignal.timeout(90000)});
  const body=await res.json();
  assert.equal(res.status,200,'vision endpoint: '+(body.error||'unexpected status'));
  assert.equal(body.reviewRequired,true);
+ assert.equal(body.formatVersion,2);
+ assert.equal(body.months[0].days.length,31,'complete October grid');
  const actual=body.days.map(x=>({date:x.date,kind:x.kind}));
  console.log('Synthetic calendar recognition:',JSON.stringify(actual));
  assert.deepEqual(actual,fixture.expected,'recognize all three marks without inferring other Sundays');
