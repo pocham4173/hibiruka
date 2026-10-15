@@ -1559,7 +1559,7 @@ test('pets: delete and restore retain photos; pending notifications block delete
 });
 
 test('pets: reopen and profile rename preserve stable assignments; account reset removes visible old data',async()=>{
- const a=app({returning:true});try{await a.w.h.startOwner();const p={ownerUid:'A',name:'before',breed:'',sex:'',birthday:'2020-01-01',welcome:'2020-02-01',birthdayEstimated:false,welcomeEstimated:false,photo:'',createdAt:1,updatedAt:1};a.data.set('personalPets/p',p);a.db.petsCallback({docs:[{id:'p',data:()=>p}]});a.d.getElementById('petOpenSettings').click();a.d.querySelector('[data-pet-select="p"]').click();a.d.getElementById('petEdit').click();a.d.getElementById('petName').value='after';a.d.getElementById('petWelcome').value='2020-03-01';await a.d.getElementById('petProfileForm').onsubmit({preventDefault(){}});assert.equal(a.data.get('personalPets/p').name,'after');
+ const a=app({returning:true});try{await a.w.h.startOwner();const p={ownerUid:'A',name:'before',breed:'',sex:'',birthday:'2020-01-01',welcome:'2020-02-01',birthdayEstimated:false,welcomeEstimated:false,photo:'',createdAt:1,updatedAt:1};a.data.set('personalPets/p',p);a.db.petsCallback({docs:[{id:'p',data:()=>p}]});a.d.getElementById('petOpenSettings').click();a.d.querySelector('[data-pet-select="p"]').click();a.d.getElementById('petVisibility').click();a.d.getElementById('petEdit').click();a.d.getElementById('petName').value='after';a.d.getElementById('petWelcome').value='2020-03-01';await a.d.getElementById('petProfileForm').onsubmit({preventDefault(){}});assert.equal(a.data.get('personalPets/p').name,'after');
  await a.w.h.startOwner();assert.doesNotMatch(a.d.getElementById('petProfile').textContent,/before|after/);a.db.petsCallback({docs:[{id:'p',data:()=>a.data.get('personalPets/p')}]});a.w.h.setEvents([{id:'e',kind:'memory',date:'2020-05-01',petIds:['p'],title:'saved'}]);a.d.getElementById('petOpenSettings').click();a.d.querySelector('[data-pet-select="p"]').click();assert.match(a.d.getElementById('petRecords').textContent,/saved.*after/s);assert.match(a.d.getElementById('petProfile').textContent,/2020-03-01/);
  }finally{a.close();}
 });
@@ -1583,12 +1583,29 @@ test('pets: direct home shortcuts and quick switching use registered IDs and sho
  assert(d.getElementById('petHome').classList.contains('hidden'));
  const pets=['a','b','c'].map((id,i)=>({id,name:'テスト'+i,birthday:'2020-01-01',welcome:'2020-03-01',photo:''}));
  const snapshot=()=>a.db.petsCallback({docs:pets.map(p=>({id:p.id,data:()=>p}))});snapshot();
- assert.equal(d.querySelectorAll('[data-pet-open]').length,3);d.querySelector('[data-pet-open="b"]').click();
+ d.getElementById('petOpen').click();for(const b of [...d.querySelectorAll('[data-pet-fold]')])d.querySelector('[data-pet-fold="'+b.dataset.petFold+'"]').click();assert.equal(d.querySelectorAll('[data-pet-open]').length,3);d.querySelector('[data-pet-open="b"]').click();
  assert(!d.getElementById('tab-pet').classList.contains('hidden'));assert.match(d.getElementById('petProfile').textContent,/テスト1/);
  assert.equal(d.querySelectorAll('.pet-duration').length,2);for(const x of d.querySelectorAll('.pet-duration'))assert.match(x.textContent,/年\d+か月/);
  d.querySelector('[data-pet-select="c"]').click();assert.equal(d.querySelector('[data-pet-select="c"]').getAttribute('aria-pressed'),'true');assert.match(d.getElementById('petProfile').textContent,/テスト2/);
  d.getElementById('petMemory').click();assert.deepEqual([...d.querySelectorAll('#petChecks input:checked')].map(x=>x.value),['c']);
- pets[1].name='変更後';snapshot();assert.equal(d.querySelector('[data-pet-open="b"]').textContent,'🐾変更後');
+ pets[1].name='変更後';snapshot();assert.match(d.querySelector('[data-pet-fold="b"]').textContent,/変更後/);
  await w.h.startOwner();assert(d.getElementById('petHome').classList.contains('hidden'));assert.equal(d.querySelectorAll('[data-pet-open]').length,0);
+ }finally{a.close();}
+});
+
+test('pets: folds retain profiles, suppress closed photos, persist per account and default closed',async()=>{
+ const a=app({returning:true});try{await a.w.h.startOwner();const {d,w}=a;
+ const profiles=[{id:'a',name:'テストA',photo:'data:image/jpeg;base64,AAAA'},{id:'b',name:'テストB',photo:'data:image/jpeg;base64,BBBB'}];
+ const snapshot=()=>a.db.petsCallback({docs:profiles.map(p=>({id:p.id,data:()=>p}))});snapshot();
+ assert.equal(d.getElementById('petOpen').getAttribute('aria-expanded'),'false');assert.equal(d.querySelectorAll('#petHome img').length,0);
+ d.getElementById('petOpen').click();assert.equal(d.querySelectorAll('#petHome img').length,0);
+ d.querySelector('[data-pet-fold="a"]').click();assert.equal(d.querySelectorAll('#petHome img').length,1);assert.equal(d.querySelector('[data-pet-fold="b"]').getAttribute('aria-expanded'),'false');
+ d.querySelector('[data-pet-open="a"]').click();assert(d.querySelector('#petProfile img'));assert.equal(d.querySelectorAll('#petSwitch img').length,0);
+ d.getElementById('petVisibility').click();assert.equal(d.querySelectorAll('#petProfile img,#petHome img').length,0);assert.match(d.getElementById('petProfile').textContent,/登録や記録はそのまま/);
+ d.querySelector('[data-pet-select="b"]').click();assert.equal(d.querySelectorAll('#petProfile img').length,0);
+ d.getElementById('petOpen').click();await w.h.startOwner();snapshot();assert.equal(d.getElementById('petOpen').getAttribute('aria-expanded'),'false');assert.equal(d.querySelectorAll('#petHome img').length,0);
+ d.getElementById('petOpen').click();assert.equal(d.querySelector('[data-pet-fold="a"]').getAttribute('aria-expanded'),'false');d.querySelector('[data-pet-fold="a"]').click();await w.h.startOwner();snapshot();assert.equal(d.querySelector('[data-pet-fold="a"]').getAttribute('aria-expanded'),'true');
+ w.firebase.auth().currentUser.uid='B';await w.h.startOwner();snapshot();assert.equal(d.getElementById('petOpen').getAttribute('aria-expanded'),'false');assert.equal(d.querySelector('[data-pet-fold="a"]').getAttribute('aria-expanded'),'false');
+ assert(![...a.data.keys()].some(k=>/^(personalPets|pets|personalEvents|events)\//.test(k)),'display preferences must not write profile or record data');
  }finally{a.close();}
 });
