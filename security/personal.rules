@@ -48,7 +48,8 @@
         && ((!exists(/databases/$(database)/documents/personalPets/$(id)) && request.resource.data.createdAt == request.time)
           || (exists(/databases/$(database)/documents/personalPets/$(id)) && request.resource.data.createdAt == resource.data.createdAt));
     }
-    // Earlier shared records: exactly the existing legacy owner membership, never personal users.
+    // Earlier shared records: follow the live isOwner() policy, including already registered devices.
+    // Do not invent PIN revocation rules or grant access to personal-only users.
     match /pets/{id} {
       allow read, delete: if isOwner();
       allow create, update: if isOwner()
