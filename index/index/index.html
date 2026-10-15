@@ -1281,7 +1281,7 @@
   <p class="note">祝日と会社の休みは別です。祝日データ：<a href="https://www8.cao.go.jp/chosei/shukujitsu/gaiyou.html" target="_blank" rel="noopener">内閣府</a>。六曜は日本の旧暦に基づく参考表示です。</p>
 </div></div>
 <script src="./pet-core.js?v=20261015"></script>
-<script src="./pet-ui.js?v=20261016"></script>
+<script src="./pet-ui.js?v=20261016b"></script>
 <script src="./business-calendar.js?v=20261013-leisure"></script>
 <script src="./calendar-data.js"></script>
 <script src="./calendar-core.js?v=20261013-business"></script>
@@ -3151,7 +3151,7 @@ async function saveRecord() {
     memo: $("fMemo").value.trim(), link: $("fLink").value.trim(), fav: form.fav,
     thumbs: form.photos.map(p => p.thumb), updatedAt: TS()
   };
-  if (personalMode) { try { Object.assign(data, petUI.fields()); if(data.petIds.length && kindSel === "memory" && date > todayStr()) throw Error("済ませた記録は、今日までの日付にしてください"); } catch(e) { toast(e.message); return; } }
+  { try { Object.assign(data, petUI.fields()); if(data.petIds.length && kindSel === "memory" && date > todayStr()) throw Error("済ませた記録は、今日までの日付にしてください"); } catch(e) { toast(e.message); return; } }
   // 場所の座標は、写真やLINEから入れた場所のままのときだけ残す（直したら消す）
   const geo = form.geo && form.geo.place === data.place ? form.geo : null;
   if (geo) { data.lat = geo.lat; data.lng = geo.lng; }
@@ -3245,7 +3245,7 @@ async function editRecord(id) {
 }
 async function deleteRecord(id) {
   const e = events.find(x => x.id === id); if (!e) return;
-  if (personalMode && e.petIds?.length) {
+  if (e.petIds?.length) {
     if (!confirm(`「${e.title || e.place || '記録'}」を削除しますか？「うちの子」から元に戻せます。`)) return;
     try { await setPetHidden(id,true); closeSheets(); toast('削除しました。「うちの子」の「削除した記録を戻す」から戻せます',5000); }
     catch(error) { toast(error.message||'削除できませんでした'); }
@@ -4264,29 +4264,30 @@ function entryParams(search) {
   return params;
 }
 
-/* うちの子：本人の記録だけ。通常のタブは増やさない。 */
+/* うちの子：現在の記録と同じ保存・共有範囲。通常のタブは増やさない。 */
+const petCollection=()=>db.collection(personalMode ? "personalPets" : "pets");
 async function setPetHidden(id,hidden) {
-  const uid=myUid;if(!personalMode||!uid||auth.currentUser?.uid!==uid)throw Error('自分の記録を開き直してください');
-  const ref=db.collection('personalEvents').doc(id);
+  const uid=myUid,mode=personalMode;if(!uid||auth.currentUser?.uid!==uid)throw Error('自分の記録を開き直してください');
+  const ref=recordCollection('events').doc(id);
   await db.runTransaction(async tx=>{
     const snap=await tx.get(ref),e=snap.exists?snap.data():null;
-    if(myUid!==uid||auth.currentUser?.uid!==uid||!e||e.ownerUid!==uid||!e.petIds?.length)throw Error('記録を開き直してください');
+    if(myUid!==uid||personalMode!==mode||auth.currentUser?.uid!==uid||!e||(mode&&e.ownerUid!==uid)||!e.petIds?.length)throw Error('記録を開き直してください');
     if(hidden&&(e.nextSendAt||(e.sends||[]).some(x=>x.status==='wait'||x.status==='sending')))throw Error('先に、この予定のお知らせ予約を取り消してください');
     tx.update(ref,{petHidden:hidden,updatedAt:TS()});
   });
 }
 const petUI=HibirukaPetUI.create({
-  personal:()=>personalMode, today:todayStr, events:()=>events, trash:()=>petTrash, done:isDone,
+  personal:()=>Boolean(myUid), shared:()=>!personalMode, today:todayStr, events:()=>events, trash:()=>petTrash, done:isDone,
   show:()=>goTab('pet'),back:()=>goTab('list'),edit:editRecord,detail:openDetail,
   newRecord(kind){resetForm();form.cat=cats[0]?.name||'遊び';$('fKind').value=kind;renderCats();updateSaveNote();goTab('rec');},
-  newId:()=>db.collection('personalPets').doc().id,
-  watch(ok,fail){const uid=myUid;return db.collection('personalPets').where('ownerUid','==',uid).onSnapshot(s=>{if(myUid===uid)ok(s.docs.map(d=>({id:d.id,...d.data()})));},fail);},
+  newId:()=>petCollection().doc().id,
+  watch(ok,fail){const uid=myUid,mode=personalMode,col=petCollection();return (mode?col.where('ownerUid','==',uid):col).onSnapshot(s=>{if(myUid===uid&&personalMode===mode)ok(s.docs.map(d=>({id:d.id,...d.data()})));},fail);},
   async saveProfile(id,p,before){
-    const uid=myUid,ref=db.collection('personalPets').doc(id);
+    const uid=myUid,mode=personalMode,ref=petCollection().doc(id);
     await db.runTransaction(async tx=>{
       const snap=await tx.get(ref);
-      if(!personalMode||myUid!==uid||auth.currentUser?.uid!==uid)throw Error('アカウントが変わりました。開き直してください');
-      if(snap.exists){const old={id,...snap.data()};if(old.ownerUid!==uid)throw Error('保存できません');
+      if(personalMode!==mode||myUid!==uid||auth.currentUser?.uid!==uid)throw Error('アカウントが変わりました。開き直してください');
+      if(snap.exists){const old={id,...snap.data()};if(mode&&old.ownerUid!==uid)throw Error('保存できません');
         const same=Object.keys(p).every(k=>old[k]===p[k]);
         if(same)return;
         if(!before||JSON.stringify(old)!==before)throw Error('別の画面で変更されました。プロフィールを開き直してください');
