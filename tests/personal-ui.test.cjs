@@ -104,7 +104,7 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
   where:(...filter)=>query(name,[...filters,filter]),orderBy:()=>query(name,filters),
   add:async x=>{const r=ref(name+'/new'+(++serial));await r.set(x);return r;},
   get:async()=>{queries.push({name,filters});const docs=[...data.keys()].filter(p=>p.startsWith(name+'/')&&filters.every(([k,op,v])=>data.get(p)[k]===v)).map(snap);return{docs,forEach:f=>docs.forEach(f)};},
-  onSnapshot:(options,success,error)=>{const cb=typeof options==="function"?options:success;queries.push({name,filters});if(name==="personalPets")db.petsCallback=cb;if(name.endsWith("Events")||name==="events"){db.recordsCallback=cb;db.recordsError=error;if(delayed)return()=>{};}cb({docs:[],metadata:{fromCache:false}});return()=>{};}
+  onSnapshot:(options,success,error)=>{const cb=typeof options==="function"?options:success;queries.push({name,filters});if(name==="personalPets"){db.petsCallback=cb;db.petsError=typeof options==="function"?success:error;}if(name.endsWith("Events")||name==="events"){db.recordsCallback=cb;db.recordsError=error;if(delayed)return()=>{};}cb({docs:[],metadata:{fromCache:false}});return()=>{};}
  });
  const db={collection:name=>query(name),batch:()=>{const writes=[];return{set:(r,x)=>writes.push(()=>r.set(x)),update:(r,x)=>writes.push(()=>r.update(x)),delete:r=>writes.push(()=>r.delete()),commit:async()=>{if(db.failCommit){db.failCommit=false;throw new Error("test offline");}for(const write of writes)await write();if(db.failAcknowledgement){db.failAcknowledgement=false;throw new Error("test response lost");}}}},runTransaction:async fn=>fn({get:r=>r.get(),set:(r,x,opt)=>r.set(x,opt),update:(r,x)=>r.update(x)})};
  const user={uid:'A',getIdToken:async()=>'id-token-A',isAnonymous:!linked,...(linked?{email:'a@example.test'}:{}),linkWithCredential:async c=>{user.email=c.email;user.isAnonymous=false;calls.push(['link',user.uid]);}};
@@ -1563,3 +1563,9 @@ test('pets: reopen and profile rename preserve stable assignments; account reset
  await a.w.h.startOwner();assert.doesNotMatch(a.d.getElementById('petProfile').textContent,/before|after/);a.db.petsCallback({docs:[{id:'p',data:()=>a.data.get('personalPets/p')}]});a.w.h.setEvents([{id:'e',kind:'memory',date:'2020-05-01',petIds:['p'],title:'saved'}]);a.d.getElementById('petOpenSettings').click();a.d.getElementById('petSelect').value='p';a.d.getElementById('petSelect').onchange();assert.match(a.d.getElementById('petRecords').textContent,/saved.*after/s);assert.match(a.d.getElementById('petProfile').textContent,/2020-03-01/);
  }finally{a.close();}
 });
+
+ test('pets: settings entry opens visible panel and read errors can be retried without losing input',async()=>{
+ const a=app({returning:true});try{await a.w.h.startOwner();const d=a.d;const b=d.getElementById('petOpenSettings');assert.equal(b.textContent,'うちの子を開く');assert(b.closest('.card'));b.click();assert(!d.getElementById('tab-pet').closest('.hidden'));assert(d.getElementById('tab-set').classList.contains('hidden'));
+ a.db.petsError(new Error('offline'));b.click();assert.match(d.getElementById('petStatus').textContent,/読み込めません/);assert(!d.getElementById('petRetry').classList.contains('hidden'));d.getElementById('petAdd').click();d.getElementById('petName').value='残す名前';await d.getElementById('petProfileForm').onsubmit({preventDefault(){}});assert.match(d.getElementById('petStatus').textContent,/まだ保存できません/);d.getElementById('petRetry').click();assert.equal(d.getElementById('petName').value,'残す名前');assert.equal(d.getElementById('petStatus').textContent,'');await d.getElementById('petProfileForm').onsubmit({preventDefault(){}});assert([...a.data].some(([k,v])=>k.startsWith('personalPets/')&&v.name==='残す名前'));
+ }finally{a.close();}
+ });
