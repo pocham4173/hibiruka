@@ -203,3 +203,18 @@ test('business calendar: owner-only extension, bounded data, and old clients can
  await assertFails(updateDoc(ref,{calendar:{...calendar,business:{...business,unexpected:'no'}}}));
  await assertSucceeds(updateDoc(ref,{calendar:{...calendar,business:{...business,personal:{}}}}));
 });
+
+test('pet profiles and records belong only to the owner; malformed profiles and notified deletion fail',async()=>{
+ const p={ownerUid:'person-A',name:'test',breed:'',sex:'',birthday:'2020-02-29',welcome:'',birthdayEstimated:false,welcomeEstimated:false,photo:'',createdAt:serverTimestamp(),updatedAt:serverTimestamp()};
+ await assertSucceeds(setDoc(doc(A,'personalPets/pet-A'),p));await assertSucceeds(getDoc(doc(A,'personalPets/pet-A')));
+ await assertFails(getDoc(doc(B,'personalPets/pet-A')));await assertFails(updateDoc(doc(B,'personalPets/pet-A'),{name:'stolen',updatedAt:serverTimestamp()}));await assertFails(deleteDoc(doc(B,'personalPets/pet-A')));
+ await assertSucceeds(getDocs(query(collection(A,'personalPets'),where('ownerUid','==','person-A'))));await assertFails(getDocs(collection(A,'personalPets')));
+ await assertFails(updateDoc(doc(A,'personalPets/pet-A'),{ownerUid:'person-B',updatedAt:serverTimestamp()}));await assertFails(updateDoc(doc(A,'personalPets/pet-A'),{photo:'https://tracking.invalid/photo',updatedAt:serverTimestamp()}));
+ await assertFails(setDoc(doc(A,'personalPets/bad'),{...p,name:'x'.repeat(41)}));await assertFails(setDoc(doc(A,'personalPets/bad'),{...p,unexpected:true}));
+ await assertSucceeds(updateDoc(doc(A,'personalPets/pet-A'),{name:'renamed',updatedAt:serverTimestamp()}));
+ const e={ownerUid:'person-A',kind:'memory',date:'2020-02-29',petIds:['pet-A'],petCareType:'体重',petWeightKg:3.8,createdAt:serverTimestamp(),sends:[],nextSendAt:null};
+ await assertSucceeds(setDoc(doc(A,'personalEvents/pet-log'),e));await assertSucceeds(updateDoc(doc(A,'personalEvents/pet-log'),{petHidden:true}));await assertSucceeds(updateDoc(doc(A,'personalEvents/pet-log'),{petHidden:false}));await assertFails(updateDoc(doc(B,'personalEvents/pet-log'),{petHidden:true}));
+ await assertFails(updateDoc(doc(A,'personalEvents/pet-log'),{petWeightKg:-1}));await assertFails(updateDoc(doc(A,'personalEvents/pet-log'),{petCareType:'unsupported'}));
+ await env.withSecurityRulesDisabled(async c=>{await updateDoc(doc(c.firestore(),'personalEvents/pet-log'),{nextSendAt:'2099-01-01T12:00'});});
+ await assertFails(updateDoc(doc(A,'personalEvents/pet-log'),{petHidden:true}));
+});

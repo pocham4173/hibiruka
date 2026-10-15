@@ -12,12 +12,13 @@ function memoryDb(data){
 }
 test('delete: only my records and my LINE link go; others stay', async () => {
   const db=memoryDb({
-    personalEvents:{e1:{ownerUid:'me'},e2:{ownerUid:'you'}}, personalPhotos:{p1:{ownerUid:'me'}},
+    personalPets:{p1:{ownerUid:'me'},p2:{ownerUid:'you'}}, personalEvents:{e1:{ownerUid:'me'},e2:{ownerUid:'you'}}, personalPhotos:{p1:{ownerUid:'me'}},
     personalFriends:{f1:{ownerUid:'me'},f2:{ownerUid:'you',lineUserId:U}}, pushSubs:{s1:{ownerUid:'me'}},
     personalConfig:{me:{},you:{}}, lineLinks:{me:{lineUserId:U}}, lineAccounts:{[U]:{ownerUid:'me'}}, lineLinkCodes:{}
   });
   const r=await deleteAccountData(db,'me');
   assert.equal(r.more,false);
+  assert.deepEqual(Object.keys(db.data.personalPets),['p2']);
   assert.deepEqual(Object.keys(db.data.personalEvents),['e2']);
   assert.deepEqual(Object.keys(db.data.personalFriends),['f2']);
   assert.deepEqual(Object.keys(db.data.personalPhotos),[]);assert.deepEqual(Object.keys(db.data.pushSubs),[]);

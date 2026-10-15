@@ -13,7 +13,7 @@ export async function inquiryNo(uid) {
 }
 
 // 持ち主が ownerUid の文書を、まとめて消す（1回で消しきれないときは more を返す）
-const OWNED = ['personalPhotos', 'personalEvents', 'personalFriends', 'lineLinkCodes', 'pushSubs'];
+const OWNED = ['personalPets', 'personalPhotos', 'personalEvents', 'personalFriends', 'lineLinkCodes', 'pushSubs'];
 export async function deleteAccountData(db, uid) {
   let deleted = 0;
   for (const c of OWNED) {
