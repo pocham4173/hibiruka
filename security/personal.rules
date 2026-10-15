@@ -48,6 +48,26 @@
         && ((!exists(/databases/$(database)/documents/personalPets/$(id)) && request.resource.data.createdAt == request.time)
           || (exists(/databases/$(database)/documents/personalPets/$(id)) && request.resource.data.createdAt == resource.data.createdAt));
     }
+    // Earlier shared records: exactly the existing legacy owner membership, never personal users.
+    match /pets/{id} {
+      allow read, delete: if isOwner();
+      allow create, update: if isOwner()
+        && request.resource.data.ownerUid is string
+        && ((!exists(/databases/$(database)/documents/pets/$(id)) && personalOwner(request.resource.data))
+          || (exists(/databases/$(database)/documents/pets/$(id)) && request.resource.data.ownerUid == resource.data.ownerUid))
+        && request.resource.data.keys().hasOnly(['ownerUid','name','breed','sex','birthday','welcome','birthdayEstimated','welcomeEstimated','photo','createdAt','updatedAt'])
+        && request.resource.data.keys().hasAll(['ownerUid','name','breed','sex','birthday','welcome','birthdayEstimated','welcomeEstimated','photo','createdAt','updatedAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 40
+        && request.resource.data.breed is string && request.resource.data.breed.size() <= 60
+        && request.resource.data.sex in ['','男の子','女の子','不明']
+        && petDate(request.resource.data.birthday) && petDate(request.resource.data.welcome)
+        && request.resource.data.birthdayEstimated is bool && request.resource.data.welcomeEstimated is bool
+        && request.resource.data.photo is string && request.resource.data.photo.size() <= 100000
+        && (request.resource.data.photo == '' || request.resource.data.photo.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+$'))
+        && request.resource.data.updatedAt == request.time
+        && ((!exists(/databases/$(database)/documents/pets/$(id)) && request.resource.data.createdAt == request.time)
+          || (exists(/databases/$(database)/documents/pets/$(id)) && request.resource.data.createdAt == resource.data.createdAt));
+    }
     function petDate(d) { return d is string && (d == '' || d.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')); }
     function validPetEvent(d) {
       return (!('petIds' in d) || (d.petIds is list && d.petIds.size() <= 20))
