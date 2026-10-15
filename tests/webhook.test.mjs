@@ -296,3 +296,8 @@ test('また行きたい with nothing saved still shows the recommended features
   const [none] = await handleEvent(memoryDb(linked()), {}, msg({type:'text', text:'わたしの行きたい場所'}), NOW);
   assert.match(none.text, /ここ行きたい/);
 });
+
+test('deleted pet memories never enter LINE look-backs',async()=>{
+ const {isDoneRecord}=await import('../line-worker/webhook.mjs');
+ assert.equal(isDoneRecord({kind:'memory',petHidden:true,date:'2026-01-01'},'2026-01-02'),false);
+});

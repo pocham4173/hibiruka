@@ -29,6 +29,32 @@
         && b.personal is map && b.personal.size() <= 1200
         && b.entries is map && b.entries.size() <= 500;
     }
+    match /personalPets/{id} {
+      allow list: if personalOwner(resource.data);
+      allow get: if request.auth != null && (!exists(/databases/$(database)/documents/personalPets/$(id)) || personalOwner(resource.data));
+      allow delete: if personalOwner(resource.data);
+      allow create, update: if personalOwner(request.resource.data)
+        && (!exists(/databases/$(database)/documents/personalPets/$(id)) || personalOwner(resource.data))
+        && request.resource.data.keys().hasOnly(['ownerUid','name','breed','sex','birthday','welcome','birthdayEstimated','welcomeEstimated','photo','createdAt','updatedAt'])
+        && request.resource.data.keys().hasAll(['ownerUid','name','breed','sex','birthday','welcome','birthdayEstimated','welcomeEstimated','photo','createdAt','updatedAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 40
+        && request.resource.data.breed is string && request.resource.data.breed.size() <= 60
+        && request.resource.data.sex in ['','男の子','女の子','不明']
+        && petDate(request.resource.data.birthday) && petDate(request.resource.data.welcome)
+        && request.resource.data.birthdayEstimated is bool && request.resource.data.welcomeEstimated is bool
+        && request.resource.data.photo is string && request.resource.data.photo.size() <= 100000
+        && (request.resource.data.photo == '' || request.resource.data.photo.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+$'))
+        && request.resource.data.updatedAt == request.time
+        && ((!exists(/databases/$(database)/documents/personalPets/$(id)) && request.resource.data.createdAt == request.time)
+          || (exists(/databases/$(database)/documents/personalPets/$(id)) && request.resource.data.createdAt == resource.data.createdAt));
+    }
+    function petDate(d) { return d is string && (d == '' || d.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')); }
+    function validPetEvent(d) {
+      return (!('petIds' in d) || (d.petIds is list && d.petIds.size() <= 20))
+        && (!('petCareType' in d) || d.petCareType in ['','思い出','体重','薬','ワクチン','通院','トリミング'])
+        && (!('petWeightKg' in d) || d.petWeightKg == null || (d.petWeightKg is number && d.petWeightKg > 0 && d.petWeightKg <= 200))
+        && (!('petHidden' in d) || (d.petHidden is bool && (!d.petHidden || d.get('nextSendAt',null) == null)));
+    }
     // 通知の予約（2026-10-09）：送信状態・通数・処理中の印はサーバーだけが書く。
     // 本人ができるのは「予約を1件、末尾に足す」と「取り消しの申し出を1件足す」だけ（既存の行は変えられない）。
     function sendFieldsUntouched() {
@@ -68,12 +94,12 @@
     }
     match /personalEvents/{id} {
       allow read, delete: if personalOwner(resource.data);
-      allow create: if personalOwner(request.resource.data)
+      allow create: if personalOwner(request.resource.data) && validPetEvent(request.resource.data)
         && request.resource.data.createdAt == request.time
         && request.resource.data.get('sends', []) == []
         && request.resource.data.get('nextSendAt', null) == null
         && !request.resource.data.keys().hasAny(['sendCancels', 'schedulerError']);
-      allow update: if personalOwner(resource.data) && personalOwner(request.resource.data)
+      allow update: if personalOwner(resource.data) && personalOwner(request.resource.data) && validPetEvent(request.resource.data)
         && request.resource.data.createdAt == resource.data.createdAt
         && (sendFieldsUntouched() || appendsOneSend() || appendsOneCancel());
     }

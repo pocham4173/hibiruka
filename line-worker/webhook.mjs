@@ -178,12 +178,12 @@ async function listToday(db, owner, now) {
   const base = () => { let q = db.collection(eventsOf(owner.scope)); if (owner.scope === 'personal') q = q.where('ownerUid', '==', owner.uid); return q; };
   const days = Array.from({length: 31}, (_, i) => addDay(date, i));
   let rows;
-  try { rows = (await Promise.all([days.slice(0, 16), days.slice(16)].map(part => base().where('date', 'in', part).select('date', 'time', 'title', 'place', 'cat', 'kind').limit(200).get()))).flatMap(r => r.docs).map(d => d.data()); }
-  catch { rows = (await base().where('date', '==', date).select('date', 'time', 'title', 'place', 'cat', 'kind').get()).docs.map(d => d.data()); }
+  try { rows = (await Promise.all([days.slice(0, 16), days.slice(16)].map(part => base().where('date', 'in', part).select('date', 'time', 'title', 'place', 'cat', 'kind', 'petHidden').limit(200).get()))).flatMap(r => r.docs).map(d => d.data()); }
+  catch { rows = (await base().where('date', '==', date).select('date', 'time', 'title', 'place', 'cat', 'kind', 'petHidden').get()).docs.map(d => d.data()); }
   const byTime = (a, b) => (a.date + String(a.time || '')).localeCompare(b.date + String(b.time || ''));
   const name = e => `${e.title || e.place || e.cat || '記録'}${e.title && e.place ? '（' + e.place + '）' : ''}`;
-  const today = rows.filter(e => e.date === date).sort(byTime);
-  const next = rows.filter(e => e.date > date && e.kind !== 'memory' && e.kind !== 'wish').sort(byTime).slice(0, 8);
+  const today = rows.filter(e => !e.petHidden && e.date === date).sort(byTime);
+  const next = rows.filter(e => !e.petHidden && e.date > date && e.kind !== 'memory' && e.kind !== 'wish').sort(byTime).slice(0, 8);
   const parts = [today.length ? '📅 今日の予定・記録\n' + today.map(e => `${e.time ? e.time + ' ' : ''}${name(e)}`).join('\n') : '📅 今日の予定・記録はまだありません。'];
   if (next.length) parts.push('🎉 これからの予定\n' + next.map(e => { const n = daysBetween(date, e.date); return `${n === 1 ? '明日' : `あと${n}日`}｜${jpDate(e.date)}${e.time ? ' ' + e.time : ''} ${name(e)}`; }).join('\n'));
   else parts.push('これから30日の予定はまだありません。「10/12 14時 歯医者」のように送ると入ります。');
@@ -314,7 +314,7 @@ export function monthsAgoFrom(t, now) {
 }
 const monthQuick = ago => ({items: [ago + 1, ago + 2, ago + 3].filter(n => n <= 36).map(n => ({type: 'action', action: {type: 'message', label: n === 1 ? '先月' : n === 2 ? '先々月' : `${n}か月前`, text: n === 1 ? '先月のふりかえり' : n === 2 ? '先々月のふりかえり' : `${n}か月前のふりかえり`}}))});
 // 実際にあったか（アプリ index.html の isDone と同じ。中止が付いたものは、種類が何でも入れない）
-export const isDoneRecord = (e, today) => e.outcome !== 'cancelled' && (e.kind === 'memory' || (e.kind !== 'memory' && e.kind !== 'wish' && !!e.date && e.date < today && e.outcome === 'done'));
+export const isDoneRecord = (e, today) => !e.petHidden && e.outcome !== 'cancelled' && (e.kind === 'memory' || (e.kind !== 'memory' && e.kind !== 'wish' && !!e.date && e.date < today && e.outcome === 'done'));
 // 「ふりかえり」：その月の思い出をAIがまとめる
 async function lookBack(db, env, owner, monthsAgo, now) {
   if (!env.AI) return [text('ふりかえりは、いま準備中です。')];
@@ -322,7 +322,7 @@ async function lookBack(db, env, owner, monthsAgo, now) {
   const ym = `${j.getUTCFullYear()}-${pad(j.getUTCMonth() + 1)}`, label = `${j.getUTCFullYear()}年${j.getUTCMonth() + 1}月`;
   const {date: today} = jstNow(now);
   const base = () => { let q = db.collection(eventsOf(owner.scope)); if (owner.scope === 'personal') q = q.where('ownerUid', '==', owner.uid); return q; };
-  const fieldsOf = q => q.select('date', 'title', 'place', 'cat', 'memo', 'fav', 'kind', 'outcome');
+  const fieldsOf = q => q.select('date', 'title', 'place', 'cat', 'memo', 'fav', 'kind', 'outcome', 'petHidden');
   // Read only that month (two "in" queries of up to 16 days) so a look-back costs a few reads, not every record.
   const days = Array.from({length: new Date(Date.UTC(j.getUTCFullYear(), j.getUTCMonth() + 1, 0)).getUTCDate()}, (_, i) => `${ym}-${pad(i + 1)}`);
   let found;
