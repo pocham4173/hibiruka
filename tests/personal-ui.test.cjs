@@ -104,7 +104,7 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
   where:(...filter)=>query(name,[...filters,filter]),orderBy:()=>query(name,filters),
   add:async x=>{const r=ref(name+'/new'+(++serial));await r.set(x);return r;},
   get:async()=>{queries.push({name,filters});const docs=[...data.keys()].filter(p=>p.startsWith(name+'/')&&filters.every(([k,op,v])=>data.get(p)[k]===v)).map(snap);return{docs,forEach:f=>docs.forEach(f)};},
-  onSnapshot:(options,success,error)=>{const cb=typeof options==="function"?options:success;queries.push({name,filters});if(name.endsWith("Events")||name==="events"){db.recordsCallback=cb;db.recordsError=error;if(delayed)return()=>{};}cb({docs:[],metadata:{fromCache:false}});return()=>{};}
+  onSnapshot:(options,success,error)=>{const cb=typeof options==="function"?options:success;queries.push({name,filters});if(name==="personalPets")db.petsCallback=cb;if(name.endsWith("Events")||name==="events"){db.recordsCallback=cb;db.recordsError=error;if(delayed)return()=>{};}cb({docs:[],metadata:{fromCache:false}});return()=>{};}
  });
  const db={collection:name=>query(name),batch:()=>{const writes=[];return{set:(r,x)=>writes.push(()=>r.set(x)),update:(r,x)=>writes.push(()=>r.update(x)),delete:r=>writes.push(()=>r.delete()),commit:async()=>{if(db.failCommit){db.failCommit=false;throw new Error("test offline");}for(const write of writes)await write();if(db.failAcknowledgement){db.failAcknowledgement=false;throw new Error("test response lost");}}}},runTransaction:async fn=>fn({get:r=>r.get(),set:(r,x,opt)=>r.set(x,opt),update:(r,x)=>r.update(x)})};
  const user={uid:'A',getIdToken:async()=>'id-token-A',isAnonymous:!linked,...(linked?{email:'a@example.test'}:{}),linkWithCredential:async c=>{user.email=c.email;user.isAnonymous=false;calls.push(['link',user.uid]);}};
@@ -112,7 +112,7 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
  const authFn=()=>auth;authFn.Auth={Persistence:{LOCAL:'local'}};authFn.EmailAuthProvider={credential:(email,password)=>({email,password})};
  const firestore=()=>db;firestore.FieldValue={delete:()=>'__delete__',serverTimestamp:()=>1,arrayUnion:x=>[x],arrayRemove:()=>[],increment:x=>x};
  w.firebase={initializeApp:()=>{},auth:authFn,firestore};w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.console.error=(...args)=>errors.push(args);w.liff={init:async()=>{},isLoggedIn:()=>true,getProfile:async()=>({userId:'U'+'a'.repeat(32),displayName:'A'}),getAccessToken:()=>'line-access-token',isInClient:()=>false};
- for(const file of ['calendar-data.js','calendar-core.js','calendar-photo.js','calendar-photo-review.js','calendar-settings.js','business-calendar.js']) w.eval(fs.readFileSync('index/index/'+file,'utf8'));
+ for(const file of ['pet-core.js','pet-ui.js','calendar-data.js','calendar-core.js','calendar-photo.js','calendar-photo-review.js','calendar-settings.js','business-calendar.js']) w.eval(fs.readFileSync('index/index/'+file,'utf8'));
  const script=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean).pop();
  w.testNavigate=url=>calls.push(['navigate',url]);
  w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={setCalendarMonth:(year,month)=>{calMonth=new Date(year,month,1);selectView("cal");goTab("list");},addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setWishes:value=>wishes=value,setShown:value=>findShown=value,spotMapLink,setFriends:(value,self)=>{friends=value;selfFriendId=self;},config:CONFIG,setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
@@ -1520,5 +1520,46 @@ test('business: account change before transaction read prevents writing the form
   const original=a.db.runTransaction;let release;a.db.runTransaction=async fn=>{await new Promise(r=>release=r);return original(fn);};
   const pending=a.d.getElementById('businessPersonalForm').onsubmit({preventDefault(){}});a.w.firebase.auth().currentUser.uid='B';release();await pending;
   assert.equal(a.data.get('personalConfig/A').calendar,undefined);assert.match(a.d.getElementById('businessStatus').textContent,/アカウント/);
+ }finally{a.close();}
+});
+
+test('pets: quiet entry, profile days, edit existing records, multiple pets and weight validation',async()=>{
+ const a=app({returning:true});try{await a.w.h.startOwner();const {w,d}=a;
+ assert(d.getElementById('petOpen').classList.contains('hidden'));assert(d.getElementById('petFormFields').classList.contains('hidden'));assert.equal(d.querySelector('.maintabs [data-tab="pet"]'),null);
+ d.getElementById('petOpenSettings').click();d.getElementById('petAdd').click();d.getElementById('petName').value='テスト犬';d.getElementById('petBirthday').value='2020-02-29';d.getElementById('petWelcome').value='2020-04-01';
+ await d.getElementById('petProfileForm').onsubmit({preventDefault(){}});
+ const entry=[...a.data].find(([k])=>k.startsWith('personalPets/'));assert(entry);assert.equal(entry[1].ownerUid,'A');
+ const id=entry[0].split('/')[1];a.db.petsCallback({docs:[{id,data:()=>entry[1]}]});
+ assert(!d.getElementById('petOpen').classList.contains('hidden'));assert.match(d.getElementById('petProfile').textContent,/生まれてから.*日.*お迎えしてから.*日/s);
+ const old={id:'oldpet',ownerUid:'A',cat:'遊び',date:'2020-05-01',kind:'memory',title:'いっしょのお出かけ',memo:'keep',createdAt:1};a.data.set('personalEvents/oldpet',old);w.h.setEvents([old]);await w.h.editRecord('oldpet');
+ d.querySelector('#petChecks input').click();assert.match(d.getElementById('petChosen').textContent,/テスト犬/);await w.h.saveRecord();assert.deepEqual(Array.from(a.data.get('personalEvents/oldpet').petIds),[id]);assert.equal(a.data.get('personalEvents/oldpet').memo,'keep');
+ w.h.setEvents([{...a.data.get('personalEvents/oldpet'),id:'oldpet'}]);await w.h.editRecord('oldpet');assert(d.querySelector('#petChecks input').checked);
+ d.getElementById('petCareType').value='体重';d.getElementById('petWeight').value='-1';await w.h.saveRecord();assert.equal(a.data.get('personalEvents/oldpet').petCareType,'思い出');
+ d.getElementById('petWeight').value='3.8';await w.h.saveRecord();assert.equal(a.data.get('personalEvents/oldpet').petWeightKg,3.8);
+ const p2={...entry[1],name:'もう一匹'};a.db.petsCallback({docs:[{id,data:()=>entry[1]},{id:'otherpet',data:()=>p2}]});
+ w.h.setEvents([{...a.data.get('personalEvents/oldpet'),id:'oldpet'}]);await w.h.editRecord('oldpet');d.querySelector('#petChecks input[value="otherpet"]').click();await w.h.saveRecord();assert.equal(a.data.get('personalEvents/oldpet').petIds.length,1,'weights cannot be shared across dogs');
+ d.getElementById('petCareType').value='思い出';await w.h.saveRecord();assert.equal(a.data.get('personalEvents/oldpet').petIds.length,2);
+ }finally{a.close();}
+});
+test('pets: profile failure preserves input, same-ID retry, conflict and account change prevent overwrite',async()=>{
+ const a=app({returning:true});try{await a.w.h.startOwner();const d=a.d;d.getElementById('petOpenSettings').click();d.getElementById('petAdd').click();d.getElementById('petName').value='テスト';
+ const tx=a.db.runTransaction;a.db.runTransaction=async()=>{throw Error('offline');};await d.getElementById('petProfileForm').onsubmit({preventDefault(){}});assert.equal(d.getElementById('petName').value,'テスト');assert.match(d.getElementById('petStatus').textContent,/offline/);
+ a.db.runTransaction=tx;await d.getElementById('petProfileForm').onsubmit({preventDefault(){}});const [path,p]=[...a.data].find(([k])=>k.startsWith('personalPets/'));const id=path.split('/')[1];a.db.petsCallback({docs:[{id,data:()=>p}]});
+ d.getElementById('petEdit').click();d.getElementById('petName').value='edited';a.data.set(path,{...p,name:'other device'});await d.getElementById('petProfileForm').onsubmit({preventDefault(){}});assert.equal(a.data.get(path).name,'other device');assert.match(d.getElementById('petStatus').textContent,/別の画面/);
+ a.w.firebase.auth().currentUser={uid:'B'};await d.getElementById('petProfileForm').onsubmit({preventDefault(){}});assert.equal(a.data.get(path).name,'other device');
+ }finally{a.close();}
+});
+test('pets: delete and restore retain photos; pending notifications block delete; feed excludes deleted records',async()=>{
+ const a=app({returning:true});try{await a.w.h.startOwner();const e={id:'petlog',ownerUid:'A',petIds:['p'],kind:'memory',date:'2020-01-01',title:'記録',thumbs:['small'],createdAt:1};a.data.set('personalEvents/petlog',e);a.data.set('personalPhotos/petlog_0',{ownerUid:'A',eventId:'petlog',data:'full'});a.w.h.setEvents([e]);a.w.confirm=()=>true;
+ await a.w.deleteRecord('petlog');assert.equal(a.data.get('personalEvents/petlog').petHidden,true);assert.equal(a.data.get('personalPhotos/petlog_0').data,'full');
+ const snapshot=()=>a.db.recordsCallback({docs:[{id:'petlog',data:()=>a.data.get('personalEvents/petlog')}],metadata:{fromCache:false}});snapshot();a.d.getElementById('petOpenSettings').click();assert(!a.d.querySelector('[data-pet-record="petlog"]'));assert(a.d.querySelector('[data-pet-restore="petlog"]'));
+ await a.d.querySelector('[data-pet-restore="petlog"]').onclick();assert.equal(a.data.get('personalEvents/petlog').petHidden,false);snapshot();assert(a.d.querySelector('[data-pet-record="petlog"]'));
+ a.data.set('personalEvents/petlog',{...e,nextSendAt:'2099-01-01T12:00',sends:[{status:'wait'}]});await a.w.deleteRecord('petlog');assert.notEqual(a.data.get('personalEvents/petlog').petHidden,true);
+ }finally{a.close();}
+});
+
+test('pets: reopen and profile rename preserve stable assignments; account reset removes visible old data',async()=>{
+ const a=app({returning:true});try{await a.w.h.startOwner();const p={ownerUid:'A',name:'before',breed:'',sex:'',birthday:'2020-01-01',welcome:'2020-02-01',birthdayEstimated:false,welcomeEstimated:false,photo:'',createdAt:1,updatedAt:1};a.data.set('personalPets/p',p);a.db.petsCallback({docs:[{id:'p',data:()=>p}]});a.d.getElementById('petOpenSettings').click();a.d.getElementById('petSelect').value='p';a.d.getElementById('petSelect').onchange();a.d.getElementById('petEdit').click();a.d.getElementById('petName').value='after';a.d.getElementById('petWelcome').value='2020-03-01';await a.d.getElementById('petProfileForm').onsubmit({preventDefault(){}});assert.equal(a.data.get('personalPets/p').name,'after');
+ await a.w.h.startOwner();assert.doesNotMatch(a.d.getElementById('petProfile').textContent,/before|after/);a.db.petsCallback({docs:[{id:'p',data:()=>a.data.get('personalPets/p')}]});a.w.h.setEvents([{id:'e',kind:'memory',date:'2020-05-01',petIds:['p'],title:'saved'}]);a.d.getElementById('petOpenSettings').click();a.d.getElementById('petSelect').value='p';a.d.getElementById('petSelect').onchange();assert.match(a.d.getElementById('petRecords').textContent,/saved.*after/s);assert.match(a.d.getElementById('petProfile').textContent,/2020-03-01/);
  }finally{a.close();}
 });

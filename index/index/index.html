@@ -599,6 +599,7 @@
   .ad-note { font-size: 12px; color: var(--muted); margin: 0 0 10px; line-height: 1.6; }
   .shop-route { margin: 12px 0 0; } .shop-route .note { margin: 6px 0 0; font-size: 12px; }
   .terms-link { margin:8px 0 0; font-size:13px; } .terms-link a { color:var(--rose, #a9536a); font-weight:700; }
+.pet-panel .back-link,.pet-settings .back-link,#petOpen{border:0;background:none;color:var(--ink);padding:8px 0;text-align:left;font:inherit;cursor:pointer}.pet-settings{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:8px 0 18px}.pet-panel{max-width:740px;margin:12px auto}.pet-actions{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}.pet-avatar{width:80px;height:80px;object-fit:cover;border-radius:50%;flex-shrink:0}.pet-placeholder{display:grid;place-items:center;background:#f3e9df;font-size:32px}.pet-identity{display:flex;align-items:center;gap:16px;margin-top:20px}.pet-identity h3,.pet-identity p{margin:4px 0}.pet-days{display:grid;grid-template-columns:1fr 1fr;gap:12px}.pet-days p{background:#f8f5ef;padding:12px;border-radius:14px;font-size:14px}.pet-days strong,.pet-days small,.pet-record small{display:block}.pet-days strong{font-size:22px;margin:8px 0}.pet-record{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:14px 0;border-bottom:1px solid #eee}.pet-record>div{min-width:0;overflow-wrap:anywhere}.pet-record small{font-size:12px;color:#777;margin-top:5px}.pet-record button{flex-shrink:0}.pet-check{display:inline-flex;align-items:center;gap:8px;padding:8px}.pet-check input{width:20px!important;height:20px}#petFormFields{margin:12px 0;padding:12px;background:#faf7f1;border-radius:12px}#petProfileForm input,#petProfileForm select{max-width:100%;box-sizing:border-box}#petProfileForm .lbl{margin-top:16px}#petProfileForm input[type=file]{font-size:14px}#petStatus:empty{display:none}
 </style>
 <link rel="stylesheet" href="./business-calendar.css?v=20261013-business">
 </head>
@@ -1279,6 +1280,8 @@
   <button type="button" class="btn ghost" id="calendarClose">あとで・閉じる</button>
   <p class="note">祝日と会社の休みは別です。祝日データ：<a href="https://www8.cao.go.jp/chosei/shukujitsu/gaiyou.html" target="_blank" rel="noopener">内閣府</a>。六曜は日本の旧暦に基づく参考表示です。</p>
 </div></div>
+<script src="./pet-core.js?v=20261015"></script>
+<script src="./pet-ui.js?v=20261015"></script>
 <script src="./business-calendar.js?v=20261013-leisure"></script>
 <script src="./calendar-data.js"></script>
 <script src="./calendar-core.js?v=20261013-business"></script>
@@ -1359,7 +1362,7 @@ function isPlan(e) { return e.kind !== "memory" && e.date >= todayStr(); }
 function isPastPlan(e) { return e.kind !== "memory" && e.kind !== "wish" && !!e.date && e.date < todayStr(); }
 // 実際にあったこと＝思い出として記録したもの、または予定で「行った」を選んだもの（一覧・地図・ふりかえり・LINEのまとめで同じ判定）。
 // 「中止」が付いた記録は、種類が何であっても実施済みにしない（以前の版で種類だけ思い出に変わった記録も含む）
-function isDone(e) { return e.outcome !== "cancelled" && (e.kind === "memory" || (isPastPlan(e) && e.outcome === "done")); }
+function isDone(e) { return !e.petHidden && e.outcome !== "cancelled" && (e.kind === "memory" || (isPastPlan(e) && e.outcome === "done")); }
 // 行きたいリストの状態は、つながっている予定と、同じ場所の実施済みの記録から決める
 const samePlace = (a, b) => !!a && !!b && String(a).trim() === String(b).trim();
 function wishStatusFor(w, evs) {
@@ -1496,6 +1499,7 @@ async function startInvite() {
    自分側：ログインなし（この端末をリエさん専用にする）
    ========================================================= */
 let myUid = null;
+let petTrash = [];
 let friends = [], events = [], wishes = [], cats = DEFAULT_CATS.slice(), people = [], ownerName = CONFIG.defaultOwnerName;
 let unsub = [];
 let selfFriendId = "", selfConnecting = false;
@@ -1599,7 +1603,7 @@ function enterApp() {
   calendarUI.reset(); calendarConfig = HibirukaCalendar.cleanConfig(null); calendarLoaded = false;
   renderCalendarSetup();
   unsub.forEach(stop=>stop()); unsub=[];
-  recordsState = "loading"; events = [];
+  recordsState = "loading"; events = []; petTrash = []; petUI.start();
   show("app");
   setupAccount();
   $("legacyTransfer").classList.toggle("hidden", personalMode);
@@ -1657,7 +1661,8 @@ function watchRecords() {
     if (!cached || s.docs.length) {
       const all = s.docs.map(d => ({id:d.id,...d.data()}));
       // 「行きたい」スポットは記録と同じ場所に保存するが、カレンダーや思い出には出さない
-      events = all.filter(e => e.kind !== "wish"); wishes = all.filter(e => e.kind === "wish");
+      petTrash = all.filter(e => e.petHidden === true);
+      events = all.filter(e => e.kind !== "wish" && !e.petHidden); wishes = all.filter(e => e.kind === "wish" && !e.petHidden);
     }
     recordsState = cached ? "cached" : "ready";
     renderList(); renderFirstRecordGuide(); renderWishes();
@@ -1801,7 +1806,7 @@ function setupTabs() {
 function goTab(t) {
   const active = t === "rec" ? "list" : t === "list" && ["mem", "fav", "map"].includes(view) ? "mem" : t;
   document.querySelectorAll(".maintabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === active));
-  ["rec", "list", "find", "set"].forEach(x => $("tab-" + x).classList.toggle("hidden", x !== t));
+  ["rec", "list", "find", "set", "pet"].forEach(x => $("tab-" + x).classList.toggle("hidden", x !== t));
   window.scrollTo(0, 0);
   renderCourseBar();
 }
@@ -1862,6 +1867,7 @@ function resetForm() {
   $("saveBtn").textContent = "この内容で記録する";
   $("cancelEditBtn").classList.add("hidden");
   $("recEyebrow").textContent = "記録の種類を選ぶ";
+  petUI.setForm();
   renderCats(); renderWho(); renderPhotos(); updateSaveNote(); updateMapLink();
 }
 function renderCats() {
@@ -2764,6 +2770,7 @@ function renderWishes() {
     if (w.status !== "scheduled" || !w.planId) return;
     const plan = events.find(e => e.id === w.planId);
     if (!plan) {
+      if (petTrash.some(e=>e.id===w.planId)) return; // 復元できる削除では、関連付けを壊さない
       // 予定が見つからない：サーバーから全部読み終わったとき（読み込み中・端末の控えだけのときは直さない）だけ、消えた予定として直す
       if (recordsState !== "ready" || wishFixing.has(w.id)) return;
       const st = wishStatusFor({ ...w, planId: "" }, events);
@@ -3144,6 +3151,7 @@ async function saveRecord() {
     memo: $("fMemo").value.trim(), link: $("fLink").value.trim(), fav: form.fav,
     thumbs: form.photos.map(p => p.thumb), updatedAt: TS()
   };
+  if (personalMode) { try { Object.assign(data, petUI.fields()); if(data.petIds.length && kindSel === "memory" && date > todayStr()) throw Error("済ませた記録は、今日までの日付にしてください"); } catch(e) { toast(e.message); return; } }
   // 場所の座標は、写真やLINEから入れた場所のままのときだけ残す（直したら消す）
   const geo = form.geo && form.geo.place === data.place ? form.geo : null;
   if (geo) { data.lat = geo.lat; data.lng = geo.lng; }
@@ -3211,6 +3219,7 @@ async function editRecord(id) {
   form.photos = (e.thumbs || []).map(t => ({ thumb: t, full: null }));
   form.geo = Number.isFinite(e.lat) && Number.isFinite(e.lng) ? { lat: e.lat, lng: e.lng, place: e.place || "" } : null;
   form.dateTouched = true;
+  petUI.setForm(e);
   // 種類は保存されているまま（日が過ぎた予定を開いても「思い出」に変えない。行った／中止の結果も変えない）
   form.orig = { kind: e.kind, date: e.date, outcome: e.outcome };
   form.shop = e.shop && hpShopUrl(e.shop.url) ? { ...e.shop } : null;
@@ -3236,6 +3245,12 @@ async function editRecord(id) {
 }
 async function deleteRecord(id) {
   const e = events.find(x => x.id === id); if (!e) return;
+  if (personalMode && e.petIds?.length) {
+    if (!confirm(`「${e.title || e.place || '記録'}」を削除しますか？「うちの子」から元に戻せます。`)) return;
+    try { await setPetHidden(id,true); closeSheets(); toast('削除しました。「うちの子」の「削除した記録を戻す」から戻せます',5000); }
+    catch(error) { toast(error.message||'削除できませんでした'); }
+    return;
+  }
   if (!confirm(`「${e.title || e.place || catLabel(e.cat)}」を消しますか？`)) return;
   try {
     const ps = await ownedQuery("photos").where("eventId", "==", id).get();
@@ -3404,7 +3419,7 @@ function card(e) {
     <div class="body">
       <div class="ttl">${icon(c.icon)}<span>${esc(ttl)}</span>${e.fav ? `<span class="fav-mark">♥</span>` : ""}</div>
       ${meta ? `<div class="meta">${meta}</div>` : ""}
-      <div class="tags"><span class="tag cat">${esc(catLabel(e.cat))}</span>${e.source === "line" ? `<span class="tag">LINEから</span>` : ""}${(e.who || []).map(n => `<span class="tag">${esc(n)}</span>`).join("")}</div>
+      <div class="tags">${e.petIds?.length?`<span class="tag">🐾 ${esc(petUI.names(e.petIds))}</span>`:""}<span class="tag cat">${esc(catLabel(e.cat))}</span>${e.source === "line" ? `<span class="tag">LINEから</span>` : ""}${(e.who || []).map(n => `<span class="tag">${esc(n)}</span>`).join("")}</div>
       ${(e.thumbs || []).length ? `<div class="thumbs">${e.thumbs.slice(0, 4).map(s => `<img src="${s}" alt="">`).join("")}</div>` : ""}
       ${outcomeButtons(e)}
       ${sendRows(e)}
@@ -3458,6 +3473,7 @@ function exportCsv() {
   toast(`${rows.length}件を書き出しました`);
 }
 function renderList() {
+  petUI.render();
   renderBackupHint();
   renderCountdown();
   if (!$("listBox") || !calMonth) return;
@@ -3595,6 +3611,7 @@ async function openDetail(id) {
     <div class="detail-photos" id="dPhotos">${(e.thumbs || []).map(s => `<img src="${s}" alt="">`).join("")}</div>
     <div class="ev-mini" style="margin-top:8px">📅 ${fmtDate(e.date)}${e.time ? " " + esc(e.time) : ""}
       ${e.place ? `<br>📍 <a href="${placeUrl(e)}" target="_blank" rel="noopener">${esc(e.place)}</a>` : ""}${(e.who || []).length ? `<br>👥 ${e.who.map(esc).join("・")}` : ""}
+      ${e.petIds?.length ? `<br>🐾 ${esc(petUI.names(e.petIds))}${e.petCareType ? "・"+esc(e.petCareType) : ""}${Number.isFinite(e.petWeightKg)?"・"+e.petWeightKg+" kg":""}` : ""}
       ${e.memo ? `<br>📝 ${esc(e.memo).replace(/\n/g, "<br>")}` : ""}
       ${e.link ? `<br>🔗 <a href="${esc(e.link)}" target="_blank" rel="noopener">${esc(e.link)}</a>` : ""}</div>
     ${plan ? shopRoute(e) : ""}
@@ -4246,6 +4263,42 @@ function entryParams(search) {
   }
   return params;
 }
+
+/* うちの子：本人の記録だけ。通常のタブは増やさない。 */
+async function setPetHidden(id,hidden) {
+  const uid=myUid;if(!personalMode||!uid||auth.currentUser?.uid!==uid)throw Error('自分の記録を開き直してください');
+  const ref=db.collection('personalEvents').doc(id);
+  await db.runTransaction(async tx=>{
+    const snap=await tx.get(ref),e=snap.exists?snap.data():null;
+    if(myUid!==uid||auth.currentUser?.uid!==uid||!e||e.ownerUid!==uid||!e.petIds?.length)throw Error('記録を開き直してください');
+    if(hidden&&(e.nextSendAt||(e.sends||[]).some(x=>x.status==='wait'||x.status==='sending')))throw Error('先に、この予定のお知らせ予約を取り消してください');
+    tx.update(ref,{petHidden:hidden,updatedAt:TS()});
+  });
+}
+const petUI=HibirukaPetUI.create({
+  personal:()=>personalMode, today:todayStr, events:()=>events, trash:()=>petTrash, done:isDone,
+  show:()=>goTab('pet'),back:()=>goTab('list'),edit:editRecord,detail:openDetail,
+  newRecord(kind){resetForm();form.cat=cats[0]?.name||'遊び';$('fKind').value=kind;renderCats();updateSaveNote();goTab('rec');},
+  newId:()=>db.collection('personalPets').doc().id,
+  watch(ok,fail){const uid=myUid;return db.collection('personalPets').where('ownerUid','==',uid).onSnapshot(s=>{if(myUid===uid)ok(s.docs.map(d=>({id:d.id,...d.data()})));},fail);},
+  async saveProfile(id,p,before){
+    const uid=myUid,ref=db.collection('personalPets').doc(id);
+    await db.runTransaction(async tx=>{
+      const snap=await tx.get(ref);
+      if(!personalMode||myUid!==uid||auth.currentUser?.uid!==uid)throw Error('アカウントが変わりました。開き直してください');
+      if(snap.exists){const old={id,...snap.data()};if(old.ownerUid!==uid)throw Error('保存できません');
+        const same=Object.keys(p).every(k=>old[k]===p[k]);
+        if(same)return;
+        if(!before||JSON.stringify(old)!==before)throw Error('別の画面で変更されました。プロフィールを開き直してください');
+        tx.update(ref,{...p,updatedAt:TS()});
+      }else{if(before)throw Error('プロフィールを開き直してください');tx.set(ref,{...p,ownerUid:uid,createdAt:TS(),updatedAt:TS()});}
+    });
+  },
+  async photo(file){
+    if(!file.type.startsWith('image/')||file.size>20*1024*1024)throw Error('image');
+    const url=URL.createObjectURL(file);try{const img=new Image();img.src=url;await img.decode();const c=document.createElement('canvas');c.width=c.height=240;const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,240,240);const size=Math.min(img.naturalWidth,img.naturalHeight);ctx.drawImage(img,(img.naturalWidth-size)/2,(img.naturalHeight-size)/2,size,size,0,0,240,240);return c.toDataURL('image/jpeg',.75);}finally{URL.revokeObjectURL(url);}
+  }, restore:id=>setPetHidden(id,false)
+});
 
 /* ---------- 入口 ---------- */
 const qs = entryParams(location.search);
