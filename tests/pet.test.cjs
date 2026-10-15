@@ -14,3 +14,13 @@ test('pet weight belongs to exactly one dog, while memories support multiple dog
  assert.deepEqual(P.fields(['a','b','a'],'思い出',''),{petIds:['a','b'],petCareType:'思い出',petWeightKg:null});assert.equal(P.fields([],'思い出','').petCareType,'');
  for(const ids of [[],['a','b']])assert.throws(()=>P.fields(ids,'体重',3.8));for(const w of ['',0,-1,'bad',201])assert.throws(()=>P.fields(['a'],'体重',w));assert.equal(P.fields(['a'],'体重','3.8').petWeightKg,3.8);
 });
+
+test('pet durations include full years and months for both milestones',()=>{
+ assert.equal(P.duration('2020-09-30','2026-10-15'),'6年0か月');
+ assert.equal(P.duration('2020-01-25','2026-10-15'),'6年8か月');
+ assert.equal(P.duration('2020-02-29','2020-02-29'),'0年0か月');
+ assert.equal(P.duration('2020-02-29','2021-02-28'),'0年11か月');
+ assert.equal(P.duration('2020-02-29','2021-03-01'),'1年0か月');
+ assert.equal(P.duration('2020-01-31','2020-03-01'),'0年1か月');
+ for(const from of ['', '2021-02-29', '2026-10-16'])assert.equal(P.duration(from,'2026-10-15'),'');
+});
