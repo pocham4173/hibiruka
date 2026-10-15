@@ -218,3 +218,12 @@ test('pet profiles and records belong only to the owner; malformed profiles and 
  await env.withSecurityRulesDisabled(async c=>{await updateDoc(doc(c.firestore(),'personalEvents/pet-log'),{nextSendAt:'2099-01-01T12:00'});});
  await assertFails(updateDoc(doc(A,'personalEvents/pet-log'),{petHidden:true}));
 });
+
+ test('legacy pets use legacy membership only and never expose personal pet profiles',async()=>{
+ await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();await setDoc(doc(d,'config/secret'),{pinHash:'legacy-secret'});await setDoc(doc(d,'members/legacy-pet-one'),{pinHash:'legacy-secret'});await setDoc(doc(d,'members/legacy-pet-two'),{pinHash:'legacy-secret'});await setDoc(doc(d,'members/legacy-pet-wrong'),{pinHash:'wrong'});});
+ const L=env.authenticatedContext('legacy-pet-one').firestore(),M=env.authenticatedContext('legacy-pet-two').firestore(),W=env.authenticatedContext('legacy-pet-wrong').firestore();
+ const p={ownerUid:'legacy-pet-one',name:'shared test',breed:'',sex:'',birthday:'2020-01-01',welcome:'',birthdayEstimated:false,welcomeEstimated:false,photo:'',createdAt:serverTimestamp(),updatedAt:serverTimestamp()};
+ await assertSucceeds(setDoc(doc(L,'pets/shared'),p));await assertSucceeds(getDocs(collection(M,'pets')));await assertSucceeds(updateDoc(doc(M,'pets/shared'),{name:'renamed',updatedAt:serverTimestamp()}));
+ for(const d of [A,B,W,env.unauthenticatedContext().firestore()]){await assertFails(getDoc(doc(d,'pets/shared')));await assertFails(getDocs(collection(d,'pets')));await assertFails(setDoc(doc(d,'pets/new'),p));await assertFails(updateDoc(doc(d,'pets/shared'),{name:'stolen',updatedAt:serverTimestamp()}));await assertFails(deleteDoc(doc(d,'pets/shared')));}
+ await assertFails(getDoc(doc(L,'personalPets/pet-A')));await assertFails(updateDoc(doc(M,'pets/shared'),{ownerUid:'legacy-pet-two',updatedAt:serverTimestamp()}));await assertFails(updateDoc(doc(M,'pets/shared'),{name:'',updatedAt:serverTimestamp()}));await assertSucceeds(deleteDoc(doc(M,'pets/shared')));
+ });
