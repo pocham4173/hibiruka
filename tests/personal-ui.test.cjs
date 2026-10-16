@@ -91,7 +91,7 @@ test('calendar: changing the photo year invalidates its draft and confirmed empt
  }finally{a.close();}
 });
 
-function app({url='?start=1',legacy=false,linked=false,returning=false,invite=false, delayed=false}={}){
+function app({url='?start=1',legacy=false,linked=false,returning=false,invite=false, delayed=false, fullEntry=false, withoutLiff=false}={}){
  const dom=new JSDOM(html,{url:'https://example.test/index/'+url,runScripts:'outside-only'}),w=dom.window,d=w.document;
  const data=new Map(),calls=[],queries=[],errors=[];let serial=0;
  if(legacy)data.set('members/A',{pinHash:'test'});
@@ -113,9 +113,10 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
  const firestore=()=>db;firestore.FieldValue={delete:()=>'__delete__',serverTimestamp:()=>1,arrayUnion:x=>[x],arrayRemove:()=>[],increment:x=>x};
  w.firebase={initializeApp:()=>{},auth:authFn,firestore};w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.console.error=(...args)=>errors.push(args);w.liff={init:async()=>{},isLoggedIn:()=>true,getProfile:async()=>({userId:'U'+'a'.repeat(32),displayName:'A'}),getAccessToken:()=>'line-access-token',isInClient:()=>false};
  for(const file of ['purchase-core.js','purchase-ui.js','pet-core.js','pet-ui.js','calendar-data.js','calendar-core.js','calendar-photo.js','calendar-photo-review.js','calendar-settings.js','business-calendar.js']) w.eval(fs.readFileSync('index/index/'+file,'utf8'));
+ if(withoutLiff)delete w.liff;
  const script=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean).pop();
  w.testNavigate=url=>calls.push(['navigate',url]);
- w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={purchaseUI,changePurchase,isPlan,filtered,openSend,addSend,setCalendarMonth:(year,month)=>{calMonth=new Date(year,month,1);selectView("cal");goTab("list");},addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setWishes:value=>wishes=value,setShown:value=>findShown=value,spotMapLink,setFriends:(value,self)=>{friends=value;selfFriendId=self;},config:CONFIG,setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
+ w.eval((fullEntry?script:script.slice(0,script.indexOf('/* ---------- 入口 ---------- */'))).replaceAll('location.assign(', 'globalThis.testNavigate(')+(fullEntry?'':'\nconst qs=new URLSearchParams(location.search);')+'\nglobalThis.h={ensureLiffSdk,purchaseUI,changePurchase,isPlan,filtered,openSend,addSend,setCalendarMonth:(year,month)=>{calMonth=new Date(year,month,1);selectView("cal");goTab("list");},addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setWishes:value=>wishes=value,setShown:value=>findShown=value,spotMapLink,setFriends:(value,self)=>{friends=value;selfFriendId=self;},config:CONFIG,setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
  return{w,d,data,calls,queries,db,errors,close:()=>{w.close();assert.equal(errors.length,0,errors.map(String).join(' '));}};
 }
 test('new user gets a private profile and all list queries are owner-filtered',async()=>{
@@ -1663,5 +1664,48 @@ test('purchase: stale notification dialog cannot reserve after a purchase was st
   await a.w.h.addSend(false);
   assert.equal(a.data.get('personalEvents/p').sends.length,0);
   assert.match(a.errors.map(String).join(' '),/買い物の予定が変更/);a.errors.length=0;
+ }finally{a.close();}
+});
+
+test('startup: full entry opens existing records without loading or waiting for LINE',async()=>{
+ assert(![...html.matchAll(/<script\b[^>]*src=["']([^"']+)/g)].some(m=>m[1].includes('line-scdn.net')));
+ const a=app({returning:true,fullEntry:true,withoutLiff:true,url:''});try{
+  await tick();
+  assert(a.d.getElementById('loading').classList.contains('hidden'));
+  assert(!a.d.getElementById('app').classList.contains('hidden'));
+  assert.equal(a.w.liff,undefined);
+  assert.equal(a.d.querySelector('script[src*="line-scdn.net"]'),null);
+  assert(!a.calls.some(c=>c[0]==='anonymous'));
+  assert(!a.calls.some(c=>c[0]==='set'));
+ }finally{a.close();}
+});
+test('startup: recovery works before external downloads and never exposes retry after success',()=>{
+ const dom=new JSDOM(html,{url:'https://example.test/',runScripts:'outside-only'}),w=dom.window,d=w.document;
+ try{
+  const tasks=[];w.setTimeout=(fn,ms)=>{tasks.push({fn,ms});return 1;};
+  const recovery=d.getElementById('startupRecovery');
+  assert(recovery.compareDocumentPosition(d.querySelector('script[src*="pet-core"]')) & w.Node.DOCUMENT_POSITION_FOLLOWING);
+  w.eval(recovery.textContent);assert.equal(tasks[0].ms,8000);tasks[0].fn();
+  assert(!d.getElementById('slowMsg').classList.contains('hidden'));
+  assert.equal(typeof d.getElementById('startupRetry').onclick,'function');
+  assert.match(d.getElementById('startupRetry').onclick.toString(),/location.reload/);
+  d.getElementById('slowMsg').classList.add('hidden');w.dispatchEvent(new w.Event('error'));
+  assert(!d.getElementById('slowMsg').classList.contains('hidden'));
+  d.getElementById('loading').classList.add('hidden');d.getElementById('slowMsg').classList.add('hidden');tasks[0].fn();
+  w.dispatchEvent(new w.Event('unhandledrejection'));assert(d.getElementById('slowMsg').classList.contains('hidden'));
+ }finally{w.close();}
+});
+test('startup: LINE download is shared, bounded and retryable after a timeout',async()=>{
+ const a=app({withoutLiff:true});try{
+  const tasks=[];const set=a.w.setTimeout,clear=a.w.clearTimeout;
+  a.w.setTimeout=(fn,ms)=>{tasks.push({fn,ms});return 123;};a.w.clearTimeout=()=>{};
+  const first=a.w.h.ensureLiffSdk();assert.equal(a.w.h.ensureLiffSdk(),first);
+  assert.equal(a.d.querySelectorAll('script[src*="line-scdn.net"]').length,1);
+  assert.equal(tasks[0].ms,10000);
+  const rejected=assert.rejects(first,/LINEを読み込めません/);tasks[0].fn();await rejected;
+  assert.equal(a.d.querySelectorAll('script[src*="line-scdn.net"]').length,0);
+  const retry=a.w.h.ensureLiffSdk();a.w.liff={init:async()=>{}};
+  a.d.querySelector('script[src*="line-scdn.net"]').onload();assert.equal(await retry,a.w.liff);
+  a.w.setTimeout=set;a.w.clearTimeout=clear;
  }finally{a.close();}
 });
