@@ -112,10 +112,10 @@ function app({url='?start=1',legacy=false,linked=false,returning=false,invite=fa
  const authFn=()=>auth;authFn.Auth={Persistence:{LOCAL:'local'}};authFn.EmailAuthProvider={credential:(email,password)=>({email,password})};
  const firestore=()=>db;firestore.FieldValue={delete:()=>'__delete__',serverTimestamp:()=>1,arrayUnion:x=>[x],arrayRemove:()=>[],increment:x=>x};
  w.firebase={initializeApp:()=>{},auth:authFn,firestore};w.scrollTo=()=>{};w.HTMLElement.prototype.scrollIntoView=()=>{};w.console.error=(...args)=>errors.push(args);w.liff={init:async()=>{},isLoggedIn:()=>true,getProfile:async()=>({userId:'U'+'a'.repeat(32),displayName:'A'}),getAccessToken:()=>'line-access-token',isInClient:()=>false};
- for(const file of ['pet-core.js','pet-ui.js','calendar-data.js','calendar-core.js','calendar-photo.js','calendar-photo-review.js','calendar-settings.js','business-calendar.js']) w.eval(fs.readFileSync('index/index/'+file,'utf8'));
+ for(const file of ['purchase-core.js','purchase-ui.js','pet-core.js','pet-ui.js','calendar-data.js','calendar-core.js','calendar-photo.js','calendar-photo-review.js','calendar-settings.js','business-calendar.js']) w.eval(fs.readFileSync('index/index/'+file,'utf8'));
  const script=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m=>m[1]).filter(Boolean).pop();
  w.testNavigate=url=>calls.push(['navigate',url]);
- w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={setCalendarMonth:(year,month)=>{calMonth=new Date(year,month,1);selectView("cal");goTab("list");},addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setWishes:value=>wishes=value,setShown:value=>findShown=value,spotMapLink,setFriends:(value,self)=>{friends=value;selfFriendId=self;},config:CONFIG,setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
+ w.eval(script.slice(0,script.indexOf('/* ---------- 入口 ---------- */')).replaceAll('location.assign(', 'globalThis.testNavigate(')+'\nconst qs=new URLSearchParams(location.search);globalThis.h={purchaseUI,changePurchase,isPlan,filtered,openSend,addSend,setCalendarMonth:(year,month)=>{calMonth=new Date(year,month,1);selectView("cal");goTab("list");},addPhotos,setShrink:fn=>shrink=fn,get draftId(){return draftRecordId},editRecord,setEvents:value=>events=value,setWishes:value=>wishes=value,setShown:value=>findShown=value,spotMapLink,setFriends:(value,self)=>{friends=value;selfFriendId=self;},config:CONFIG,setPhotos:value=>form.photos=value,startLogin,entryParams,startOwner,startInvite,saveRecord,createInvite,prepareSelfLine,setupAccount,recordCollection,appRef,get personal(){return personalMode}};');
  return{w,d,data,calls,queries,db,errors,close:()=>{w.close();assert.equal(errors.length,0,errors.map(String).join(' '));}};
 }
 test('new user gets a private profile and all list queries are owner-filtered',async()=>{
@@ -1607,5 +1607,61 @@ test('pets: folds retain profiles, suppress closed photos, persist per account a
  d.getElementById('petOpen').click();assert.equal(d.querySelector('[data-pet-fold="a"]').getAttribute('aria-expanded'),'false');d.querySelector('[data-pet-fold="a"]').click();await w.h.startOwner();snapshot();assert.equal(d.querySelector('[data-pet-fold="a"]').getAttribute('aria-expanded'),'true');
  w.firebase.auth().currentUser.uid='B';await w.h.startOwner();snapshot();assert.equal(d.getElementById('petOpen').getAttribute('aria-expanded'),'false');assert.equal(d.querySelector('[data-pet-fold="a"]').getAttribute('aria-expanded'),'false');
  assert(![...a.data.keys()].some(k=>/^(personalPets|pets|personalEvents|events)\//.test(k)),'display preferences must not write profile or record data');
+ }finally{a.close();}
+});
+
+test('purchase: register, reopen, calendar display, receive, next month, pause and resume',async()=>{
+ const a=app({returning:true});try{
+  await a.w.h.startOwner();const $=id=>a.d.getElementById(id);a.w.confirm=()=>true;
+  $('purchaseOpen').click();$('purchaseNew').click();
+  $('purchaseTitle').value='定期フード';$('purchaseUrl').value='https://www.amazon.co.jp/dp/EXAMPLE';$('purchaseDate').value='2027-01-31';$('purchaseRecurring').checked=true;$('purchaseEvery').value='1';$('purchaseUnit').value='month';
+  $('purchaseForm').onsubmit({preventDefault(){}});await tick();
+  const path=[...a.data.keys()].find(p=>p.startsWith('personalEvents/'));assert(path);
+  const publish=()=>{const docs=[...a.data.entries()].filter(([p])=>p.startsWith('personalEvents/')).map(([p,e])=>({id:p.split('/')[1],data:()=>e}));a.db.recordsCallback({docs,metadata:{fromCache:false}});};
+  publish();const original={id:path.split('/')[1],...a.data.get(path)};
+  assert.equal(original.ownerUid,'A');assert.equal(original.purchase.every,1);assert.equal(original.sends.length,0);
+  a.w.h.setCalendarMonth(2027,0);assert.match($('calGrid').querySelector('[data-d="2027-01-31"]').getAttribute('aria-label'),/1件/);
+  await a.w.h.editRecord(original.id);assert.equal($('purchaseTitle').value,'定期フード');assert(!$('tab-purchase').classList.contains('hidden'));
+  $('purchaseCancel').click();a.d.querySelector('[data-purchase-received]').click();await tick();publish();
+  const all=[...a.data.entries()].filter(([p])=>p.startsWith('personalEvents/'));assert.equal(all.length,2);assert.equal(a.data.get(path).kind,'memory');
+  const [nextPath,next]=all.find(([p])=>p!==path);assert.equal(next.date,'2027-02-28');assert.equal(next.purchase.anchorDay,31);assert.equal(next.sends.length,0);
+  await assert.rejects(a.w.h.changePurchase(original,'receive'),/変更/);assert.equal([...a.data.keys()].filter(p=>p.startsWith('personalEvents/')).length,2);
+  a.d.querySelector('[data-purchase-pause]').click();await tick();publish();assert.equal(a.data.get(nextPath).purchase.status,'paused');
+  assert(!a.w.h.filtered().some(e=>e.id===nextPath.split('/')[1]));
+  a.d.querySelector('[data-purchase-resume]').click();$('purchaseDate').value='2027-03-10';$('purchaseForm').onsubmit({preventDefault(){}});await tick();publish();
+  assert.equal(a.data.get(nextPath).date,'2027-03-10');assert.equal(a.data.get(nextPath).purchase.status,'active');
+ }finally{a.close();}
+});
+test('purchase: pending cancellation blocks stopping or changing the date and a different owner cannot change it',async()=>{
+ const a=app({returning:true});try{
+  await a.w.h.startOwner();
+  const e={id:'p',ownerUid:'A',...a.w.HibirukaPurchase.fields({title:'フード',date:'2027-01-31',recurring:true,every:1,unit:'month'}),sends:[{id:'send1',status:'wait'}],sendCancels:['send1'],nextSendAt:'2027-01-30T09:00'};
+  a.data.set('personalEvents/p',e);
+  await assert.rejects(a.w.h.changePurchase(e,'pause'),/取り消し完了/);
+  assert.equal(a.data.get('personalEvents/p').purchase.status,'active');
+  a.data.set('personalEvents/p',{...e,ownerUid:'B',sends:[],nextSendAt:null});
+  await assert.rejects(a.w.h.changePurchase(e,'pause'),/自分の記録/);
+ }finally{a.close();}
+});
+test('purchase: share link is received as an unsaved draft and title HTML stays text',async()=>{
+ const a=app({returning:true,url:'?start=1&share_text='+encodeURIComponent('<img src=x onerror=alert(1)> https://amzn.asia/d/example')});try{
+  await a.w.h.startOwner();const $=id=>a.d.getElementById(id);
+  assert.equal($('purchaseUrl').value,'https://amzn.asia/d/example');assert.match($('purchaseTitle').value,/<img/);
+  assert(!$('purchaseForm').classList.contains('hidden'));assert.equal([...a.data.keys()].filter(p=>p.startsWith('personalEvents/')).length,0);
+  assert(!a.w.location.search.includes('share_text'));assert.equal($('purchaseForm').querySelectorAll('img').length,0);
+ }finally{a.close();}
+});
+test('purchase: stale notification dialog cannot reserve after a purchase was stopped',async()=>{
+ const a=app({returning:true});try{
+  await a.w.h.startOwner();a.w.fetch=async()=>({ok:true,json:async()=>({left:100})});
+  const e={id:'p',ownerUid:'A',...a.w.HibirukaPurchase.fields({title:'フード',date:'2027-01-31',deadline:'2027-01-20'}),sends:[],nextSendAt:null};
+  a.w.h.setEvents([e]);a.data.set('personalEvents/p',e);
+  a.w.h.setFriends([{id:'f',status:'joined',lineUserId:'U'+'a'.repeat(32),name:'自分'}],'f');
+  a.w.h.openSend('p',e);assert.match(a.d.getElementById('sQuick').textContent,/変更期限の前日/);
+  await tick();a.d.querySelector('#sWho [data-id="f"]').click();
+  await a.w.h.changePurchase(e,'pause');
+  await a.w.h.addSend(false);
+  assert.equal(a.data.get('personalEvents/p').sends.length,0);
+  assert.match(a.errors.map(String).join(' '),/買い物の予定が変更/);a.errors.length=0;
  }finally{a.close();}
 });
