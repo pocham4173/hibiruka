@@ -8,10 +8,12 @@ try{const saved=JSON.parse(sessionStorage.getItem(draftKey));if(saved&&Date.now(
 const panel=document.createElement('section');panel.id='tab-purchase';panel.className='wrap hidden';
 panel.innerHTML=`<button type="button" class="btn sub" id="purchaseBack" style="margin-top:16px">‹ 予定・記録へ</button>
 <div class="card"><h2>🛍️ 買い物・定期購入</h2><p class="note">次のお届け日をカレンダーへ。購入先の注文・解約は購入先で手続きしてください。</p>
+<p class="note">Amazon・楽天などの商品リンクを貼り付けて登録できます。事前の設定はいりません。</p>
 <p class="note" id="purchaseScope"></p><button type="button" class="btn" id="purchaseNew">＋ 商品を登録</button>
 <form id="purchaseForm" class="hidden" style="margin-top:20px">
 <h3 id="purchaseHeading">商品を登録</h3>
 <label class="lbl" for="purchaseUrl">商品リンク（任意）</label><input id="purchaseUrl" type="url" maxlength="4096" placeholder="Amazonなどの商品リンクを貼り付け">
+<p class="note">コピーしたリンクを、この欄に貼り付けます。リンクがなくても、商品名と日付だけで登録できます。</p>
 <label class="lbl" for="purchaseTitle">商品名</label><input id="purchaseTitle" required maxlength="120" placeholder="例：いつものドッグフード">
 <label class="lbl" for="purchaseStatus">状態</label><select id="purchaseStatus"><option value="active">お届け予定</option><option value="received">購入済み・受け取り済み</option><option value="paused">予定の管理を停止中</option></select>
 <label class="lbl" for="purchaseDate" id="purchaseDateLabel">次のお届け予定日</label><input id="purchaseDate" type="date" min="2000-01-01" max="2099-12-31" required>
@@ -22,8 +24,7 @@ panel.innerHTML=`<button type="button" class="btn sub" id="purchaseBack" style="
 <button class="btn" id="purchaseSave" style="margin-top:16px">保存する</button><button type="button" class="btn ghost" id="purchaseCancel">やめる</button></form>
 <p id="purchaseMessage" role="status" aria-live="polite" style="white-space:pre-wrap"></p>
 <h3>登録した買い物</h3><div id="purchaseList"></div>
-<details style="margin-top:24px"><summary>Amazonなどから追加するには</summary><p class="note">まずは商品リンクをコピーして「商品を登録」に貼り付けて使えます。写真・価格・購入履歴は自動取得しません。</p><p class="note">Androidの対応ブラウザでは、ホーム画面にインストールしたヒビルカを共有先として選べます。iPhoneでは「ショートカット」の初回設定が必要です。</p>
-<details><summary>iPhoneのショートカット設定</summary><p class="note">「ヒビルカに追加」というショートカットを作り、「共有シートに表示」を有効にします。入力はURLとテキストを受け取る設定にします。</p><ol class="note"><li>「ショートカットの入力」を「URLエンコード」します。</li><li>「テキスト」に、下の受け取り先URLと、その直後にエンコード済みの入力を入れます。</li><li>そのテキストを「URLを開く」に渡します。</li></ol><label class="lbl" for="purchaseReceiver">受け取り先URL</label><input id="purchaseReceiver" readonly><button type="button" class="btn sub" id="purchaseCopyReceiver">受け取り先URLをコピー</button><p class="note">Safariで開きます。ホーム画面のヒビルカと記録が違う場合は、同じメールアドレスでログインしてください。保存前に自分の記録か確認してください。</p></details></details></div>`;
+<details style="margin-top:24px"><summary>商品リンクの貼り付け方</summary><ol class="note"><li>Amazon・楽天などで、商品のページのリンクをコピーします。</li><li>この画面の「＋ 商品を登録」を押し、「商品リンク」の欄に貼り付けます。</li><li>商品名と日付を入力して「保存する」を押します。</li></ol><p class="note">商品名・金額は自分で入力します。写真・価格・購入履歴は自動取得しません。</p></details></div>`;
 $('tab-set').parentNode.appendChild(panel);
 $('heroPlus').insertAdjacentHTML('afterend','<button type="button" class="btn sub" id="purchaseOpen" style="margin-top:12px">🛍️ 買い物・定期購入</button>');
 const message=s=>$('purchaseMessage').textContent=s;
@@ -62,8 +63,6 @@ $('purchaseForm').onsubmit=event=>{event.preventDefault();let data;
 };
 $('purchaseOpen').onclick=()=>open();$('purchaseBack').onclick=()=>{if(!busy)h.back();};$('purchaseNew').onclick=()=>edit();$('purchaseCancel').onclick=closeEditor;
 $('purchaseRecurring').onchange=stateForm;$('purchaseStatus').onchange=stateForm;
-const receiver=new URL('./',location.href);receiver.search='';receiver.hash='purchase=';$('purchaseReceiver').value=receiver.href;
-$('purchaseCopyReceiver').onclick=()=>h.copy(receiver.href);
 function render(){
  $('purchaseScope').textContent=h.personal()?'自分の記録に保存します。':'以前の共有モードです。この買い物も同じ共有範囲の人に見えます。';
  const records=h.events().filter(e=>e.purchase),active=records.filter(e=>e.purchase.status!=='received').sort((a,b)=>(a.purchase.status==='paused')-(b.purchase.status==='paused')||a.date.localeCompare(b.date));
