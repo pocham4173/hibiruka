@@ -1553,7 +1553,7 @@ test('pets: delete and restore retain photos; pending notifications block delete
  const a=app({returning:true});try{await a.w.h.startOwner();const e={id:'petlog',ownerUid:'A',petIds:['p'],kind:'memory',date:'2020-01-01',title:'記録',thumbs:['small'],createdAt:1};a.data.set('personalEvents/petlog',e);a.data.set('personalPhotos/petlog_0',{ownerUid:'A',eventId:'petlog',data:'full'});a.w.h.setEvents([e]);a.w.confirm=()=>true;
  await a.w.deleteRecord('petlog');assert.equal(a.data.get('personalEvents/petlog').petHidden,true);assert.equal(a.data.get('personalPhotos/petlog_0').data,'full');
  const snapshot=()=>a.db.recordsCallback({docs:[{id:'petlog',data:()=>a.data.get('personalEvents/petlog')}],metadata:{fromCache:false}});snapshot();a.d.getElementById('petOpenSettings').click();assert(!a.d.querySelector('[data-pet-record="petlog"]'));assert(a.d.querySelector('[data-pet-restore="petlog"]'));
- await a.d.querySelector('[data-pet-restore="petlog"]').onclick();assert.equal(a.data.get('personalEvents/petlog').petHidden,false);snapshot();assert(a.d.querySelector('[data-pet-record="petlog"]'));
+ await a.d.querySelector('[data-pet-restore="petlog"]').onclick();assert.equal(a.data.get('personalEvents/petlog').petHidden,false);snapshot();a.db.petsCallback({docs:[{id:'p',data:()=>({name:'テスト犬'})}]});a.d.querySelector('[data-pet-select="p"]').click();a.d.getElementById('petVisibility').click();assert(a.d.querySelector('[data-pet-record="petlog"]'));
  a.data.set('personalEvents/petlog',{...e,nextSendAt:'2099-01-01T12:00',sends:[{status:'wait'}]});await a.w.deleteRecord('petlog');assert.notEqual(a.data.get('personalEvents/petlog').petHidden,true);
  }finally{a.close();}
 });
