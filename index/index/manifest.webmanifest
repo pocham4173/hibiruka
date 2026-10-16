@@ -32,5 +32,14 @@
       "name": "思い出を見る",
       "url": "./?tab=list&view=mem"
     }
-  ]
+  ],
+  "share_target": {
+    "action": "./",
+    "method": "GET",
+    "params": {
+      "title": "share_title",
+      "text": "share_text",
+      "url": "share_url"
+    }
+  }
 }

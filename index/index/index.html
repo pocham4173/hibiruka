@@ -1282,6 +1282,8 @@
 </div></div>
 <script src="./pet-core.js?v=20261016c"></script>
 <script src="./pet-ui.js?v=20261016e"></script>
+<script src="./purchase-core.js?v=20261016"></script>
+<script src="./purchase-ui.js?v=20261016"></script>
 <script src="./business-calendar.js?v=20261013-leisure"></script>
 <script src="./calendar-data.js"></script>
 <script src="./calendar-core.js?v=20261013-business"></script>
@@ -1357,9 +1359,9 @@ function addDays(s, n) { const [y, m, d] = s.split("-").map(Number); return ymd(
 function fmtAt(at) { const [d, t] = at.split("T"); const p = parts(d); return `${p.m}/${p.d}(${p.w}) ${t}`; }
 function nextSendAt(sends) { const w = (sends || []).filter(x => x.status === "wait").map(x => x.at).sort(); return w[0] || null; }
 function inviteUrl(token) { return `https://liff.line.me/${CONFIG.liffId}?invite=${encodeURIComponent(token)}${personalMode ? "&scope=personal" : ""}`; }
-function isPlan(e) { return e.kind !== "memory" && e.date >= todayStr(); }
+function isPlan(e) { if(e.purchase)return e.purchase.status === "active"; return e.kind !== "memory" && e.date >= todayStr(); }
 // 日が過ぎた予定。日付が過ぎただけでは「行った」にしない（行った／中止を本人が選べる。選ばなくても困らない）
-function isPastPlan(e) { return e.kind !== "memory" && e.kind !== "wish" && !!e.date && e.date < todayStr(); }
+function isPastPlan(e) { return !e.purchase && e.kind !== "memory" && e.kind !== "wish" && !!e.date && e.date < todayStr(); }
 // 実際にあったこと＝思い出として記録したもの、または予定で「行った」を選んだもの（一覧・地図・ふりかえり・LINEのまとめで同じ判定）。
 // 「中止」が付いた記録は、種類が何であっても実施済みにしない（以前の版で種類だけ思い出に変わった記録も含む）
 function isDone(e) { return !e.petHidden && e.outcome !== "cancelled" && (e.kind === "memory" || (isPastPlan(e) && e.outcome === "done")); }
@@ -1599,6 +1601,7 @@ function showPin() {
 }
 
 function enterApp() {
+  purchaseUI.reset();
   businessUI.reset();
   calendarUI.reset(); calendarConfig = HibirukaCalendar.cleanConfig(null); calendarLoaded = false;
   renderCalendarSetup();
@@ -1614,6 +1617,7 @@ function enterApp() {
   if (t0 === "find") { goTab("find"); renderWishes(); showWeather(); renderLocalCoupons(); renderEvents(); }
   if (["up", "cal", "mem", "fav", "map"].includes(v0)) selectView(v0 === "up" ? "cal" : v0);
   if(qs.get('mode')==='business')businessUI.open();
+  purchaseUI.accept();
   const denied = (e) => { console.error(e); if (e.code === "permission-denied") toast("読み込めませんでした。もう一度開き直してください。", 6000); };
   unsub.push((personalMode ? ownedQuery("friends") : recordCollection("friends").orderBy("createdAt")).onSnapshot(s => {
     friends = s.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1804,9 +1808,9 @@ function setupTabs() {
   $("heroPlus").onclick = () => { resetForm(); if (view === "mem") { $("fKind").value = "memory"; updateSaveNote(); } goTab("rec"); };
 }
 function goTab(t) {
-  const active = t === "rec" ? "list" : t === "list" && ["mem", "fav", "map"].includes(view) ? "mem" : t;
+  const active = t === "rec" || t === "purchase" ? "list" : t === "list" && ["mem", "fav", "map"].includes(view) ? "mem" : t;
   document.querySelectorAll(".maintabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === active));
-  ["rec", "list", "find", "set", "pet"].forEach(x => $("tab-" + x).classList.toggle("hidden", x !== t));
+  ["rec", "list", "find", "set", "pet", "purchase"].forEach(x => $("tab-" + x).classList.toggle("hidden", x !== t));
   window.scrollTo(0, 0);
   renderCourseBar();
 }
@@ -3212,6 +3216,7 @@ async function saveRecord() {
 }
 async function editRecord(id) {
   const e = events.find(x => x.id === id); if (!e) return;
+  if(e.purchase){purchaseUI.open(e);return;}
   closeSheets();
   resetForm();
   editingId = id;
@@ -3373,7 +3378,7 @@ function renderWhoFilter() {
   $("whoFilter").querySelectorAll("[data-w]").forEach(b => b.onclick = () => { filterWho = filterWho === b.dataset.w ? "" : b.dataset.w; renderWhoFilter(); renderFilters(); renderList(); });
 }
 function filtered() {
-  return events.filter(e => (!filterCat || e.cat === filterCat) && (!filterWho || (e.who || []).includes(filterWho)));
+  return events.filter(e => e.purchase?.status !== "paused" && (!filterCat || e.cat === filterCat) && (!filterWho || (e.who || []).includes(filterWho)));
 }
 // 手段ごとの結果を短く（「送信済み」＝LINE・通知サービスが受け付けた。端末に届いたかまでは分からないので「届いた」とは書かない）
 const LINE_WORD = { sent: "送信済み", unknown: "送れたか不明", retry: "再試行中", cancelled: "取り消し済み", expired: "期限切れで送っていません" };
@@ -3421,6 +3426,7 @@ function card(e) {
       ${meta ? `<div class="meta">${meta}</div>` : ""}
       <div class="tags">${e.petIds?.length?`<span class="tag">🐾 ${esc(petUI.names(e.petIds))}</span>`:""}<span class="tag cat">${esc(catLabel(e.cat))}</span>${e.source === "line" ? `<span class="tag">LINEから</span>` : ""}${(e.who || []).map(n => `<span class="tag">${esc(n)}</span>`).join("")}</div>
       ${(e.thumbs || []).length ? `<div class="thumbs">${e.thumbs.slice(0, 4).map(s => `<img src="${s}" alt="">`).join("")}</div>` : ""}
+      ${purchaseUI.summary(e)}
       ${outcomeButtons(e)}
       ${sendRows(e)}
       <div class="card-acts"><button type="button" class="btn small sub" data-edit="${e.id}">✏️ 直す</button><button type="button" class="btn small ghost" data-detail="${e.id}">くわしく・送る</button></div>
@@ -3436,7 +3442,7 @@ function memoryCover(e) {
 function renderCountdown() {
   const box = $("countdown"); if (!box) return;
   const t = todayStr(), until = addDays(t, 60);
-  const list = events.filter(e => e.kind !== "memory" && e.date >= t && e.date <= until).sort((a, b) => (a.date + (a.time || "")) < (b.date + (b.time || "")) ? -1 : 1).slice(0, 3);
+  const list = events.filter(e => isPlan(e) && e.date >= t && e.date <= until).sort((a, b) => (a.date + (a.time || "")) < (b.date + (b.time || "")) ? -1 : 1).slice(0, 3);
   const show = list.length && $("memoryViews").classList.contains("hidden");
   box.classList.toggle("hidden", !show); if (!show) { box.innerHTML = ""; return; }
   const days = d => Math.round((new Date(d + "T12:00") - new Date(t + "T12:00")) / 86400000);
@@ -3455,7 +3461,7 @@ function renderBackupHint() {
 }
 // 記録の書き出し（自分の端末の中だけで作る。サーバーには送らない）
 function exportRows() {
-  return events.map(e => ({ 日付: e.date || "", 時間: e.time || "", 種類: e.kind === "memory" ? "思い出" : e.kind === "wish" ? "行きたい" : "予定", 行った: e.outcome === "done" ? "行った" : e.outcome === "cancelled" ? "中止" : "", 題名: e.title || "", 場所: e.place || "", 分類: catLabel(e.cat) || "", 誰と: (e.who || []).join("・"), メモ: e.memo || "", リンク: e.link || "", また行きたい: e.fav ? "♥" : "" }));
+  return events.map(e => ({ 日付: e.date || "", 時間: e.time || "", 種類: e.kind === "memory" ? "思い出" : e.kind === "wish" ? "行きたい" : "予定", 行った: e.outcome === "done" ? "行った" : e.outcome === "cancelled" ? "中止" : "", 題名: e.title || "", 場所: e.place || "", 分類: catLabel(e.cat) || "", 誰と: (e.who || []).join("・"), メモ: e.memo || "", リンク: e.link || "", また行きたい: e.fav ? "♥" : "", 商品リンク:e.purchase?.url||"", 購入状態:e.purchase?.status||"", 定期購入:e.purchase?HibirukaPurchase.label(e.purchase):"", 見込金額:e.purchase?.amount??"", 変更期限:e.purchase?.deadline||"" }));
 }
 function download(name, text, type) {
   const a = document.createElement("a"), url = URL.createObjectURL(new Blob([text], { type }));
@@ -3473,6 +3479,7 @@ function exportCsv() {
   toast(`${rows.length}件を書き出しました`);
 }
 function renderList() {
+  purchaseUI.render();
   petUI.render();
   renderBackupHint();
   renderCountdown();
@@ -3615,6 +3622,8 @@ async function openDetail(id) {
       ${e.memo ? `<br>📝 ${esc(e.memo).replace(/\n/g, "<br>")}` : ""}
       ${e.link ? `<br>🔗 <a href="${esc(e.link)}" target="_blank" rel="noopener">${esc(e.link)}</a>` : ""}</div>
     ${plan ? shopRoute(e) : ""}
+    ${purchaseUI.summary(e)}
+    ${e.purchase && HibirukaPurchase.shared(e.purchase.url) ? `<a class="btn sub" href="${esc(HibirukaPurchase.url(e.purchase.url))}" target="_blank" rel="noopener noreferrer">購入先を開く</a>` : ""}
     ${outcomeButtons(e)}
     <div id="dWeather"></div>
     ${sendRows(e)}
@@ -3827,6 +3836,11 @@ function openSend(id, ev) {
   $("sEv").innerHTML = `<b>${esc(fmtDate(e.date))}　${esc(e.title || e.place || catLabel(e.cat))}</b>${meta ? `<br>${meta}` : ""}`;
   const now = new Date(), t = todayStr(), prev = addDays(e.date, -1);
   const opts = [];
+  if(e.purchase?.deadline && e.purchase.deadline >= t) {
+    const before = addDays(e.purchase.deadline,-1);
+    if(before >= t) opts.push(["変更期限の前日 9:00",before,"09:00"]);
+    opts.push(["変更期限の当日 9:00",e.purchase.deadline,"09:00"]);
+  }
   if (prev >= t) { opts.push(["前の日の朝 9:00", prev, "09:00"]); opts.push(["前の日の夜 20:00", prev, "20:00"]); }
   if (e.date >= t) opts.push(["当日の朝 7:00", e.date, "07:00"]);
   if (e.time && e.date >= t) {
@@ -3961,6 +3975,7 @@ async function addSend(now) {
     await db.runTransaction(async tx => {
       const snap = await tx.get(ref);
       if (!snap.exists) throw new Error("予定が見つかりません");
+      if(snap.data().purchase && (snap.data().purchase.status !== 'active' || snap.data().purchase.revision !== sendFor.e.purchase?.revision)) throw new Error('買い物の予定が変更されました。開き直してください');
       // 末尾に1件足すだけ（既存の行・送信状態はサーバーが管理していて、ここからは変えられない）
       const cur = snap.data().nextSendAt || null;
       tx.update(ref, { sends: [...(snap.data().sends || []), item], nextSendAt: !cur || item.at < cur ? item.at : cur });
@@ -4299,6 +4314,47 @@ const petUI=HibirukaPetUI.create({
     if(!file.type.startsWith('image/')||file.size>20*1024*1024)throw Error('image');
     const url=URL.createObjectURL(file);try{const img=new Image();img.src=url;await img.decode();const c=document.createElement('canvas');c.width=c.height=240;const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,240,240);const size=Math.min(img.naturalWidth,img.naturalHeight);ctx.drawImage(img,(img.naturalWidth-size)/2,(img.naturalHeight-size)/2,size,size,0,0,240,240);return c.toDataURL('image/jpeg',.75);}finally{URL.revokeObjectURL(url);}
   }, restore:id=>setPetHidden(id,false)
+});
+
+/* 買い物も既存の所有者別 events に保存する。通知状態は書き換えない。 */
+async function changePurchase(before,action,data) {
+  const uid=myUid,mode=personalMode,ref=recordCollection('events').doc(before.id);
+  // Generate the next ID once, outside the retriable transaction callback.
+  const nextRef=recordCollection('events').doc();
+  await db.runTransaction(async tx=>{
+    const snap=await tx.get(ref),current=snap.exists?snap.data():null;
+    if(!uid||myUid!==uid||personalMode!==mode||auth.currentUser?.uid!==uid||!current||(mode&&current.ownerUid!==uid))throw Error('自分の記録を開き直してください');
+    HibirukaPurchase.guard(current,before);
+    if(action==='receive'){
+      const result=HibirukaPurchase.received(current,todayStr());
+      tx.update(ref,{...result.patch,updatedAt:TS()});
+      if(result.next)tx.set(nextRef,{...result.next,ownerUid:uid,createdAt:TS(),updatedAt:TS()});
+    }else if(action==='pause'){
+      if(current.purchase.status!=='active')throw Error('記録を開き直してください');
+      tx.update(ref,{purchase:{...current.purchase,status:'paused',revision:current.purchase.revision+1},updatedAt:TS()});
+    }else tx.update(ref,{...data,updatedAt:TS()});
+  });
+}
+const purchaseUI=HibirukaPurchaseUI.create({
+  esc,today:todayStr,personal:()=>personalMode,signedIn:()=>Boolean(myUid&&!$('app').classList.contains('hidden')),
+  ready:()=>recordsState==='ready',events:()=>events,newId:()=>recordCollection('events').doc().id,
+  show:()=>goTab('purchase'),back:()=>{selectView('cal');goTab('list');},closeSheets,copy:copyText,detail:openDetail,send:openSend,
+  async save(id,data,before){
+    if(before)return changePurchase(before,'save',data);
+    const uid=myUid,mode=personalMode,ref=recordCollection('events').doc(id);
+    if(!uid||auth.currentUser?.uid!==uid)throw Error('自分の記録を開き直してください');
+    let previous;
+    try{previous=await ref.get({source:'server'});}catch(e){if(e.code!=='permission-denied')throw e;}
+    if(myUid!==uid||personalMode!==mode||auth.currentUser?.uid!==uid)throw Error('自分の記録を開き直してください');
+    if(previous?.exists){
+      const old=previous.data();
+      if(old.ownerUid!==uid)throw Error('保存できません');
+      // A lost successful response must not reset createdAt or notification reservations.
+      if(old.purchase?.revision===data.purchase.revision && old.title===data.title && old.date===data.date && old.memo===data.memo && Object.keys(data.purchase).every(key=>old.purchase[key]===data.purchase[key]))return;
+      throw Error('保存済みの記録があります。登録した買い物から開き直してください');
+    }
+    await ref.set({...data,ownerUid:uid,cat:'買い物',time:'',place:'',who:[],thumbs:[],link:'',fav:false,sends:[],nextSendAt:null,createdAt:TS(),updatedAt:TS()});
+  },pause:e=>changePurchase(e,'pause'),receive:e=>changePurchase(e,'receive')
 });
 
 /* ---------- 入口 ---------- */
