@@ -7,7 +7,7 @@ const draftKey='hibiruka-purchase-share';
 try{const saved=JSON.parse(sessionStorage.getItem(draftKey));if(saved&&Date.now()-saved.at<1800000)sharedDraft=C.shared(saved.url);}catch{}
 const panel=document.createElement('section');panel.id='tab-purchase';panel.className='wrap hidden';
 panel.innerHTML=`<button type="button" class="btn sub" id="purchaseBack" style="margin-top:16px">‹ 予定・記録へ</button>
-<div class="card"><h2>🛍️ 買い物・定期購入</h2><p class="note">次のお届け日をカレンダーへ。購入先の注文・解約は購入先で手続きしてください。</p>
+<div class="card"><h2>🛍️ 買い物の記録・お届け予定</h2><p class="note">1回の買い物も、定期購入も。買ったものを残して、お届け日をカレンダーで確認できます。</p><p class="note">購入先の注文・解約は購入先で手続きしてください。</p>
 <p class="note">Amazon・楽天などの商品リンクを貼り付けて登録できます。事前の設定はいりません。</p>
 <p class="note" id="purchaseScope"></p><button type="button" class="btn" id="purchaseNew">＋ 商品を登録</button>
 <form id="purchaseForm" class="hidden" style="margin-top:20px">
@@ -26,7 +26,7 @@ panel.innerHTML=`<button type="button" class="btn sub" id="purchaseBack" style="
 <h3>登録した買い物</h3><div id="purchaseList"></div>
 <details style="margin-top:24px"><summary>商品リンクの貼り付け方</summary><ol class="note"><li>Amazon・楽天などで、商品のページのリンクをコピーします。</li><li>この画面の「＋ 商品を登録」を押し、「商品リンク」の欄に貼り付けます。</li><li>商品名と日付を入力して「保存する」を押します。</li></ol><p class="note">商品名・金額は自分で入力します。写真・価格・購入履歴は自動取得しません。</p></details></div>`;
 $('tab-set').parentNode.appendChild(panel);
-$('heroPlus').insertAdjacentHTML('afterend','<button type="button" class="btn sub" id="purchaseOpen" style="margin-top:12px">🛍️ 買い物・定期購入</button>');
+($('petHome')||$('calBox')).insertAdjacentHTML('beforebegin','<div class="card" id="purchaseHome" style="margin-top:16px"><button type="button" class="btn sub" id="purchaseOpen">🛍️ 買い物の記録・お届け予定</button><p class="note" style="margin-bottom:0">1回の買い物も、定期購入も。買ったものや届く日をまとめて確認できます。</p></div>');
 const message=s=>$('purchaseMessage').textContent=s;
 function stateForm(){
  $('purchaseInterval').classList.toggle('hidden',!$('purchaseRecurring').checked);
