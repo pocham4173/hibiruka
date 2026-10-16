@@ -53,13 +53,25 @@ async function reply(token, replyToken, messages, fetcher) {
 const text = (t, quickReply) => ({type:'text', text:clip(t, 4900), ...(quickReply ? {quickReply} : {})});
 
 // LINEの人 → ヒビルカの持ち主。アプリから解除されたら使わない。
+// Admin経由の読み書きはFirestoreの利用者向けルールを通らないため、
+// 以前のLINE連携だけを根拠に旧共有領域へのアクセスを続けさせない。
+async function legacyOwnerAllowed(db, uid) {
+  if (typeof uid !== 'string' || !uid || uid.includes('/')) return false;
+  const [member, owners] = await Promise.all([
+    db.collection('members').doc(uid).get(),
+    db.collection('config').doc('owners').get()
+  ]);
+  const uids = owners.exists ? owners.data().uids : null;
+  return member.exists || (Array.isArray(uids) && uids.includes(uid));
+}
 export async function resolveOwner(db, lineUserId) {
   const account = await db.collection('lineAccounts').doc(lineUserId).get();
   if (!account.exists) return null;
   const {ownerUid, scope} = account.data();
-  if (typeof ownerUid !== 'string' || !['personal','legacy'].includes(scope)) return null;
+  if (typeof ownerUid !== 'string' || !ownerUid || ownerUid.includes('/') || !['personal','legacy'].includes(scope)) return null;
   const link = await db.collection('lineLinks').doc(ownerUid).get();
   if (!link.exists || link.data().lineUserId !== lineUserId) return null;
+  if (scope === 'legacy' && !await legacyOwnerAllowed(db, ownerUid)) return null;
   return {uid:ownerUid, scope};
 }
 const eventsOf = scope => scope === 'personal' ? 'personalEvents' : 'events';
@@ -87,8 +99,7 @@ async function link(db, lineUserId, code, now) {
   if (scope === 'personal') {
     if (!(await db.collection('personalConfig').doc(ownerUid).get()).exists) return 'つなげませんでした。';
   } else if (scope === 'legacy') {
-    const [member, owners] = await Promise.all([db.collection('members').doc(ownerUid).get(), db.collection('config').doc('owners').get()]);
-    if (!member.exists && !(owners.exists && (owners.data().uids || []).includes(ownerUid))) return 'つなげませんでした。';
+    if (!await legacyOwnerAllowed(db, ownerUid)) return 'つなげませんでした。';
   } else return 'つなげませんでした。';
   const old = await db.collection('lineLinks').doc(ownerUid).get();
   const ops = [

@@ -145,6 +145,51 @@ test('legacy owner records go to the legacy collection',async()=>{
   await handleEvent(db,{},msg({type:'location',address:'上田城跡公園',latitude:36.4,longitude:138.2}),NOW);
   const [e]=Object.values(db.data.events);assert.equal(e.place,'上田城跡公園');assert.equal(e.ownerUid,undefined);
 });
+const legacyLinked = () => ({
+  config:{owners:{uids:['alice']},app:{cats:[{name:'遊び'}]}},
+  lineAccounts:{[U]:{ownerUid:'alice',scope:'legacy'}},lineLinks:{alice:{lineUserId:U}},
+  events:{e1:{title:'PRIVATE_FIXTURE',date:'2026-10-03',kind:'plan',cat:'遊び',fav:true}}
+});
+test('legacy LINE access is rechecked after owner or membership revocation',async()=>{
+  for (const via of ['owners','members']) {
+    const seed=legacyLinked();
+    if(via==='members'){seed.config.owners.uids=[];seed.members={alice:{pinHash:'test'}};}
+    const db=memoryDb(seed);
+    assert.deepEqual(await resolveOwner(db,U),{uid:'alice',scope:'legacy'});
+    if(via==='members')delete db.data.members.alice;else db.data.config.owners.uids=[];
+    assert.equal(await resolveOwner(db,U),null,'old bidirectional LINE link cannot retain access');
+    const before=structuredClone(db.data.events);
+    const requests=[msg({type:'text',text:'今日'}),msg({type:'text',text:'また行きたい'}),
+      msg({type:'location',address:'NEW_PRIVATE_FIXTURE',latitude:36,longitude:138}),
+      {type:'postback',source:{type:'user',userId:U},postback:{data:'a=cat&e=e1&c=0'}},
+      {type:'postback',source:{type:'user',userId:U},postback:{data:'a=del&e=e1'}}];
+    for(const request of requests){
+      const response=await handleEvent(db,{},request,NOW);
+      assert.doesNotMatch(JSON.stringify(response),/PRIVATE_FIXTURE/);
+    }
+    assert.deepEqual(db.data.events,before,'records are not deleted or changed');
+    assert.equal(db.queries.some(q=>q[0]==='events'),false,'no legacy record listing');
+  }
+});
+test('revoked legacy owner cannot reconnect with an unused link code',async()=>{
+  const seed=legacyLinked();seed.config.owners.uids=[];
+  seed.lineLinkCodes={ABCDEFGH23:{ownerUid:'alice',scope:'legacy',expiresAt:new Date(NOW+1000)}};
+  const db=memoryDb(seed),before=structuredClone(db.data.lineLinks);
+  const response=await handleEvent(db,{},msg({type:'text',text:'ABCDEFGH23'}),NOW);
+  assert.match(response[0].text,/つなげませんでした/);
+  assert.equal(await resolveOwner(db,U),null);
+  assert.deepEqual(db.data.lineLinks,before);
+});
+test('malformed legacy owner list cannot grant access by substring',async()=>{
+  const seed=legacyLinked();seed.config.owners.uids='not-alice';
+  assert.equal(await resolveOwner(memoryDb(seed),U),null);
+});
+test('legacy permission lookup failure stops before reading records',async()=>{
+  const db=memoryDb(legacyLinked()),collection=db.collection;
+  db.collection=name=>name==='members'?{doc:()=>({get:async()=>{throw Error('unavailable');}})}:collection(name);
+  await assert.rejects(()=>handleEvent(db,{},msg({type:'text',text:'今日'}),NOW),/unavailable/);
+  assert.equal(db.queries.some(q=>q[0]==='events'),false);
+});
 test('LINE addresses drop the country and postal code for the place name',async()=>{
   const db=memoryDb(linked());
   await handleEvent(db,{},msg({type:'location',address:'日本、〒386-0013 長野県上田市中央東１１−１５',latitude:36.4,longitude:138.2}),NOW);
