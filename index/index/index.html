@@ -612,7 +612,18 @@
 <div class="wrap install-shortcut"><button class="btn sub small" type="button" data-install>ホームに追加</button></div>
 
 <!-- 読み込み中 -->
-<div id="loading" class="wrap"><div class="loading">読み込み中…<div id="slowMsg" class="setup-warn hidden" style="text-align:left;margin-top:20px">うまく開けないときは、<b>Safari</b>（Androidは<b>Chrome</b>）で開き直してください。<br>アプリの中の簡易ブラウザだと、開けないことがあります。</div></div></div>
+<div id="loading" class="wrap"><div class="loading">読み込み中…<div id="slowMsg" class="setup-warn hidden" style="text-align:left;margin-top:20px"><p id="startupMessage" role="status">読み込みに時間がかかっています。通信を確認して、もう一度お試しください。</p><button type="button" class="btn sub" id="startupRetry">もう一度開く</button><p class="note">保存した記録やログイン情報は消しません。</p></div></div></div>
+<script id="startupRecovery">
+// Run before external scripts so a stalled download cannot hide the retry control.
+(() => {
+  const loading = document.getElementById('loading'), notice = document.getElementById('slowMsg');
+  const reveal = () => { if (!loading.classList.contains('hidden')) notice.classList.remove('hidden'); };
+  document.getElementById('startupRetry').onclick = () => location.reload();
+  setTimeout(reveal, 8000);
+  window.addEventListener('error', reveal);
+  window.addEventListener('unhandledrejection', reveal);
+})();
+</script>
 
 <div id="loginView" class="wrap hidden"><div class="card">
   <h2>自分のヒビルカにログイン</h2>
@@ -1293,7 +1304,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <dialog id="friendEdit" class="simple-dialog"><form id="friendEditForm">
 <h2>送信先の名前を変更</h2><label class="lbl" for="friendEditName">ヒビルカに表示する名前</label>
 <input type="text" id="friendEditName" maxlength="40" required autocomplete="off">
@@ -1446,11 +1456,29 @@ function inviteMsg(ic, text, showAdd) {
   $("invStep1").classList.add("hidden"); $("invStep2").classList.add("hidden"); $("invMsg").classList.remove("hidden");
   $("invMsgIcon").textContent = ic; $("invMsgText").innerHTML = text; $("invMsgAddBtn").classList.toggle("hidden", !showAdd);
 }
+let liffSdkLoading = null;
+function ensureLiffSdk() {
+  if (window.liff) return Promise.resolve(window.liff);
+  if (liffSdkLoading) return liffSdkLoading;
+  liffSdkLoading = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    let settled = false;
+    script.src = 'https://static.line-scdn.net/liff/edge/2/sdk.js';
+    script.async = true;
+    const fail = () => { if (settled) return; settled = true; clearTimeout(timer); script.remove(); liffSdkLoading = null; reject(new Error('LINEを読み込めませんでした。もう一度お試しください。')); };
+    const timer = setTimeout(fail, 10000);
+    script.onerror = fail;
+    script.onload = () => { if (settled) return; if (!window.liff) { fail(); return; } settled = true; clearTimeout(timer); resolve(window.liff); };
+    document.head.appendChild(script);
+  });
+  return liffSdkLoading;
+}
 async function startInvite() {
   show("invite");
   $("invAddFriendBtn").href = OA_URL; $("invMsgAddBtn").href = OA_URL;
   $("invAcceptBtn").disabled = true;
   try {
+    await ensureLiffSdk();
     await liff.init({ liffId: CONFIG.liffId });
     if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
     let token = new URLSearchParams(location.search).get("invite");
@@ -1546,7 +1574,7 @@ async function startOwner() {
   } catch (e) {
     console.error(e);
     $("slowMsg").classList.remove("hidden");
-    $("slowMsg").innerHTML='開けませんでした。通信を確認して、もう一度お試しください。<a class="btn sub" href="?intro=1">ホームへ戻る</a>';
+    $("startupMessage").textContent='開けませんでした。通信を確認して、もう一度お試しください。';
   } finally { clearTimeout(slow); }
 }
 function setupPasswordToggles() {
