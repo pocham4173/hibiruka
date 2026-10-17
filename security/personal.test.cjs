@@ -5,7 +5,7 @@ const fs=require('node:fs');let env,A,B;
 const rules=fs.readFileSync('/tmp/hibiruka-combined.rules','utf8');
 const legacyPrivate=/match\s+\/config\/legacyPrivacy\s*\{/.test(rules);
 async function seedLegacyOwner(db,uid){if(legacyPrivate)await setDoc(doc(db,'config/legacyPrivacy'),{version:1,ownerUid:uid});}
-before(async()=>{env=await initializeTestEnvironment({projectId:'demo-hibiruka-isolation',firestore:{rules}});A=env.authenticatedContext('person-A').firestore();B=env.authenticatedContext('person-B').firestore();});
+before(async()=>{env=await initializeTestEnvironment({projectId:'demo-hibiruka-isolation',firestore:{rules}});await env.clearFirestore();A=env.authenticatedContext('person-A').firestore();B=env.authenticatedContext('person-B').firestore();});
 after(async()=>{await env?.cleanup();});
 test('two users can create and read their own profiles; cannot access another',async()=>{
  await assertSucceeds(setDoc(doc(A,'personalConfig/person-A'),{ownerName:'A'}));

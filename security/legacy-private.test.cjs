@@ -4,10 +4,12 @@ const {doc,setDoc,getDoc,getDocs,collection,query,where,updateDoc,deleteDoc,serv
 const fs=require('node:fs');let env,A,B,C;
 before(async()=>{
  env=await initializeTestEnvironment({projectId:'demo-hibiruka-isolation',firestore:{rules:fs.readFileSync('/tmp/hibiruka-combined.rules','utf8')}});
+ await env.clearFirestore();
  A=env.authenticatedContext('confirmed-owner').firestore();B=env.authenticatedContext('former-owner').firestore();C=env.authenticatedContext('new-user').firestore();
  await env.withSecurityRulesDisabled(async context=>{
   const db=context.firestore();
   await setDoc(doc(db,'config/legacyPrivacy'),{version:1,ownerUid:'confirmed-owner'});
+  await setDoc(doc(db,'config/legacyPrivacyBackup'),{fixture:'admin-only'});
   await setDoc(doc(db,'config/owners'),{uids:['confirmed-owner','former-owner']});
   await setDoc(doc(db,'config/secret'),{pinHash:'fixture-pin'});
   await setDoc(doc(db,'members/former-owner'),{pinHash:'fixture-pin'});
