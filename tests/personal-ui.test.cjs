@@ -1635,7 +1635,10 @@ test('pets: folds retain profiles, suppress closed photos, persist per account a
 test('purchase: register, reopen, calendar display, receive, next month, pause and resume',async()=>{
  const a=app({returning:true});try{
   await a.w.h.startOwner();const $=id=>a.d.getElementById(id);a.w.confirm=()=>true;
-  $('purchaseOpen').click();$('purchaseNew').click();
+  a.d.querySelector('[data-tab="set"]').click();
+  assert(!$('purchaseOpenSettings').closest('.hidden'));
+  $('purchaseOpenSettings').click();assert(!$('tab-purchase').classList.contains('hidden'));assert($('tab-set').classList.contains('hidden'));
+  $('purchaseNew').click();
   $('purchaseTitle').value='定期フード';$('purchaseUrl').value='https://www.amazon.co.jp/dp/EXAMPLE';$('purchaseDate').value='2027-01-31';$('purchaseRecurring').checked=true;$('purchaseEvery').value='1';$('purchaseUnit').value='month';
   $('purchaseForm').onsubmit({preventDefault(){}});await tick();
   const path=[...a.data.keys()].find(p=>p.startsWith('personalEvents/'));assert(path);
