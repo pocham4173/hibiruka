@@ -184,6 +184,16 @@ test('malformed legacy owner list cannot grant access by substring',async()=>{
   const seed=legacyLinked();seed.config.owners.uids='not-alice';
   assert.equal(await resolveOwner(memoryDb(seed),U),null);
 });
+test('private legacy policy overrides old owners and memberships for LINE',async()=>{
+  const seed=legacyLinked();seed.members={alice:{pinHash:'test'}};
+  seed.config.legacyPrivacy={version:1,ownerUid:'different-confirmed-owner'};
+  const db=memoryDb(seed);
+  assert.equal(await resolveOwner(db,U),null);
+  db.data.config.legacyPrivacy.ownerUid='alice';
+  assert.deepEqual(await resolveOwner(db,U),{uid:'alice',scope:'legacy'});
+  db.data.config.legacyPrivacy.version=2;
+  assert.equal(await resolveOwner(db,U),null,'unknown policy fails closed');
+});
 test('legacy permission lookup failure stops before reading records',async()=>{
   const db=memoryDb(legacyLinked()),collection=db.collection;
   db.collection=name=>name==='members'?{doc:()=>({get:async()=>{throw Error('unavailable');}})}:collection(name);

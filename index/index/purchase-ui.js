@@ -64,7 +64,7 @@ $('purchaseForm').onsubmit=event=>{event.preventDefault();let data;
 $('purchaseOpen').onclick=()=>open();$('purchaseBack').onclick=()=>{if(!busy)h.back();};$('purchaseNew').onclick=()=>edit();$('purchaseCancel').onclick=closeEditor;
 $('purchaseRecurring').onchange=stateForm;$('purchaseStatus').onchange=stateForm;
 function render(){
- $('purchaseScope').textContent=h.personal()?'自分の記録に保存します。':'以前の共有モードです。この買い物も同じ共有範囲の人に見えます。';
+ $('purchaseScope').textContent=(h.privateRecords?.()??h.personal())?'自分だけの記録に保存します。LINEでは、選んだ予定だけを選んだ相手に送れます。':'以前の共有モードです。この買い物も同じ共有範囲の人に見えます。';
  const records=h.events().filter(e=>e.purchase),active=records.filter(e=>e.purchase.status!=='received').sort((a,b)=>(a.purchase.status==='paused')-(b.purchase.status==='paused')||a.date.localeCompare(b.date));
  const history=records.filter(e=>e.purchase.status==='received').sort((a,b)=>b.date.localeCompare(a.date));
  function row(e){const p=e.purchase,link=C.shared(p.url)?.url||'',active=p.status==='active';return `<div style="border-top:1px solid var(--line);padding:16px 0"><strong>${esc(e.title)}</strong><p class="note">${esc(e.date)}・${p.status==='paused'?'管理停止中':p.status==='received'?'購入済み・受け取り済み':e.date<h.today()?'お届け予定日を過ぎています':'お届け予定'}・${esc(C.label(p))}${p.amount==null?'':'・'+esc(p.amount.toLocaleString('ja-JP'))+'円（見込み）'}${p.deadline?'<br>変更期限：'+esc(p.deadline):''}</p>

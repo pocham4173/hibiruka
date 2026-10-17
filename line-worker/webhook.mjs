@@ -57,6 +57,8 @@ const text = (t, quickReply) => ({type:'text', text:clip(t, 4900), ...(quickRepl
 // 以前のLINE連携だけを根拠に旧共有領域へのアクセスを続けさせない。
 async function legacyOwnerAllowed(db, uid) {
   if (typeof uid !== 'string' || !uid || uid.includes('/')) return false;
+  const privacy = await db.collection('config').doc('legacyPrivacy').get();
+  if (privacy.exists) return privacy.data().version === 1 && privacy.data().ownerUid === uid;
   const [member, owners] = await Promise.all([
     db.collection('members').doc(uid).get(),
     db.collection('config').doc('owners').get()

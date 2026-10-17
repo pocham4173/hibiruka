@@ -128,6 +128,27 @@ test('new user saves memories and invitations only to personal collections with 
 test('legacy owner keeps existing workspace even if start link is opened',async()=>{
  const a=app({legacy:true});try{await a.w.h.startOwner();assert(!a.w.h.personal);assert(!a.data.has('personalConfig/A'));assert(a.queries.some(q=>q.name==='events'));assert(!a.queries.some(q=>q.name==='personalEvents'));}finally{a.close();}
 });
+test('activated private legacy policy changes guidance without moving any existing records',async()=>{
+ const a=app({legacy:true});try{
+  a.data.set('config/legacyPrivacy',{version:1,ownerUid:'A',activated:true});
+  a.data.set('events/retained',{title:'Existing fixture'});
+  await a.w.h.startOwner();a.w.h.purchaseUI.render();
+  assert(!a.w.h.personal,'storage remains in the original collections');
+  assert(a.queries.some(q=>q.name==='events'));
+  assert(!a.data.has('personalConfig/A'));
+  assert.equal(a.data.get('events/retained').title,'Existing fixture');
+  assert(a.d.getElementById('legacyTransfer').classList.contains('hidden'));
+  assert.match(a.d.getElementById('purchaseScope').textContent,/自分だけ/);
+ }finally{a.close();}
+});
+test('staged or foreign privacy policy never claims that old shared records are private',async()=>{
+ for(const policy of [{version:1,ownerUid:'A'},{version:1,ownerUid:'B',activated:true}]){
+  const a=app({legacy:true});try{
+   a.data.set('config/legacyPrivacy',policy);await a.w.h.startOwner();a.w.h.purchaseUI.render();
+   assert.match(a.d.getElementById('purchaseScope').textContent,/共有/);
+  }finally{a.close();}
+ }
+});
 test('returning email user stays signed in; linking anonymous account preserves UID and records',async()=>{
  const a=app({returning:true,linked:true});try{await a.w.h.startOwner();assert(a.w.h.personal);assert(!a.calls.some(c=>c[0]==='anonymous'));assert(a.d.getElementById('accountForm').classList.contains('hidden'));}finally{a.close();}
  const b=app();try{await b.w.h.startOwner();b.d.getElementById('accountEmail').value='a@example.test';b.d.getElementById('accountPassword').value='long-password';await b.d.getElementById('accountForm').onsubmit({preventDefault(){}});assert(b.calls.some(c=>c[0]==='link'&&c[1]==='A'));assert(b.data.has('personalConfig/A'));}finally{b.close();}
