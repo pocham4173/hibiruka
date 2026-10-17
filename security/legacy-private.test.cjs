@@ -39,6 +39,10 @@ test('old PIN and owner documents cannot grant access again',async()=>{
  await assertSucceeds(getDoc(doc(A,'config/legacyPrivacy')));
  await assertFails(getDoc(doc(B,'config/legacyPrivacy')));
  await assertFails(getDoc(doc(C,'config/legacyPrivacy')));
+ for(const db of [A,B,C]){
+  await assertFails(getDoc(doc(db,'config/legacyPrivacyBackup')));
+  await assertFails(setDoc(doc(db,'config/legacyPrivacyBackup'),{fake:true}));
+ }
 });
 test('personal records remain scoped to their owner',async()=>{
  await assertSucceeds(setDoc(doc(C,'personalConfig/new-user'),{ownerName:'fixture'}));

@@ -2,7 +2,7 @@ name: 非公開化の本番ルール事前検査（読み取り専用）
 on:
   push:
     branches: [fix/private-records-20261017]
-    paths: [.github/workflows/privacy-preflight.yml, scripts/privacy-preflight.cjs, scripts/legacy-private-rules.cjs, security/legacy-private.test.cjs]
+    paths: [.github/workflows/privacy-preflight.yml, scripts/privacy-preflight.cjs, scripts/legacy-private-rules.cjs, security/legacy-private.test.cjs, security/personal.test.cjs]
 permissions:
   contents: read
 jobs:
@@ -25,4 +25,4 @@ jobs:
       - run: npm install --prefix security --no-audit --no-fund
       - name: 本番ルールの修正案を架空アカウントで検査
         working-directory: security
-        run: ./node_modules/.bin/firebase emulators:exec --only firestore --project demo-hibiruka-isolation 'node --test legacy-private.test.cjs'
+        run: ./node_modules/.bin/firebase emulators:exec --only firestore --project demo-hibiruka-isolation 'node --test legacy-private.test.cjs && node --test personal.test.cjs'

@@ -2,7 +2,10 @@ const {test,before,after}=require('node:test');
 const {initializeTestEnvironment,assertSucceeds,assertFails}=require('@firebase/rules-unit-testing');
 const {doc,setDoc,getDoc,getDocs,collection,query,where,updateDoc,serverTimestamp,deleteDoc,writeBatch}=require('firebase/firestore');
 const fs=require('node:fs');let env,A,B;
-before(async()=>{env=await initializeTestEnvironment({projectId:'demo-hibiruka-isolation',firestore:{rules:fs.readFileSync('/tmp/hibiruka-combined.rules','utf8')}});A=env.authenticatedContext('person-A').firestore();B=env.authenticatedContext('person-B').firestore();});
+const rules=fs.readFileSync('/tmp/hibiruka-combined.rules','utf8');
+const legacyPrivate=/match\s+\/config\/legacyPrivacy\s*\{/.test(rules);
+async function seedLegacyOwner(db,uid){if(legacyPrivate)await setDoc(doc(db,'config/legacyPrivacy'),{version:1,ownerUid:uid});}
+before(async()=>{env=await initializeTestEnvironment({projectId:'demo-hibiruka-isolation',firestore:{rules}});A=env.authenticatedContext('person-A').firestore();B=env.authenticatedContext('person-B').firestore();});
 after(async()=>{await env?.cleanup();});
 test('two users can create and read their own profiles; cannot access another',async()=>{
  await assertSucceeds(setDoc(doc(A,'personalConfig/person-A'),{ownerName:'A'}));
@@ -77,6 +80,7 @@ test('legacy owner can atomically create an event and its four photos with exist
    const d=c.firestore();
    await setDoc(doc(d,'config/secret'),{pinHash:'legacy-atomic-secret'});
    await setDoc(doc(d,'members/legacy-owner'),{pinHash:'legacy-atomic-secret'});
+   await seedLegacyOwner(d,'legacy-owner');
  });
  const L=env.authenticatedContext('legacy-owner').firestore(),b=writeBatch(L);
  b.set(doc(L,'events/atomic-legacy'),{createdAt:serverTimestamp(),kind:'memory',date:'2020-01-01',thumbs:['1','2','3','4']});
@@ -107,7 +111,7 @@ test('LINE link codes: own one-time code only; status readable and removable by 
 });
 test('LINE link codes: legacy owner may create a legacy code',async()=>{
  const {Timestamp}=require('firebase/firestore');
- await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();await setDoc(doc(d,'config/secret'),{pinHash:'legacy-line'});await setDoc(doc(d,'members/legacy-line'),{pinHash:'legacy-line'});});
+ await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();await setDoc(doc(d,'config/secret'),{pinHash:'legacy-line'});await setDoc(doc(d,'members/legacy-line'),{pinHash:'legacy-line'});await seedLegacyOwner(d,'legacy-line');});
  const L=env.authenticatedContext('legacy-line').firestore();
  await assertSucceeds(setDoc(doc(L,'lineLinkCodes/LBCDEFGH23'),{ownerUid:'legacy-line',scope:'legacy',expiresAt:Timestamp.fromMillis(Date.now()+9*60000),createdAt:serverTimestamp()}));
 });
@@ -219,15 +223,18 @@ test('pet profiles and records belong only to the owner; malformed profiles and 
  await assertFails(updateDoc(doc(A,'personalEvents/pet-log'),{petHidden:true}));
 });
 
- test('legacy pets use legacy membership only and never expose personal pet profiles',async()=>{
- await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();await setDoc(doc(d,'config/secret'),{pinHash:'legacy-secret'});await setDoc(doc(d,'members/legacy-pet-one'),{pinHash:'legacy-secret'});await setDoc(doc(d,'members/legacy-pet-two'),{pinHash:'legacy-secret'});await setDoc(doc(d,'members/legacy-pet-wrong'),{pinHash:'wrong'});});
+ test('legacy pets follow the active legacy policy and never expose personal pet profiles',async()=>{
+ await env.withSecurityRulesDisabled(async c=>{const d=c.firestore();await setDoc(doc(d,'config/secret'),{pinHash:'legacy-secret'});await setDoc(doc(d,'members/legacy-pet-one'),{pinHash:'legacy-secret'});await setDoc(doc(d,'members/legacy-pet-two'),{pinHash:'legacy-secret'});await setDoc(doc(d,'members/legacy-pet-wrong'),{pinHash:'wrong'});await seedLegacyOwner(d,'legacy-pet-one');});
  const L=env.authenticatedContext('legacy-pet-one').firestore(),M=env.authenticatedContext('legacy-pet-two').firestore(),W=env.authenticatedContext('legacy-pet-wrong').firestore();
  const p={ownerUid:'legacy-pet-one',name:'shared test',breed:'',sex:'',birthday:'2020-01-01',welcome:'',birthdayEstimated:false,welcomeEstimated:false,photo:'',createdAt:serverTimestamp(),updatedAt:serverTimestamp()};
- await assertSucceeds(setDoc(doc(L,'pets/shared'),p));await assertSucceeds(getDocs(collection(M,'pets')));await assertSucceeds(updateDoc(doc(M,'pets/shared'),{name:'renamed',updatedAt:serverTimestamp()}));
+ await assertSucceeds(setDoc(doc(L,'pets/shared'),p));
+ const memberResult=legacyPrivate?assertFails:assertSucceeds;
+ await assertSucceeds(getDocs(collection(L,'pets')));
+ await memberResult(getDocs(collection(M,'pets')));await memberResult(updateDoc(doc(M,'pets/shared'),{name:'renamed',updatedAt:serverTimestamp()}));
  for(const d of [A,B,env.unauthenticatedContext().firestore()]){await assertFails(getDoc(doc(d,'pets/shared')));await assertFails(getDocs(collection(d,'pets')));await assertFails(setDoc(doc(d,'pets/new'),p));await assertFails(updateDoc(doc(d,'pets/shared'),{name:'stolen',updatedAt:serverTimestamp()}));await assertFails(deleteDoc(doc(d,'pets/shared')));}
  // The production legacy policy may retain registered devices after PIN changes.
  // Match that existing access exactly; do not infer revocation from the stand-in PIN rule.
  const canRead=async ref=>{try{await getDoc(ref);return true;}catch(e){if(e.code==='permission-denied')return false;throw e;}};
  require('node:assert/strict').equal(await canRead(doc(W,'pets/shared')),await canRead(doc(W,'events/legacy')),'shared pet access must equal existing legacy access');
- await assertFails(getDoc(doc(L,'personalPets/pet-A')));await assertFails(updateDoc(doc(M,'pets/shared'),{ownerUid:'legacy-pet-two',updatedAt:serverTimestamp()}));await assertFails(updateDoc(doc(M,'pets/shared'),{name:'',updatedAt:serverTimestamp()}));await assertSucceeds(deleteDoc(doc(M,'pets/shared')));
+ await assertFails(getDoc(doc(L,'personalPets/pet-A')));await assertFails(updateDoc(doc(M,'pets/shared'),{ownerUid:'legacy-pet-two',updatedAt:serverTimestamp()}));await assertFails(updateDoc(doc(M,'pets/shared'),{name:'',updatedAt:serverTimestamp()}));if(legacyPrivate){await assertFails(deleteDoc(doc(M,'pets/shared')));await assertSucceeds(deleteDoc(doc(L,'pets/shared')));}else await assertSucceeds(deleteDoc(doc(M,'pets/shared')));
  });
