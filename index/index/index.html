@@ -1306,7 +1306,7 @@
 <script src="./pet-core.js?v=20261016c"></script>
 <script src="./pet-ui.js?v=20261016e"></script>
 <script src="./purchase-core.js?v=20261016"></script>
-<script src="./purchase-ui.js?v=20261016-3"></script>
+<script src="./purchase-ui.js?v=20261017-private"></script>
 <script src="./business-calendar.js?v=20261013-leisure"></script>
 <script src="./calendar-data.js"></script>
 <script src="./calendar-core.js?v=20261013-business"></script>
@@ -1552,6 +1552,7 @@ async function pinHash(pin) {
 }
 let recordsState = "loading", recordsStop = null, recordsEpoch = 0;
 let personalMode = false;
+let legacyPrivateMode = false;
 const personalNames = {events:"personalEvents", photos:"personalPhotos", friends:"personalFriends"};
 function recordCollection(name) { return db.collection(personalMode ? personalNames[name] : name); }
 function ownedQuery(name) { const ref=recordCollection(name); return personalMode ? ref.where("ownerUid","==",myUid) : ref; }
@@ -1568,10 +1569,15 @@ async function startOwner() {
   const slow = setTimeout(() => $("slowMsg").classList.remove("hidden"), 8000);
   try {
     myUid = (await ensureIdentity()).uid;
+    legacyPrivateMode = false;
     const [mem, own] = await Promise.all([
       db.collection("members").doc(myUid).get(), db.collection("config").doc("owners").get()
     ]);
-    if (mem.exists || (own.exists && (own.data().uids || []).includes(myUid))) { personalMode=false; enterApp(); return; }
+    if (mem.exists || (own.exists && (own.data().uids || []).includes(myUid))) {
+      const privacy = await db.collection('config').doc('legacyPrivacy').get().catch(() => null);
+      legacyPrivateMode = !!(privacy?.exists && privacy.data().version === 1 && privacy.data().activated === true && privacy.data().ownerUid === myUid);
+      personalMode=false; enterApp(); return;
+    }
     const profile = await db.collection("personalConfig").doc(myUid).get();
     if (profile.exists) { personalMode=true; ownerName=profile.data().ownerName || "あなた"; enterApp(); return; }
     if (qs.has("start")) {
@@ -1649,7 +1655,7 @@ function enterApp() {
   recordsState = "loading"; events = []; petTrash = []; petUI.start();
   show("app");
   setupAccount();
-  $("legacyTransfer").classList.toggle("hidden", personalMode);
+  $("legacyTransfer").classList.toggle("hidden", personalMode || legacyPrivateMode);
   setupTabs(); setupForm(); setupList(); setupSettings(); setupFirstRecordGuide();
   // LINEのメニューなどから開いたとき：?tab=rec / list / set、?view=up / cal / mem / fav
   const t0 = qs.get("tab"), v0 = qs.get("view");
@@ -4332,7 +4338,7 @@ async function setPetHidden(id,hidden) {
   });
 }
 const petUI=HibirukaPetUI.create({
-  preferenceKey:()=>myUid?`hibiruka-pet-view:${personalMode?'personal':'shared'}:${myUid}`:'', personal:()=>Boolean(myUid), shared:()=>!personalMode, today:todayStr, events:()=>events, trash:()=>petTrash, done:isDone,
+  preferenceKey:()=>myUid?`hibiruka-pet-view:${personalMode?'personal':'shared'}:${myUid}`:'', personal:()=>Boolean(myUid), shared:()=>!personalMode&&!legacyPrivateMode, today:todayStr, events:()=>events, trash:()=>petTrash, done:isDone,
   show:()=>goTab('pet'),back:()=>goTab('list'),edit:editRecord,detail:openDetail,
   newRecord(kind){resetForm();form.cat=cats[0]?.name||'遊び';$('fKind').value=kind;renderCats();updateSaveNote();goTab('rec');},
   newId:()=>petCollection().doc().id,
@@ -4376,7 +4382,7 @@ async function changePurchase(before,action,data) {
   });
 }
 const purchaseUI=HibirukaPurchaseUI.create({
-  esc,today:todayStr,personal:()=>personalMode,signedIn:()=>Boolean(myUid&&!$('app').classList.contains('hidden')),
+  esc,today:todayStr,personal:()=>personalMode,privateRecords:()=>personalMode||legacyPrivateMode,signedIn:()=>Boolean(myUid&&!$('app').classList.contains('hidden')),
   ready:()=>recordsState==='ready',events:()=>events,newId:()=>recordCollection('events').doc().id,
   show:()=>goTab('purchase'),back:()=>{selectView('cal');goTab('list');},closeSheets,copy:copyText,detail:openDetail,send:openSend,
   async save(id,data,before){

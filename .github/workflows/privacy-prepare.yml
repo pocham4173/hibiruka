@@ -1,0 +1,19 @@
+name: 非公開化の準備（公開鍵のみ）
+on:
+  push:
+    branches: [fix/private-records-20261017]
+    paths: [.github/workflows/privacy-prepare.yml]
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/privacy-public-key.cjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
