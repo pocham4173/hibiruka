@@ -31,7 +31,7 @@ test('events are owner scoped including list, writes, delete and ownership chang
  await assertFails(setDoc(doc(B,'personalEvents/forged'),{ownerUid:'person-A',createdAt:serverTimestamp()}));
 });
 test('photos cannot reference or overwrite another user event or photo',async()=>{
- await assertSucceeds(setDoc(doc(A,'personalPhotos/p'),{ownerUid:'person-A',eventId:'a',data:'photo'}));
+ await assertSucceeds(setDoc(doc(A,'personalPhotos/p'),{ownerUid:'person-A',eventId:'a',i:0,data:'data:image/jpeg;base64,AA=='}));
  await assertFails(getDoc(doc(B,'personalPhotos/p')));await assertFails(setDoc(doc(B,'personalPhotos/p'),{ownerUid:'person-B',eventId:'a',data:'stolen'}));
  await assertFails(setDoc(doc(B,'personalPhotos/other'),{ownerUid:'person-B',eventId:'a',data:'stolen'}));
 });
@@ -60,8 +60,8 @@ test('new users cannot enter legacy records or install a legacy membership',asyn
 
 test('one batch creates a private event with four photos and rejects partial or foreign ownership',async()=>{
  const b=writeBatch(A);
- b.set(doc(A,'personalEvents/atomic'),{ownerUid:'person-A',createdAt:serverTimestamp(),thumbs:['1','2','3','4'],kind:'memory'});
- for(let i=0;i<4;i++)b.set(doc(A,'personalPhotos/atomic_'+i),{ownerUid:'person-A',eventId:'atomic',i,data:'full-'+i});
+ b.set(doc(A,'personalEvents/atomic'),{ownerUid:'person-A',createdAt:serverTimestamp(),thumbs:Array(4).fill('data:image/jpeg;base64,AA=='),kind:'memory'});
+ for(let i=0;i<4;i++)b.set(doc(A,'personalPhotos/atomic_'+i),{ownerUid:'person-A',eventId:'atomic',i,data:'data:image/jpeg;base64,AA=='});
  await assertSucceeds(b.commit());
  for(let i=0;i<4;i++)await assertSucceeds(getDoc(doc(A,'personalPhotos/atomic_'+i)));
  await assertFails(getDoc(doc(B,'personalPhotos/atomic_0')));
@@ -84,7 +84,7 @@ test('legacy owner can atomically create an event and its four photos with exist
  });
  const L=env.authenticatedContext('legacy-owner').firestore(),b=writeBatch(L);
  b.set(doc(L,'events/atomic-legacy'),{createdAt:serverTimestamp(),kind:'memory',date:'2020-01-01',thumbs:['1','2','3','4']});
- for(let i=0;i<4;i++)b.set(doc(L,'photos/atomic-legacy_'+i),{eventId:'atomic-legacy',i,data:'full-'+i});
+ for(let i=0;i<4;i++)b.set(doc(L,'photos/atomic-legacy_'+i),{eventId:'atomic-legacy',i,data:'data:image/jpeg;base64,AA=='});
  await assertSucceeds(b.commit());
  await assertFails(getDoc(doc(B,'photos/atomic-legacy_0')));
 });
@@ -238,3 +238,25 @@ test('pet profiles and records belong only to the owner; malformed profiles and 
  require('node:assert/strict').equal(await canRead(doc(W,'pets/shared')),await canRead(doc(W,'events/legacy')),'shared pet access must equal existing legacy access');
  await assertFails(getDoc(doc(L,'personalPets/pet-A')));await assertFails(updateDoc(doc(M,'pets/shared'),{ownerUid:'legacy-pet-two',updatedAt:serverTimestamp()}));await assertFails(updateDoc(doc(M,'pets/shared'),{name:'',updatedAt:serverTimestamp()}));if(legacyPrivate){await assertFails(deleteDoc(doc(M,'pets/shared')));await assertSucceeds(deleteDoc(doc(L,'pets/shared')));}else await assertSucceeds(deleteDoc(doc(M,'pets/shared')));
  });
+
+test('bounded event schema accepts the full app record, purchase and pet fields, and rejects oversized or unexpected content',async()=>{
+ const image='data:image/jpeg;base64,AA==';
+ const entry={ownerUid:'person-A',createdAt:serverTimestamp(),updatedAt:serverTimestamp(),cat:'買い物',kind:'plan',date:'2026-12-01',time:'09:30',who:['家族'],place:'お店',title:'荷物',memo:'メモ',link:'https://example.test/',fav:false,thumbs:[image,image],lat:36,lng:138,shop:{src:'hp',name:'お店',url:'https://example.test/'},petIds:['pet1'],petCareType:'薬',petWeightKg:4,petHidden:false,sends:[],nextSendAt:null,
+ purchase:{version:1,url:'https://example.test/product',status:'active',recurring:true,every:3,unit:'month',anchorDay:1,amount:2000,deadline:'2026-11-25',revision:1}};
+ await assertSucceeds(setDoc(doc(A,'personalEvents/realistic'),entry));
+ for(const bad of [{unknown:'x'},{memo:'a'.repeat(10001)},{who:['a'.repeat(1601)]},{who:[{payload:'x'}]},{thumbs:['a'.repeat(60001)]},{petIds:['a'.repeat(2561)]},{shop:{src:'hp',name:'n',url:'u',raw:'x'}},{purchase:{...entry.purchase,extra:'x'}}])await assertFails(setDoc(doc(A,'personalEvents/schema-rejected'),{...entry,...bad}));
+ await assertSucceeds(updateDoc(doc(A,'personalEvents/realistic'),{memo:'編集',updatedAt:serverTimestamp()}));
+ // Maximum supported list sizes still pass within the rules expression budget.
+ await assertSucceeds(setDoc(doc(A,'personalEvents/list-boundary'),{...entry,who:Array(20).fill('a'.repeat(80)),petIds:Array(20).fill('b'.repeat(128))}));
+ await assertFails(updateDoc(doc(A,'personalEvents/realistic'),{hiddenPayload:'x'}));
+});
+test('photo schema bounds format, payload, slot and fields without losing atomic owner checks',async()=>{
+ const photo={ownerUid:'person-A',eventId:'realistic',i:0,data:'data:image/jpeg;base64,AA=='};
+ await assertSucceeds(setDoc(doc(A,'personalPhotos/bounded'),photo));
+ const boundary='data:image/jpeg;base64,'+'A'.repeat(900000-'data:image/jpeg;base64,'.length);
+ await assertSucceeds(setDoc(doc(A,'personalPhotos/max-size'),{...photo,data:boundary}));
+ for(const bad of [{extra:'x'},{i:4},{i:-1},{data:boundary+'A'},{data:'<script>bad</script>'},{data:'https://example.test/p.jpg'},{eventId:'../x'}])await assertFails(setDoc(doc(A,'personalPhotos/bad-size'),{...photo,...bad}));
+ await assertFails(setDoc(doc(B,'personalPhotos/bounded'),{...photo,ownerUid:'person-B'}));
+ await assertFails(getDoc(doc(A,'lineInviteLimits/server-only')));
+ await assertFails(setDoc(doc(A,'lineInviteLimits/server-only'),{daily:0,monthly:0}));
+});

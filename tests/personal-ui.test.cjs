@@ -722,7 +722,7 @@ test('free-tier safety: monthly LINE allowance per person, 2 photos per record, 
   assert.match(a.w.sendRows({sendCancels:['q'],sends:[{id:'q',at:'2099-01-01T09:00',status:'wait',friendIds:['self']}]}),/取り消しを受け付けました（確認中）/,'申し出はすぐ画面に出る（まだ「取り消しました」とは言わない）');
   assert.doesNotMatch(a.w.sendRows({sendCancels:['q'],sends:[{id:'q',at:'2099-01-01T09:00',status:'wait',friendIds:['self']}]}),/data-cancel/);
   a.w.renderPhotos();assert.match(d.getElementById('phCount').textContent,/^0\/2枚/);
-  for(const id of ['pairView','tab-set','firstRecordGuide'])assert.match(d.getElementById(id).textContent,/ご利用上の注意（免責事項）[\s\S]*個人が無料で提供[\s\S]*一切の責任を負いかねます/,id);
+  for(const id of ['pairView','tab-set','firstRecordGuide'])assert.match(d.getElementById(id).textContent,/ご利用上の注意（免責事項）[\s\S]*個人が無料で提供[\s\S]*故意・重大な過失による場合を除き/,id);
  }finally{a.close();}
 });
 
@@ -1431,7 +1431,7 @@ test('calendar: full paper calendar imports both teams and clears shifted dates 
 
 test('calendar: requested March repair persists in both account modes, preserves records and later edits',async()=>{
  for(const legacy of [false,true]) {
-  const a=app({legacy,returning:!legacy,url:'?tab=list&view=cal&calendarFix=sekine-2027-march'});try {
+  const a=app({legacy,returning:!legacy,url:'?tab=list&view=cal&calendarFix=calendar-2027-march'});try {
    const days={...Object.fromEntries(a.w.HibirukaCalendar.verifiedCompanyCalendar().rows.map(r=>[r.date,r.kind])),
     '2027-03-23':'A','2027-03-27':'B','2027-03-30':'A','2027-04-01':'off'};
    a.data.set('personalConfig/A',{ownerName:'Alice',people:['Bob'],calendar:{version:1,configured:true,team:'A',showRokuyo:true,days}});
@@ -1472,7 +1472,7 @@ test('calendar: ordinary visits do not modify other company calendars',async()=>
 });
 
 test('calendar: failed repair keeps saved marks and the retry link',async()=>{
- const a=app({returning:true,url:'?calendarFix=sekine-2027-march'});try {
+ const a=app({returning:true,url:'?calendarFix=calendar-2027-march'});try {
   a.data.set('personalConfig/A',{calendar:{version:1,configured:true,days:{'2027-03-23':'A'}}});
   a.db.runTransaction=async()=>{throw Error('offline');};
   await a.w.h.startOwner();await tick();
@@ -1483,7 +1483,7 @@ test('calendar: failed repair keeps saved marks and the retry link',async()=>{
 });
 
 test('calendar: an account change during the correction prevents the write',async()=>{
- const a=app({returning:true,url:'?calendarFix=sekine-2027-march'});try {
+ const a=app({returning:true,url:'?calendarFix=calendar-2027-march'});try {
   a.data.set('personalConfig/A',{calendar:{version:1,configured:true,days:{'2027-03-23':'A'}}});
   a.db.runTransaction=async fn=>fn({get:async ref=>{
    const snapshot=await ref.get();a.w.firebase.auth().currentUser.uid='B';return snapshot;
@@ -1731,5 +1731,59 @@ test('startup: LINE download is shared, bounded and retryable after a timeout',a
   const retry=a.w.h.ensureLiffSdk();a.w.liff={init:async()=>{}};
   a.d.querySelector('script[src*="line-scdn.net"]').onload();assert.equal(await retry,a.w.liff);
   a.w.setTimeout=set;a.w.clearTimeout=clear;
+ }finally{a.close();}
+});
+
+test('LINE browser: guide appears before authentication or records, existing users can reach recovery only',async()=>{
+ const a=app({returning:true});try{
+  Object.defineProperty(a.w.navigator,'userAgent',{value:'Mozilla/5.0 (iPhone) Line/15.0',configurable:true});
+  await a.w.h.startOwner();
+  assert.equal(a.d.getElementById('browserGuide').classList.contains('hidden'),false);
+  assert.match(a.d.getElementById('browserGuideTitle').textContent,/Safari/);
+  assert.equal(a.calls.length,0);assert.equal(a.queries.length,0);
+  assert.equal(a.data.size,1,'no new profile created');
+  await a.d.getElementById('browserRecovery').onclick();
+  assert.equal(a.d.getElementById('tab-set').classList.contains('hidden'),false);
+  a.w.goTab('rec');assert.equal(a.d.getElementById('tab-rec').classList.contains('hidden'),true);
+  await a.w.h.saveRecord();assert(![...a.data.keys()].some(k=>k.startsWith('personalEvents/')));
+ }finally{a.close();}
+});
+test('LINE invitations still work inside LINE; Android guide names its browser',async()=>{
+ const a=app({invite:true,url:'?invite=token&scope=personal'});try{
+  Object.defineProperty(a.w.navigator,'userAgent',{value:'Android Line/15.0',configurable:true});
+  await a.w.h.startInvite();assert.equal(a.d.getElementById('invAcceptBtn').disabled,false);
+  await a.w.h.startOwner();assert.match(a.d.getElementById('browserGuideTitle').textContent,/Chrome/);
+ }finally{a.close();}
+});
+test('first successful record shows recovery hint and requests persistent storage; rejection never prevents saving',async()=>{
+ const a=app();try{
+  let requests=0;
+  Object.defineProperty(a.w.navigator,'storage',{value:{persisted:async()=>false,persist:async()=>{requests++;throw Error('denied');}}});
+  await a.w.h.startOwner();assert(a.d.getElementById('backupHint').classList.contains('hidden'));
+  a.d.querySelector('#catPills [data-cat]').click();a.d.getElementById('fKind').value='memory';a.d.getElementById('fDate').value='2020-01-01';a.d.getElementById('fTitle').value='First';
+  await a.w.h.saveRecord();await new Promise(r=>setTimeout(r,5));
+  assert.equal(requests,1);assert(!a.d.getElementById('backupHint').classList.contains('hidden'));
+  assert([...a.data.keys()].some(k=>k.startsWith('personalEvents/')));
+  await a.w.requestPersistentStorage();assert.equal(requests,1);
+ }finally{a.close();}
+});
+test('account deletion does not claim completion or remove login while server cleanup remains incomplete',async()=>{
+ const a=app();try{
+  await a.w.h.startOwner();let requests=0,removed=0;a.w.confirm=()=>true;
+  a.w.firebase.auth().currentUser.delete=async()=>{removed++;};
+  a.w.fetch=async()=>{requests++;return{ok:true,json:async()=>({more:true})};};
+  a.d.getElementById('deleteWord').value='削除';await a.d.getElementById('deleteGo').onclick();
+  assert.equal(requests,6);assert.equal(removed,0);assert.match(a.d.getElementById('deleteErr').textContent,/削除が途中/);
+  assert.equal(a.d.getElementById('deleteGo').disabled,false);
+ }finally{a.close();}
+});
+test('failed auth deletion stays retryable and never navigates to a deleted confirmation',async()=>{
+ const a=app();try{
+  await a.w.h.startOwner();a.w.confirm=()=>true;
+  a.w.firebase.auth().currentUser.delete=async()=>{throw Object.assign(Error('reauth'),{code:'auth/requires-recent-login'});};
+  a.w.fetch=async()=>({ok:true,json:async()=>({more:false})});
+  a.d.getElementById('deleteWord').value='削除';await a.d.getElementById('deleteGo').onclick();
+  assert.match(a.d.getElementById('deleteErr').textContent,/auth\/requires-recent-login/);
+  assert.equal(a.d.getElementById('deleteGo').disabled,false);
  }finally{a.close();}
 });

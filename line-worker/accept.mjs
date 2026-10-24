@@ -5,6 +5,8 @@ import { verifyIdToken, cors } from './ai.mjs';
 const ORIGINS = ['https://pocham4173.github.io'];
 export const LIFF_CHANNEL = '2011755874'; // LIFF ID「2011755874-…」のチャネル
 export const INVITE_DAYS = 30; // 作成（または送り直し）から30日で期限切れ
+export const INVITES_PER_DAY = 5, INVITES_PER_MONTH = 20;
+const quotaId = async id => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('invite:' + id))), b => b.toString(16).padStart(2, '0')).join('');
 const json = (body, status, origin) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...cors(origin) } });
 const ms = v => v instanceof Date ? v.getTime() : typeof v === 'string' ? Date.parse(v) : NaN;
 
@@ -25,6 +27,7 @@ export async function lineUserFromToken(token, fetcher = fetch) {
 // 招待を承認済みにする。同じ人がもう一度開いたときはそのままOK、別のLINEで使い回すことはできない。
 export async function acceptInvite(db, { scope, invite, uid, line, now = Date.now() }) {
   const ref = db.collection(scope === 'personal' ? 'personalFriends' : 'friends').doc(invite);
+  const quotaRef = db.collection('lineInviteLimits').doc(await quotaId(line.userId));
   return db.runTransaction(async tx => {
     const snap = await tx.get(ref);
     if (!snap.exists) return { error: 'missing' };
@@ -33,6 +36,14 @@ export async function acceptInvite(db, { scope, invite, uid, line, now = Date.no
     if (f.status !== 'pending') return { error: 'missing' };
     const born = Math.max(ms(f.createdAt) || 0, ms(f.sentAt) || 0);
     if (!born || now - born > INVITE_DAYS * 86400000) return { error: 'expired' };
+    // Firebaseの匿名アカウントを作り直しても、同じLINEの上限は共通。
+    // 招待と上限を同時に確定するので、並行した承認でも上限を超えない。
+    const quota = await tx.get(quotaRef), old = quota.exists ? quota.data() : {};
+    const day = new Date(now + 9 * 3600000).toISOString().slice(0, 10), month = day.slice(0, 7);
+    const daily = old.day === day ? Number(old.daily) || 0 : 0;
+    const monthly = old.month === month ? Number(old.monthly) || 0 : 0;
+    if (daily >= INVITES_PER_DAY || monthly >= INVITES_PER_MONTH) return { error: 'limit' };
+    tx.set(quotaRef, { day, month, daily: daily + 1, monthly: monthly + 1, updatedAt: new Date(now) });
     tx.update(ref, { status: 'joined', lineUserId: line.userId, lineName: line.name, joinedAt: new Date(now), ...(scope === 'personal' ? { acceptedBy: uid } : {}) });
     return { ok: true, self: f.name === '自分' };
   });

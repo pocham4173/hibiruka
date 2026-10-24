@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createECDH, hkdfSync, createDecipheriv, createPublicKey, verify, randomBytes, generateKeyPairSync, createSign} from 'node:crypto';
-import {encryptPayload, b64u, unb64u, handlePush, pushToOwner, resetVapid, vapidKeys} from '../line-worker/push.mjs';
+import {encryptPayload, b64u, unb64u, handlePush, pushToOwner, resetVapid, vapidKeys, vapidSubject} from '../line-worker/push.mjs';
 import {resetKeyCache} from '../line-worker/ai.mjs';
 
 // 受け取る側（ブラウザ）の役：RFC 8291 で復号する
@@ -53,11 +53,12 @@ test('subscribe, then a test notification reaches the device with a valid VAPID 
   assert.equal((await handlePush(req('/push/subscribe', {subscription: sub}), {}, deps)).status, 200);
   assert.equal((await handlePush(req('/push/subscribe', {subscription: {...sub, endpoint: 'http://x'}}), {}, deps)).status, 400);
   assert.equal((await handlePush(req('/push/subscribe', {subscription: sub}, {tok: 'bad'}), {}, deps)).status, 401);
-  const out = await (await handlePush(req('/push/test', {}), {}, deps)).json();
+  const out = await (await handlePush(req('/push/test', {}), {VAPID_SUBJECT:'mailto:notify@example.test'}, deps)).json();
   assert.equal(out.sent, 1);
   const [url, opt] = sent[0]; assert.equal(url, sub.endpoint); assert.equal(opt.headers['Content-Encoding'], 'aes128gcm');
   assert.match(r.decrypt(Buffer.from(opt.body)), /通知のテスト/);
   const m = opt.headers.Authorization.match(/^vapid t=([^.]+)\.([^.]+)\.([^,]+), k=(.+)$/); assert.ok(m);
+  assert.equal(JSON.parse(Buffer.from(m[2], 'base64url')).sub, 'mailto:notify@example.test');
   assert.equal(JSON.parse(Buffer.from(m[2], 'base64url')).aud, 'https://push.services.example');
   const pub = createPublicKey({key: {kty: 'EC', crv: 'P-256', x: b64u(unb64u(m[4]).slice(1, 33)), y: b64u(unb64u(m[4]).slice(33))}, format: 'jwk'});
   assert.ok(verify('sha256', Buffer.from(m[1] + '.' + m[2]), {key: pub, dsaEncoding: 'ieee-p1363'}, Buffer.from(m[3], 'base64url')), 'VAPID signature');
@@ -69,4 +70,11 @@ test('subscribe, then a test notification reaches the device with a valid VAPID 
   assert.equal(Object.keys(db.data).filter(k => k.startsWith('pushSubs/')).length, 1);
   await handlePush(req('/push/subscribe', {subscription: sub, action: 'remove'}), {}, deps);
   assert.equal(Object.keys(db.data).filter(k => k.startsWith('pushSubs/')).length, 0);
+});
+
+test('VAPID contact comes from configuration or the public support page',()=>{
+ assert.equal(vapidSubject('mailto:notify@example.test'),'mailto:notify@example.test');
+ assert.equal(vapidSubject(), 'https://pocham4173.github.io/hibiruka/terms/#contact');
+ assert.throws(()=>vapidSubject('not a contact'));
+ assert.throws(()=>vapidSubject('https://user:password@example.test/'));
 });

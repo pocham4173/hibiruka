@@ -7,6 +7,7 @@ const {parseServiceAccount}=require('../scripts/service-account.cjs');
  if(!process.env.CLOUDFLARE_API_TOKEN||!process.env.CLOUDFLARE_ACCOUNT_ID)throw Error('Cloudflare connection is missing');
  const account=parseServiceAccount(process.env.FIREBASE_SERVICE_ACCOUNT);
  if(account.project_id!=='hibiruka-f66fb')throw Error('Wrong project');
+ if(process.env.VAPID_SUBJECT){const {vapidSubject}=await import('./push.mjs');vapidSubject(process.env.VAPID_SUBJECT);}
  const enable=process.env.ENABLE_SENDING==='true';
  // An active version must first be checked by a real cron invocation in verify mode.
  if(enable){
@@ -27,6 +28,7 @@ const {parseServiceAccount}=require('../scripts/service-account.cjs');
   if(process.env.LINE_CHANNEL_SECRET)secrets.LINE_CHANNEL_SECRET=process.env.LINE_CHANNEL_SECRET.trim();
   // Optional: ホットペッパーでお店を探す。Without it the app falls back to OpenStreetMap.
   if(process.env.HOTPEPPER_API_KEY)secrets.HOTPEPPER_API_KEY=process.env.HOTPEPPER_API_KEY.trim();
+  if(process.env.VAPID_SUBJECT)secrets.VAPID_SUBJECT=process.env.VAPID_SUBJECT.trim();
   run(['secret','bulk','--config',path],JSON.stringify(secrets));
   if(enable){config.vars.SENDING_ENABLED='true';fs.writeFileSync(path,JSON.stringify(config));run(['deploy','--config',path]);}
   console.log(enable?'Scheduled sender enabled. Verify heartbeat and the next authorized reservation.':'Verify-only cron deployed. No LINE messages will be sent. Wait for a successful cron heartbeat before activation.');

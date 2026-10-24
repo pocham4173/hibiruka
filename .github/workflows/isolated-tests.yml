@@ -3,7 +3,7 @@ name: 隔離テスト（本番に触れない）
 # 権限ルールは「仮の旧ルール（security/legacy-standin.rules）＋ personal.rules」をエミュレーターで検査する。
 on:
   push:
-    branches: ['claude/**']
+    branches: [main, 'claude/**', 'fix/**']
   pull_request:
   workflow_dispatch:
 permissions:
@@ -40,5 +40,10 @@ jobs:
             echo "::error title=rules tests::${msg}"
           fi
           exit $status
+      - name: 移行後の本人限定ルールも全件検査（本番に触れない）
+        run: |
+          node security/combine-local.cjs security/legacy-standin.rules --private
+          cd security
+          ./node_modules/.bin/firebase emulators:exec --only firestore --project demo-hibiruka-isolation 'node --test legacy-private.test.cjs && node --test personal.test.cjs'
       - name: Workerのビルド確認（公開はしない）
         run: npm run build --prefix line-worker

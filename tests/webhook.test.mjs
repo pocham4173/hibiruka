@@ -210,7 +210,7 @@ test('strangers: plain text is ignored, contact gets an answer',async()=>{
   const db=memoryDb();
   assert.deepEqual(await handleEvent(db,{},msg({type:'text',text:'こんにちは'}),NOW),[]);
   const start=(await handleEvent(db,{},msg({type:'text',text:'お問い合わせ'}),NOW))[0];
-  assert.match(start.text,/よくある質問/);assert.match(start.text,/個別のお返事はしていません/);
+  assert.match(start.text,/よくある質問/);assert.match(start.text,/通常のご意見には個別のお返事をしていません/);
   assert.ok(start.quickReply.items.some(i=>i.action.data==='a=inq&c=bug'));
 });
 test('inquiry: pick a kind, send one message, it is saved without the LINE id; 3 a day',async()=>{
