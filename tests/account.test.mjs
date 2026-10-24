@@ -38,7 +38,7 @@ test('LINE inquiry goes to the real form with plain option text', async () => {
   const {FORM, KINDS}=await import('../line-worker/inquiry.mjs');
   assert.match(FORM.url,/^https:\/\/docs\.google\.com\/forms\/d\/e\/[\w-]+\/formResponse$/);
   for(const v of Object.values(FORM.entry))assert.match(v,/^entry\.\d+$/);
-  assert.deepEqual(Object.values(KINDS).map(k=>k.replace(/^\S+\s/,'')),['不具合（うまく動かない）','使い方がわからない','ご意見・ほしい機能','広告（PR）について','その他']);
+  assert.deepEqual(Object.values(KINDS).map(k=>k.replace(/^\S+\s/,'')),['個人情報の請求','不具合（うまく動かない）','使い方がわからない','ご意見・ほしい機能','広告（PR）について','その他']);
 });
 test('firestore transaction set: creates only if still missing, updates only if unchanged', async () => {
   const {firestore}=await import('../line-worker/firestore.mjs');
@@ -73,4 +73,17 @@ test('AI quota under 25 requests at once: every allowed request is counted, neve
   const counted=mine?Number(mine[1].fields.count.integerValue):0;
   assert.equal(counted,ok,'許可した数＝数えた数');assert.ok(ok<=PER_USER_DAILY);assert.ok(ok>=1);
   console.log('# parallel ok', ok, 'counted', counted);void db;
+});
+test('privacy requests retain a reply LINE id only for that purpose, and use the existing form option',async()=>{
+ const {inquiryPick,inquiryReceive}=await import('../line-worker/inquiry.mjs');
+ const data=new Map();
+ const db={collection:c=>({doc:id=>({path:c+'/'+id,get:async()=>({exists:data.has(c+'/'+id),data:()=>data.get(c+'/'+id)})})}),set:async(r,v)=>data.set(r.path,v)};
+ const now=Date.parse('2026-10-24T00:00:00Z'),posts=[];
+ const picked=await inquiryPick(db,U,'rights',now);assert.match(picked[0].text,/ユーザーIDを保存/);
+ const receipt=await inquiryReceive(db,U,{type:'text',text:'残っている情報の削除をお願いします'},null,now+1000,{fetcher:async(u,o)=>{posts.push(new URLSearchParams(o.body));return new Response('');}});
+ assert.match(receipt[0].text,/個別にご連絡/);
+ const inquiry=[...data.entries()].find(([k])=>k.startsWith('inquiries/'))[1];
+ assert.equal(inquiry.replyLineUserId,U);assert.equal(inquiry.kind,'rights');
+ const {FORM}=await import('../line-worker/inquiry.mjs');assert.equal(posts[0].get(FORM.entry.kind),'その他');assert.match(posts[0].get(FORM.entry.text),/個人情報の請求/);
+ assert(![...posts[0].values()].some(v=>v.includes(U)),'LINE id is not forwarded to the form');
 });

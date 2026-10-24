@@ -1,29 +1,31 @@
 // Explicitly invoked production verification; creates and removes only temporary QA data.
 const fs=require('node:fs'), crypto=require('node:crypto'), assert=require('node:assert/strict');
 const admin=require('firebase-admin');
-const firebase=require('firebase/compat/app');require('firebase/compat/auth');
+const firebase=require('firebase/compat/app');require('firebase/compat/auth');require('firebase/compat/app-check');
 const {parseServiceAccount}=require('./service-account.cjs');
 const account=parseServiceAccount(process.env.FIREBASE_SERVICE_ACCOUNT);
 if(account.project_id!=='hibiruka-f66fb')throw Error('Wrong project');
 admin.initializeApp({credential:admin.credential.cert(account)});
+const check=require('./smoke-app-check.cjs').smokeAppCheck(admin);
 const key=fs.readFileSync('index/index/index.html','utf8').match(/apiKey:\s*"([^"]+)"/)[1];
 const base='https://firestore.googleapis.com/v1/projects/hibiruka-f66fb/databases/(default)/documents';
 const users=[], paths=[];
 const s=stringValue=>({stringValue});
+const photo='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jMZkAAAAASUVORK5CYII=';
 async function auth(method,data){const r=await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:${method}?key=${key}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(!r.ok){const error=await r.json();throw Error(`Auth ${method}: ${r.status} ${String(error.error?.message||'unknown').replace(/[^A-Z_ :0-9]/g,'').slice(0,120)}`);}return r.json();}
-async function request(user,path,method='GET',body){return fetch(base+path,{method,headers:{Authorization:`Bearer ${user.idToken}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});}
+async function request(user,path,method='GET',body){return fetch(base+path,{method,headers:{...await check.headers(),Authorization:`Bearer ${user.idToken}`,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});}
 (async()=>{try{
- for(let i=0;i<2;i++){const client=firebase.initializeApp({apiKey:key,projectId:account.project_id},'qa'+i);const result=await client.auth().signInAnonymously();users.push({localId:result.user.uid,idToken:await result.user.getIdToken(),client,user:result.user});}
+ for(let i=0;i<2;i++){const client=firebase.initializeApp({apiKey:key,projectId:account.project_id,appId:check.appId},'qa'+i);check.activate(client);const result=await client.auth().signInAnonymously();users.push({localId:result.user.uid,idToken:await result.user.getIdToken(),client,user:result.user});}
  const [a,b]=users, event='qa-'+crypto.randomUUID();
  for(const u of users){const p='personalConfig/'+u.localId;paths.push(p);let r;for(let i=0;i<6;i++){r=await request(u,'/'+p,'PATCH',{fields:{ownerName:s('Temporary verification'),version:{integerValue:'1'}}});if(r.ok)break;if(r.status!==403)break;await new Promise(resolve=>setTimeout(resolve,15000));}assert.equal(r.status,200,'own profile creation');}
  const p='personalEvents/'+event;paths.push(p);
  const documentName=path=>base.replace('https://firestore.googleapis.com/v1/','')+'/'+path;
  const photos=Array.from({length:4},(_,i)=>'personalPhotos/'+event+'_'+i);paths.push(...photos);
- const writes=[{update:{name:documentName(p),fields:{ownerUid:s(a.localId),title:s('Temporary verification'),kind:s('memory'),thumbs:{arrayValue:{values:photos.map(()=>s('temporary-thumb'))}},nextSendAt:{nullValue:null}}},updateTransforms:[{fieldPath:'createdAt',setToServerValue:'REQUEST_TIME'}]},...photos.map((path,i)=>({update:{name:documentName(path),fields:{ownerUid:s(a.localId),eventId:s(event),i:{integerValue:String(i)},data:s('temporary-photo')}}}))];
+ const writes=[{update:{name:documentName(p),fields:{ownerUid:s(a.localId),title:s('Temporary verification'),kind:s('memory'),thumbs:{arrayValue:{values:photos.map(()=>s(photo))}},nextSendAt:{nullValue:null}}},updateTransforms:[{fieldPath:'createdAt',setToServerValue:'REQUEST_TIME'}]},...photos.map((path,i)=>({update:{name:documentName(path),fields:{ownerUid:s(a.localId),eventId:s(event),i:{integerValue:String(i)},data:s(photo)}}}))];
  let r;for(let attempt=0;attempt<8;attempt++){r=await request(a,':commit','POST',{writes});if(r.status!==403)break;await new Promise(resolve=>setTimeout(resolve,15000));}assert.equal(r.status,200,'atomic event and four photos creation');
  for(const path of photos){assert.equal((await request(a,'/'+path)).status,200,'own photo read');assert.equal((await request(b,'/'+path)).status,403,'other account photo read denied');}
  const rejected='personalEvents/qa-'+crypto.randomUUID(),badPhoto='personalPhotos/qa-'+crypto.randomUUID();paths.push(rejected,badPhoto);
- r=await request(a,':commit','POST',{writes:[{update:{name:documentName(rejected),fields:{ownerUid:s(a.localId),kind:s('memory')}},updateTransforms:[{fieldPath:'createdAt',setToServerValue:'REQUEST_TIME'}]},{update:{name:documentName(badPhoto),fields:{ownerUid:s(b.localId),eventId:s(rejected.split('/')[1]),data:s('temporary-photo')}}}]});
+ r=await request(a,':commit','POST',{writes:[{update:{name:documentName(rejected),fields:{ownerUid:s(a.localId),kind:s('memory')}},updateTransforms:[{fieldPath:'createdAt',setToServerValue:'REQUEST_TIME'}]},{update:{name:documentName(badPhoto),fields:{ownerUid:s(b.localId),eventId:s(rejected.split('/')[1]),data:s(photo)}}}]});
  assert.equal(r.status,403,'invalid photo rejects entire batch');assert.equal((await admin.firestore().doc(rejected).get()).exists,false,'no partial event remains');
 
  assert.equal((await request(a,'/'+p)).status,200,'own event read');

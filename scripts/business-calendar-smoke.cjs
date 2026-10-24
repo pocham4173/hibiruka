@@ -1,12 +1,13 @@
 // Explicit release verification. Only new temporary accounts/documents are touched.
 const fs=require('node:fs'),assert=require('node:assert/strict');
-const admin=require('firebase-admin');const firebase=require('firebase/compat/app');require('firebase/compat/auth');require('firebase/compat/firestore');
+const admin=require('firebase-admin');const firebase=require('firebase/compat/app');require('firebase/compat/auth');require('firebase/compat/firestore');require('firebase/compat/app-check');
 const {parseServiceAccount}=require('./service-account.cjs');const C=require('../index/index/calendar-core.js');
 const account=parseServiceAccount(process.env.FIREBASE_SERVICE_ACCOUNT);if(account.project_id!=='hibiruka-f66fb')throw Error('Wrong project');
 admin.initializeApp({credential:admin.credential.cert(account)});
+const check=require('./smoke-app-check.cjs').smokeAppCheck(admin);
 const apiKey=fs.readFileSync('index/index/index.html','utf8').match(/apiKey:\s*"([^"]+)"/)[1];const clients=[],users=[];
 (async()=>{try{
- for(let i=0;i<2;i++){const client=firebase.initializeApp({apiKey,projectId:account.project_id},'businessQA'+i);clients.push(client);users.push((await client.auth().signInAnonymously()).user);}
+ for(let i=0;i<2;i++){const client=firebase.initializeApp({apiKey,projectId:account.project_id,appId:check.appId},'businessQA'+i);check.activate(client);clients.push(client);users.push((await client.auth().signInAnonymously()).user);}
  const [a,b]=clients,uid=users[0].uid,ref=a.firestore().doc('personalConfig/'+uid);
  const calendar=C.businessPatch(C.cleanConfig({team:'A',days:{'2027-03-20':'B'}}),{yearStart:'03-21',personal:{'2027-03-20':{title:'Temporary half day',category:'paid',part:'am'}}});
  for(let attempt=0;;attempt++){try{await ref.set({ownerName:'Temporary business QA',calendar});break;}catch(e){if(e.code!=='permission-denied'||attempt>=7)throw e;await new Promise(r=>setTimeout(r,15000));}}

@@ -39,7 +39,7 @@
       if(days[date]===kind) patch[date]='';
     return patch;
   }
-  // Transcribed from the supplied Sekine Store paper calendar. Only boxed dates;
+  // Transcribed from the supplied paper calendar. Only boxed dates;
   // the printed but unmarked dates outside this work year are not inferred.
   function verifiedCompanyCalendar() {
     const rows=[];

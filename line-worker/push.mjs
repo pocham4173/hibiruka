@@ -28,9 +28,17 @@ export async function vapidKeys(db) {
 }
 export function resetVapid() { vapidCache = null; }
 
-async function vapidHeader(endpoint, vapid, now) {
+// Secrets が未設定でも通知を止めないよう、公開の問い合わせページを連絡先にする。
+export function vapidSubject(value) {
+  const subject = String(value || '').trim();
+  if (!subject) return 'https://pocham4173.github.io/hibiruka/terms/#contact';
+  if (/^mailto:[^\s@]+@[^\s@]+\.[^\s@]+$/.test(subject)) return subject;
+  try { const u = new URL(subject); if (u.protocol === 'https:' && !u.username && !u.password) return subject; } catch {}
+  throw Error('Invalid VAPID_SUBJECT');
+}
+async function vapidHeader(endpoint, vapid, now, subject) {
   const head = b64u(enc.encode(JSON.stringify({ typ: 'JWT', alg: 'ES256' })));
-  const body = b64u(enc.encode(JSON.stringify({ aud: new URL(endpoint).origin, exp: Math.floor(now / 1000) + 12 * 3600, sub: 'mailto:okm.co@icloud.com' })));
+  const body = b64u(enc.encode(JSON.stringify({ aud: new URL(endpoint).origin, exp: Math.floor(now / 1000) + 12 * 3600, sub: vapidSubject(subject) })));
   const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, vapid.key, enc.encode(head + '.' + body));
   return `vapid t=${head}.${body}.${b64u(sig)}, k=${vapid.publicKey}`;
 }
@@ -56,7 +64,7 @@ const subId = async endpoint => b64u(await crypto.subtle.digest('SHA-256', enc.e
 const okEndpoint = u => { try { const x = new URL(u); return x.protocol === 'https:' && u.length < 800; } catch { return false; } };
 
 // その人の端末すべてに送る。届いた端末の数を返す。もう使えない端末（404/410）は消す。
-export async function pushToOwner(db, uid, message, { fetcher = fetch, now = Date.now } = {}) {
+export async function pushToOwner(db, uid, message, { fetcher = fetch, now = Date.now, subject } = {}) {
   const subs = (await db.collection('pushSubs').where('ownerUid', '==', uid).limit(5).get()).docs;
   if (!subs.length) return 0;
   const vapid = await vapidKeys(db), text = JSON.stringify(message).slice(0, 3000);
@@ -64,7 +72,7 @@ export async function pushToOwner(db, uid, message, { fetcher = fetch, now = Dat
   for (const d of subs) {
     const s = d.data();
     try {
-      const r = await fetcher(s.endpoint, { method: 'POST', headers: { TTL: '86400', Urgency: 'high', 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', Authorization: await vapidHeader(s.endpoint, vapid, now()) }, body: await encryptPayload(text, s.p256dh, s.auth), signal: AbortSignal.timeout(10000) });
+      const r = await fetcher(s.endpoint, { method: 'POST', headers: { TTL: '86400', Urgency: 'high', 'Content-Encoding': 'aes128gcm', 'Content-Type': 'application/octet-stream', Authorization: await vapidHeader(s.endpoint, vapid, now(), subject) }, body: await encryptPayload(text, s.p256dh, s.auth), signal: AbortSignal.timeout(10000) });
       if (r.ok) ok++;
       else if (r.status === 404 || r.status === 410) await db.remove(d.ref).catch(() => {});
     } catch {}
@@ -92,7 +100,7 @@ export async function handlePush(request, env, { db, fetcher = fetch, now = Date
     return json({ ok: true }, 200, origin);
   }
   if (path === '/push/test') {
-    const n = await pushToOwner(store, uid, { title: '🔔 ヒビルカ', body: '通知のテストです。予定のお知らせはこのように届きます。', url: './' }, { fetcher, now });
+    const n = await pushToOwner(store, uid, { title: '🔔 ヒビルカ', body: '通知のテストです。予定のお知らせはこのように届きます。', url: './' }, { fetcher, now, subject: env.VAPID_SUBJECT });
     return json({ sent: n }, n ? 200 : 404, origin);
   }
   return json({ error: 'not_found' }, 404, origin);

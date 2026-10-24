@@ -88,7 +88,7 @@
         && item.status == 'wait'
         && item.id is string && item.id.matches('^[A-Za-z0-9-]{8,64}$')
         && item.at is string && item.at.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}$')
-        && item.friendIds is list && item.friendIds.size() >= 1 && item.friendIds.size() <= 20
+        && item.friendIds is list && item.friendIds.size() >= 1 && shortList(item.friendIds,2560)
         && (!('from' in item) || (item.from is string && item.from.size() <= 40))
         && (!('note' in item) || (item.note is string && item.note.size() <= 100));
     }
@@ -113,20 +113,84 @@
         && n < 40 && neu.size() == n + 1 && (n == 0 || neu[0:n] == old)
         && neu[n] is string && neu[n].matches('^[A-Za-z0-9-]{1,64}$');
     }
+    // テキスト・配列の中身にも上限を設け、既存の買い物・ペット・LINE記録は保持する。
+    function shortField(d, k, n) { let v = d.get(k, ''); return v is string && v.size() <= n; }
+    function shortList(a, n) {
+      // joinは文字列以外の要素を拒否する。全要素の合計サイズを制限する。
+      return a is list && a.size() <= 20 && a.join('').size() <= n;
+    }
+    function imageData(v, n) {
+      return v is string && v.size() <= n && v.matches('^data:image/(jpeg|webp|png);base64,[A-Za-z0-9+/=]+$');
+    }
+    function validThumbs(a) {
+      // 以前の4枚の記録も編集可能。現在の画面は2枚まで。
+      return a is list && a.size() <= 4
+        && (a.size() < 1 || imageData(a[0], 60000))
+        && (a.size() < 2 || imageData(a[1], 60000))
+        && (a.size() < 3 || imageData(a[2], 60000))
+        && (a.size() < 4 || imageData(a[3], 60000));
+    }
+    function validPurchase(p) {
+      return p is map
+        && p.keys().hasOnly(['version','url','status','recurring','every','unit','anchorDay','amount','deadline','revision','receivedOn'])
+        && p.keys().hasAll(['version','url','status','recurring','every','unit','anchorDay','amount','deadline','revision'])
+        && p.version == 1 && p.url is string && p.url.size() <= 4096
+        && p.status in ['active','paused','received'] && p.recurring is bool
+        && p.every is int && p.every >= 1 && p.every <= 365 && p.unit in ['day','week','month']
+        && p.anchorDay is int && p.anchorDay >= 1 && p.anchorDay <= 31
+        && (p.amount == null || (p.amount is int && p.amount >= 0 && p.amount <= 100000000))
+        && petDate(p.deadline) && p.revision is int && p.revision >= 1
+        && (!('receivedOn' in p) || petDate(p.receivedOn));
+    }
+    function validEvent(d) {
+      return d.keys().hasOnly(['ownerUid','createdAt','updatedAt','cat','kind','date','time','who','place','title','memo','link','fav','thumbs','lat','lng','shop','outcome','status','planId','placeId','genre','imageUrl','imageSource','infoSource','source','petIds','petCareType','petWeightKg','petHidden','purchase','sends','nextSendAt','sendCancels','schedulerError'])
+        && shortField(d,'ownerUid',128) && d.createdAt is timestamp
+        && (!('updatedAt' in d) || d.updatedAt is timestamp)
+        && shortField(d,'cat',80) && shortField(d,'title',300) && shortField(d,'place',500)
+        && shortField(d,'memo',10000) && shortField(d,'link',4096)
+        && shortField(d,'placeId',200) && shortField(d,'planId',128) && shortField(d,'genre',200)
+        && shortField(d,'imageUrl',4096)
+        && (!('imageSource' in d) || d.imageSource in ['','hp'])
+        && (!('infoSource' in d) || d.infoSource in ['','hp'])
+        && (!('source' in d) || d.source == 'line')
+        && (!('kind' in d) || d.kind in ['plan','memory','wish'])
+        && (!('date' in d) || petDate(d.date))
+        && (!('time' in d) || (d.time is string && (d.time == '' || d.time.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$'))))
+        && (!('who' in d) || shortList(d.who,1600))
+        && (!('petIds' in d) || shortList(d.petIds,2560))
+        && (!('thumbs' in d) || validThumbs(d.thumbs))
+        && (!('fav' in d) || d.fav is bool)
+        && (!('lat' in d) || (d.lat is number && d.lat >= -90 && d.lat <= 90))
+        && (!('lng' in d) || (d.lng is number && d.lng >= -180 && d.lng <= 180))
+        && (!('outcome' in d) || d.outcome in ['done','cancelled'])
+        && (!('status' in d) || d.status in ['wished','scheduled','visited'])
+        && (!('shop' in d) || (d.shop is map && d.shop.keys().hasOnly(['src','url','name'])
+          && d.shop.src == 'hp' && shortField(d.shop,'url',4096) && shortField(d.shop,'name',500)))
+        && (!('purchase' in d) || validPurchase(d.purchase));
+      // sends等のサーバー項目は既存値をそのまま保持し、変更は下の予約ルールで限定する。
+    }
+    function validPhoto(d) {
+      return d.keys().hasOnly(['ownerUid','eventId','i','data'])
+        && d.keys().hasAll(['ownerUid','eventId','i','data'])
+        && d.ownerUid is string && d.ownerUid.size() <= 128
+        && d.eventId is string && d.eventId.matches('^[A-Za-z0-9_-]{1,128}$')
+        && d.i is int && d.i >= 0 && d.i < 4
+        && imageData(d.data, 900000);
+    }
     match /personalEvents/{id} {
       allow read, delete: if personalOwner(resource.data);
-      allow create: if personalOwner(request.resource.data) && validPetEvent(request.resource.data)
+      allow create: if personalOwner(request.resource.data) && validPetEvent(request.resource.data) && validEvent(request.resource.data)
         && request.resource.data.createdAt == request.time
         && request.resource.data.get('sends', []) == []
         && request.resource.data.get('nextSendAt', null) == null
         && !request.resource.data.keys().hasAny(['sendCancels', 'schedulerError']);
-      allow update: if personalOwner(resource.data) && personalOwner(request.resource.data) && validPetEvent(request.resource.data)
+      allow update: if personalOwner(resource.data) && personalOwner(request.resource.data) && validPetEvent(request.resource.data) && validEvent(request.resource.data)
         && request.resource.data.createdAt == resource.data.createdAt
         && (sendFieldsUntouched() || appendsOneSend() || appendsOneCancel());
     }
     match /personalPhotos/{id} {
       allow read, delete: if personalOwner(resource.data);
-      allow create, update: if personalOwner(request.resource.data)
+      allow create, update: if personalOwner(request.resource.data) && validPhoto(request.resource.data)
         && (!exists(/databases/$(database)/documents/personalPhotos/$(id)) || personalOwner(resource.data))
         && personalOwner(getAfter(/databases/$(database)/documents/personalEvents/$(request.resource.data.eventId)).data);
     }
